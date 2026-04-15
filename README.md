@@ -21,7 +21,7 @@ This repository provides Python scripts and orchestration tools to:
 
 ### What This Repo Covers
 
-✅ **Supported Artifact Types**
+Γ£à **Supported Artifact Types**
 - Lakehouses (with three data sync options)
 - Data Warehouses (schema + incremental data)
 - Notebooks & Spark Job Definitions (with code remapping)
@@ -34,20 +34,20 @@ This repository provides Python scripts and orchestration tools to:
 - ML Models, Experiments & Environments
 - Workspace & item-level permissions
 
-✅ **Operational Features**
+Γ£à **Operational Features**
 - Parallel execution for performance
 - Exponential backoff for resilience
 - Comprehensive logging (console + file)
 - Detailed sync reports in JSON format
 - Dry-run mode for safe planning
 - Workspace-level and item-level permission sync
-- Scheduled KQL data replication (15min–24hr intervals)
+- Scheduled KQL data replication (15minΓÇô24hr intervals)
 - Connection string audit and auto-fix for RTI artifacts
 - Data Assurance validation including KQL table/row count checks
 
 ### What This Repo Does NOT Cover
 
-❌ **Out of Scope**
+Γ¥î **Out of Scope**
 - Azure infrastructure DR (Event Hubs, ADLS, SQL DB replication - handle separately)
 - Real-time Dashboards, Org Apps, or OneLake Apps (API limitations)
 - Premium dataflows (Power Query M script handling only)
@@ -62,25 +62,25 @@ This repository provides Python scripts and orchestration tools to:
 
 ```
 Primary Region (East US 2)          Secondary Region (Central US)
-┌─────────────────────────────────┐ ┌─────────────────────────────────┐
-│ Fabric Workspace (Primary)       │ │ Fabric Workspace (Secondary)     │
-│ ├─ Lakehouses                   │ │ ├─ Lakehouses                    │
-│ ├─ Warehouses                   │ │ ├─ Warehouses                    │
-│ ├─ Notebooks & Pipelines        │ │ ├─ Notebooks & Pipelines         │
-│ ├─ Semantic Models & Reports    │ │ ├─ Semantic Models & Reports     │
-│ ├─ Eventhouses & KQL DBs        │ │ ├─ Eventhouses & KQL DBs         │
-│ ├─ Dataflows & Eventstreams     │ │ ├─ Dataflows & Eventstreams      │
-│ └─ Other artifacts              │ │ └─ Other artifacts               │
-└─────────────────────────────────┘ └─────────────────────────────────┘
-         │                                     │
-         │  Option 1: azcopy (active)          │
-         │  Option 2: Shortcuts (passive)      │
-         │  Option 3: GRS (storage-level)      │
-         │  KQL: Inline data replication        │
-         └─────────────────────────────────────┘
+ΓöîΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÉ ΓöîΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÉ
+Γöé Fabric Workspace (Primary)       Γöé Γöé Fabric Workspace (Secondary)     Γöé
+Γöé Γö£ΓöÇ Lakehouses                   Γöé Γöé Γö£ΓöÇ Lakehouses                    Γöé
+Γöé Γö£ΓöÇ Warehouses                   Γöé Γöé Γö£ΓöÇ Warehouses                    Γöé
+Γöé Γö£ΓöÇ Notebooks & Pipelines        Γöé Γöé Γö£ΓöÇ Notebooks & Pipelines         Γöé
+Γöé Γö£ΓöÇ Semantic Models & Reports    Γöé Γöé Γö£ΓöÇ Semantic Models & Reports     Γöé
+Γöé Γö£ΓöÇ Eventhouses & KQL DBs        Γöé Γöé Γö£ΓöÇ Eventhouses & KQL DBs         Γöé
+Γöé Γö£ΓöÇ Dataflows & Eventstreams     Γöé Γöé Γö£ΓöÇ Dataflows & Eventstreams      Γöé
+Γöé ΓööΓöÇ Other artifacts              Γöé Γöé ΓööΓöÇ Other artifacts               Γöé
+ΓööΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÿ ΓööΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÿ
+         Γöé                                     Γöé
+         Γöé  Option 1: azcopy (active)          Γöé
+         Γöé  Option 2: Shortcuts (passive)      Γöé
+         Γöé  Option 3: GRS (storage-level)      Γöé
+         Γöé  KQL: Inline data replication        Γöé
+         ΓööΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÿ
 
-Failover: Primary → Secondary (during disaster)
-Failback: Secondary → Primary (after recovery)
+Failover: Primary ΓåÆ Secondary (during disaster)
+Failback: Secondary ΓåÆ Primary (after recovery)
 ```
 
 ---
@@ -164,7 +164,7 @@ $env:CLIENT_ID = "your-client-id"
 
 ### 2. Artifact Mapping Files
 
-**data/artifact_mapping.csv** — Primary → Secondary artifact ID mappings
+**data/artifact_mapping.csv** ΓÇö Primary ΓåÆ Secondary artifact ID mappings
 
 | primary_artifact_id | secondary_artifact_id | artifact_type | primary_name | secondary_name |
 |---|---|---|---|---|
@@ -177,16 +177,16 @@ python scripts/sync_workspaces_metadata.py
 
 Then populate `artifact_mapping.csv` manually or via post-processing.
 
-**data/connection_mapping.csv** — Connection name mappings
+**data/connection_mapping.csv** ΓÇö Connection name mappings
 
 | primary_connection_name | secondary_connection_name | connection_type |
 |---|---|---|
 | primary_sql_db | secondary_sql_db | SqlServer |
 | primary_eventhub | secondary_eventhub | EventHub |
 
-Collect from Workspace Settings → Manage Connections hub.
+Collect from Workspace Settings ΓåÆ Manage Connections hub.
 
-**data/reference_mapping.csv** — URL/path remapping (workspace IDs, OneLake paths)
+**data/reference_mapping.csv** ΓÇö URL/path remapping (workspace IDs, OneLake paths)
 
 | primary_reference | secondary_reference | reference_type |
 |---|---|---|
@@ -200,9 +200,9 @@ Collect from Workspace Settings → Manage Connections hub.
 python common.py
 
 # Expected output:
-# ✓ Authentication successful
-# ✓ Access to primary workspace confirmed
-# ✓ Access to secondary workspace confirmed
+# Γ£ô Authentication successful
+# Γ£ô Access to primary workspace confirmed
+# Γ£ô Access to secondary workspace confirmed
 ```
 
 ---
@@ -216,7 +216,7 @@ Run scripts in this order on first deployment:
 ```bash
 # 1. Inventory and validate
 python scripts/sync_workspaces_metadata.py
-# → Generates: data/primary_artifact_manifest.json, sync_plan.json
+# ΓåÆ Generates: data/primary_artifact_manifest.json, sync_plan.json
 
 # 2. Sync code artifacts (no data)
 python scripts/sync_notebooks_and_pipelines.py
@@ -327,21 +327,21 @@ All scripts generate outputs in `data/` and `logs/`:
 
 ### Sync Reports (data/)
 
-- `primary_artifact_manifest.json` — Full primary workspace inventory
-- `secondary_artifact_manifest.json` — Secondary inventory (for comparison)
-- `sync_plan.json` — Detailed diff: missing, in-sync, type mismatches
-- `artifact_mapping.csv` — Primary → secondary ID mappings (generated/updated)
-- `lakehouse_sync_report.json` — Lakehouse sync details
-- `warehouse_sync_report.json` — Warehouse schema sync
-- `code_sync_report.json` — Notebooks and pipelines
-- `bi_sync_report.json` — Semantic models and reports
-- `dataflow_sync_report.json` — Dataflows
-- `kql_sync_report.json` — KQL databases and querysets
-- `eventstream_sync_report.json` — Eventstreams
-- `ml_sync_report.json` — ML models and environments
-- `permissions_audit.json` — Permission assignments
-- `failover_log.json` — Failover execution log
-- `failback_log.json` — Failback execution log
+- `primary_artifact_manifest.json` ΓÇö Full primary workspace inventory
+- `secondary_artifact_manifest.json` ΓÇö Secondary inventory (for comparison)
+- `sync_plan.json` ΓÇö Detailed diff: missing, in-sync, type mismatches
+- `artifact_mapping.csv` ΓÇö Primary ΓåÆ secondary ID mappings (generated/updated)
+- `lakehouse_sync_report.json` ΓÇö Lakehouse sync details
+- `warehouse_sync_report.json` ΓÇö Warehouse schema sync
+- `code_sync_report.json` ΓÇö Notebooks and pipelines
+- `bi_sync_report.json` ΓÇö Semantic models and reports
+- `dataflow_sync_report.json` ΓÇö Dataflows
+- `kql_sync_report.json` ΓÇö KQL databases and querysets
+- `eventstream_sync_report.json` ΓÇö Eventstreams
+- `ml_sync_report.json` ΓÇö ML models and environments
+- `permissions_audit.json` ΓÇö Permission assignments
+- `failover_log.json` ΓÇö Failover execution log
+- `failback_log.json` ΓÇö Failback execution log
 
 ### Logs (logs/)
 
@@ -506,7 +506,7 @@ Cannot access workspace 550e8400-...
 **Fix**:
 - Verify workspace GUID is correct
 - Check Service Principal has been added to workspace
-- Workspace settings → Manage workspace settings → Workspace members
+- Workspace settings ΓåÆ Manage workspace settings ΓåÆ Workspace members
 
 ### azcopy Not Found
 
@@ -549,7 +549,7 @@ Connection missing: primary_sql_db
 
 **Fix**:
 - Ensure all connections in `connection_mapping.csv` exist in secondary workspace
-- Create missing connections via Workspace Settings → Connections
+- Create missing connections via Workspace Settings ΓåÆ Connections
 - For OAuth connections, manually authenticate after creation
 
 ### Large Data Sync Timeout
@@ -639,39 +639,39 @@ A professional, real-time web dashboard for monitoring BCDR operations, replicat
 
 ### Features
 
-✅ **Command Center Dashboard**
+Γ£à **Command Center Dashboard**
 - Live primary/secondary region status cards
 - Capacity utilization (SKU level: F2/F4/F64, compute units, %)
 - Replication lag monitoring (RPO target vs. actual)
 - Sync progress bar with artifact counts (in-sync, missing, mismatched)
 - Real-time sentinel event feed with socket-based updates
 
-✅ **Drift Detection**
+Γ£à **Drift Detection**
 - Comparison of primary vs. secondary artifacts
 - Synchronized artifact counts by type
 - Missing artifacts in secondary
 - Type mismatches and conflicts
 
-✅ **Data Integrity Validation**
+Γ£à **Data Integrity Validation**
 - Row count comparisons between regions
 - Data consistency verification
 - Schema validation for warehouses
 - Last refresh timestamps
 
-✅ **Architecture Visualization**
+Γ£à **Architecture Visualization**
 - Primary/secondary region topology diagrams
 - Workspace and artifact inventory display
 - Capacity SKU details
 - Replication strategy overview
 
-✅ **Failover Simulation**
+Γ£à **Failover Simulation**
 - Interactive dry-run failover workflow
 - Pre-failover checklist validation
 - Step-by-step failover execution preview
 - Smoke tests simulation (API, Lakehouse, Report, Model tests)
 - RTO/RPO estimates
 
-✅ **Sentinel Agent**
+Γ£à **Sentinel Agent**
 - 24-hour event log with filters
 - Real-time event feed from sync operations
 - Severity levels (Critical, High, Medium, Low, Info)
@@ -809,14 +809,14 @@ Per major artifact (Lakehouse, Warehouse, Semantic Model):
 - Primary Rows/Size
 - Secondary Rows/Size
 - Variance (row count difference)
-- Match Status: ✓ Data Consistent, ✓ Schema Verified, etc.
+- Match Status: Γ£ô Data Consistent, Γ£ô Schema Verified, etc.
 
 #### Architecture (/architecture)
 
 Topology and replication strategy:
 
 **Diagram Section**:
-- Visual layout: Primary Region ↔ Secondary Region
+- Visual layout: Primary Region Γåö Secondary Region
 - Workspace boxes with artifact counts
 - Replication method and RPO/RTO targets
 
@@ -832,11 +832,11 @@ Interactive DR testing:
 **Warning Box**: "This is a DRY-RUN simulation. No actual failover will be performed."
 
 **Pre-Failover Checklist**:
-- ✓ Primary workspace accessible
-- ✓ Secondary workspace healthy
-- ✓ Replication lag < 15 min
-- ✓ Artifact mappings valid
-- ✓ Secondary capacity available
+- Γ£ô Primary workspace accessible
+- Γ£ô Secondary workspace healthy
+- Γ£ô Replication lag < 15 min
+- Γ£ô Artifact mappings valid
+- Γ£ô Secondary capacity available
 
 **Failover Steps** (4-part):
 1. Pause Primary Workspace
@@ -845,7 +845,7 @@ Interactive DR testing:
 4. Execute Smoke Tests (4 tests displayed)
 
 **Execution Options**:
-- "Run Failover Simulation" button → displays logs
+- "Run Failover Simulation" button ΓåÆ displays logs
 - View Last Failover Log button
 
 **RTO/RPO Reference**:
@@ -888,7 +888,7 @@ The Flask app exposes 70+ JSON endpoints. Key categories:
 | Lakehouse Data | `/api/bcdr/azcopy-replicate`, `/api/bcdr/azcopy-status` | azcopy full copy / incremental sync for lakehouse data |
 | ML Model/Experiment | `/api/bcdr/ml-status`, `/api/bcdr/ml-replicate` | ML item creation + OneLake data sync via azcopy |
 | Scheduling | `/api/bcdr/schedule`, `/api/bcdr/azcopy-schedule` | Notebook sync schedule + azcopy incremental schedule |
-| Auto-Sync | `/api/bcdr/autosync` | Auto-replicate new artifacts (30s–10min watcher) |
+| Auto-Sync | `/api/bcdr/autosync` | Auto-replicate new artifacts (30sΓÇô10min watcher) |
 | Drift & Integrity | `/api/sync-plan`, `/api/bcdr/lakehouse-tables` | Operational drift, table-level comparison |
 | Failover | `/api/failover/simulate`, `/api/failover/execute`, `/api/failback/execute` | DR simulation and execution |
 | Lineage | `/api/lineage`, `/api/lineage/connections` | Dependency graph from artifact definitions |
@@ -938,14 +938,14 @@ ML Models and Experiments store data in OneLake (model weights, MLflow artifacts
 | Trigger | Code Path | Description |
 |---------|-----------|-------------|
 | Dashboard "Sync" button on MLModel card | `replicate_items_by_type("MLModel")` | Creates item + azcopy data |
-| Lakehouse page → ML panel → Full Copy | `api_ml_replicate` | Auto-creates missing items + azcopy data |
-| Lakehouse page → ML panel → Incremental Sync | `api_ml_replicate` (mode=sync) | azcopy sync (delta only) |
+| Lakehouse page ΓåÆ ML panel ΓåÆ Full Copy | `api_ml_replicate` | Auto-creates missing items + azcopy data |
+| Lakehouse page ΓåÆ ML panel ΓåÆ Incremental Sync | `api_ml_replicate` (mode=sync) | azcopy sync (delta only) |
 | Scheduled azcopy sync | `_azcopy_schedule_tick` | Incremental sync for paired items |
 | CLI script | `scripts/sync_ml_models_and_experiments.py` | Full sync with definition remapping |
 
 ### Critical: `.platform` File Exclusion
 
-Every Fabric item has a `.platform` file in OneLake containing its identity metadata. **Never overwrite this file** during azcopy — it will cause Fabric to delete the target item. All azcopy commands for ML items include:
+Every Fabric item has a `.platform` file in OneLake containing its identity metadata. **Never overwrite this file** during azcopy ΓÇö it will cause Fabric to delete the target item. All azcopy commands for ML items include:
 
 ```
 --exclude-pattern=.platform
@@ -961,7 +961,7 @@ The azcopy schedule provides automated data replication without requiring Fabric
 
 | Setting | Range | Default | Description |
 |---------|-------|---------|-------------|
-| Interval | 5 min – 24 hours | 15 min | How often azcopy runs |
+| Interval | 5 min ΓÇô 24 hours | 15 min | How often azcopy runs |
 | Include ML | true/false | true | Also sync ML Model/Experiment artifacts |
 
 ### How It Works
@@ -969,18 +969,18 @@ The azcopy schedule provides automated data replication without requiring Fabric
 1. Background `threading.Timer` runs `_azcopy_schedule_tick()` at the configured interval
 2. For each lakehouse pair: `azcopy sync` (incremental, `--delete-destination=false`)
 3. If "Include ML" is enabled: `azcopy sync` for each ML Model/Experiment pair (with `.platform` exclusion)
-4. State persisted to `.azcopy_schedule.json` — survives server restarts
+4. State persisted to `.azcopy_schedule.json` ΓÇö survives server restarts
 5. Lag calculation includes azcopy runs (`_azcopy_state["last_run"]`)
 
 ### Enable from Dashboard
 
-Lakehouse page → Lakehouse Data Replication panel → "Scheduled azcopy Sync" toggle
+Lakehouse page ΓåÆ Lakehouse Data Replication panel ΓåÆ "Scheduled azcopy Sync" toggle
 
 ### API
 
 ```
-GET  /api/bcdr/azcopy-schedule     → current state
-POST /api/bcdr/azcopy-schedule     → { "enabled": true, "interval_minutes": 15, "include_ml": true }
+GET  /api/bcdr/azcopy-schedule     ΓåÆ current state
+POST /api/bcdr/azcopy-schedule     ΓåÆ { "enabled": true, "interval_minutes": 15, "include_ml": true }
 ```
 
 ---
@@ -994,13 +994,13 @@ The topology page includes a dependency graph showing which artifacts reference 
 1. `/api/lineage/connections` inspects up to 50 artifact definitions in the secondary workspace
 2. For each item, exports its definition via `getDefinition` API (base64 parts)
 3. Scans for GUIDs matching any known item ID
-4. Builds a connection graph: source → target
+4. Builds a connection graph: source ΓåÆ target
 5. Non-notebook items (DataAgent, Eventhouse, KQLDatabase, SemanticModel, Report, MLExperiment, MLModel) are inspected first (higher priority)
 6. Results cached for 30 minutes (`_LINEAGE_CACHE_TTL = 1800`)
 
 ### Visualization
 
-- **Left-to-right HTML card flow** with 4 columns: Data Stores → Compute → SemanticModel → Consumers
+- **Left-to-right HTML card flow** with 4 columns: Data Stores ΓåÆ Compute ΓåÆ SemanticModel ΓåÆ Consumers
 - Each node is a card with icon, name, and type
 - Connections drawn as SVG bezier curves
 - Stale connections (pointing to primary IDs) flagged red
@@ -1018,7 +1018,7 @@ When replicating artifacts, embedded references to primary workspace items must 
 ### `_build_connection_map(primary_ws_id, secondary_ws_id)`
 
 Builds a `Dict[str, str]` replacement map:
-- Primary workspace ID → Secondary workspace ID
+- Primary workspace ID ΓåÆ Secondary workspace ID
 - Every item ID matched by `displayName` (all types: Lakehouse, MLExperiment, SemanticModel, KQLDatabase, etc.)
 
 ### `_rewrite_definition_parts(parts, replacements)`
@@ -1051,7 +1051,7 @@ The topology page shows real-time replication lag based on the most recent data 
 
 The most recent timestamp wins. Lag displayed as minutes since last sync. Status thresholds:
 - **HEALTHY**: < 15 min
-- **WARNING**: 15–60 min  
+- **WARNING**: 15ΓÇô60 min  
 - **STALE**: > 60 min or never synced
 
 ---
@@ -1070,55 +1070,9 @@ The most recent timestamp wins. Lag displayed as minutes since last sync. Status
 | `sync_dataflows.py` | Dataflow Gen2 sync |
 | `sync_eventstreams.py` | Eventstream sync with destination remapping |
 | `sync_kql_databases.py` | KQL Database schema + data replication |
-
----
-
-## License
-
-Copyright (c) Microsoft Corporation
-
-All rights reserved.
-
-MIT License
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
----
-
-## Contributing
-
-This project welcomes contributions and suggestions. Most contributions require you to agree to a Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
-
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions provided by the bot. You will only need to do this once across all repos using our CLA.
-
-This project has adopted the Microsoft Open Source Code of Conduct. For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
-
----
-
-## Trademarks
-
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.
-
----
-
-## Disclaimer
-
-This presentation, demonstration, and demonstration model are for informational purposes only and (1) are not subject to SOC 1 and SOC 2 compliance audits, and (2) are not designed, intended or made available as a medical device(s) or as a substitute for professional medical advice, diagnosis, treatment or judgment. Microsoft makes no warranties, express or implied, in this presentation, demonstration, and demonstration model. Nothing in this presentation, demonstration, or demonstration model modifies any of the terms and conditions of Microsoft's written and signed agreements. This is not an offer and applicable terms and the information provided are subject to revision and may be changed at any time by Microsoft.
-
-This presentation, demonstration, and demonstration model do not give you or your organization any license to any patents, trademarks, copyrights, or other intellectual property covering the subject matter in this presentation, demonstration, and demonstration model.
-
-The information contained in this presentation, demonstration and demonstration model represents the current view of Microsoft on the issues discussed as of the date of presentation and/or demonstration, for the duration of your access to the demonstration model. Because Microsoft must respond to changing market conditions, it should not be interpreted to be a commitment on the part of Microsoft, and Microsoft cannot guarantee the accuracy of any information presented after the date of presentation and/or demonstration and for the duration of your access to the demonstration model.
-
-No Microsoft technology, nor any of its component technologies, including the demonstration model, is intended or made available as a substitute for the professional advice, opinion, or judgment of (1) a certified financial services professional, or (2) a certified medical professional. Partners or customers are responsible for ensuring the regulatory compliance of any solution they build using Microsoft technologies.
-
-**DISCLAIMER:** The information contained in this repository and any accompanying materials (including, but not limited to, scripts, sample codes, etc.) are provided "AS-IS" and "WITH ALL FAULTS." Any estimated pricing information is provided solely for demonstration purposes and does not represent final pricing and Microsoft assumes no liability arising from your use of the information. Microsoft makes NO GUARANTEES OR WARRANTIES OF ANY KIND, WHETHER EXPRESSED OR IMPLIED, in providing this information, including any pricing information.
 | `sync_ml_models_and_experiments.py` | ML Models, Experiments, Environments, Data Agents |
 | `sync_permissions.py` | Workspace role assignments |
-| `failover.py` | Execute failover: pause primary → activate secondary |
+| `failover.py` | Execute failover: pause primary ΓåÆ activate secondary |
 | `failback.py` | Execute failback: restore primary from secondary |
 | `compare_structure.py` | Compare primary/secondary structure |
 | `discover_ml.py` | Discover ML items and OneLake structure |
@@ -1135,7 +1089,7 @@ No Microsoft technology, nor any of its component technologies, including the de
 
 | File | Description |
 |------|-------------|
-| `artifact_mapping.csv` | Primary → Secondary item ID mapping (8 columns: primary_artifact_id, secondary_artifact_id, artifact_type, primary_name, secondary_name) |
+| `artifact_mapping.csv` | Primary ΓåÆ Secondary item ID mapping (8 columns: primary_artifact_id, secondary_artifact_id, artifact_type, primary_name, secondary_name) |
 | `connection_mapping.csv` | Connection name mappings between regions |
 | `reference_mapping.csv` | URL/path/workspace ID remapping |
 | `ml_sync_report.json` | Last ML sync run report |
@@ -1167,7 +1121,7 @@ No Microsoft technology, nor any of its component technologies, including the de
 
 ### Dependency Graph Not Loading
 
-**Cause**: The `/api/lineage/connections` API inspects artifact definitions via LRO (long-running operations). On a cold cache this takes 2–4 minutes for 20 items.
+**Cause**: The `/api/lineage/connections` API inspects artifact definitions via LRO (long-running operations). On a cold cache this takes 2ΓÇô4 minutes for 20 items.
 
 **Fix**: The browser timeout is set to 5 minutes. Wait for it to complete. Subsequent loads use the 30-minute cache.
 
@@ -1181,7 +1135,7 @@ No Microsoft technology, nor any of its component technologies, including the de
 
 **Cause**: The secondary MLModel was deleted (see `.platform` issue above) or was never created.
 
-**Fix**: Go to Lakehouse page → ML panel → click "Full Copy". This will:
+**Fix**: Go to Lakehouse page ΓåÆ ML panel ΓåÆ click "Full Copy". This will:
 1. Export definition from primary
 2. Remap experiment IDs and workspace references
 3. Create in secondary via Fabric API
@@ -1472,12 +1426,11 @@ python scripts/sync_notebooks_and_pipelines.py
 
 ## Contributing
 
-Contributions welcome! Please:
+This project welcomes contributions and suggestions. Most contributions require you to agree to a Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
 
-1. Test changes with `--dry-run` first
-2. Add unit tests for new functions
-3. Update this README with new capabilities
-4. Follow PEP 8 style (run `black` + `flake8`)
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions provided by the bot. You will only need to do this once across all repos using our CLA.
+
+This project has adopted the Microsoft Open Source Code of Conduct. For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
 ---
 
@@ -1490,7 +1443,37 @@ Contributions welcome! Please:
 
 ## License
 
-MIT License - See LICENSE file
+Copyright (c) Microsoft Corporation
+
+All rights reserved.
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.
+
+---
+
+## Disclaimer
+
+This presentation, demonstration, and demonstration model are for informational purposes only and (1) are not subject to SOC 1 and SOC 2 compliance audits, and (2) are not designed, intended or made available as a medical device(s) or as a substitute for professional medical advice, diagnosis, treatment or judgment. Microsoft makes no warranties, express or implied, in this presentation, demonstration, and demonstration model. Nothing in this presentation, demonstration, or demonstration model modifies any of the terms and conditions of Microsoft's written and signed agreements. This is not an offer and applicable terms and the information provided are subject to revision and may be changed at any time by Microsoft.
+
+This presentation, demonstration, and demonstration model do not give you or your organization any license to any patents, trademarks, copyrights, or other intellectual property covering the subject matter in this presentation, demonstration, and demonstration model.
+
+The information contained in this presentation, demonstration and demonstration model represents the current view of Microsoft on the issues discussed as of the date of presentation and/or demonstration, for the duration of your access to the demonstration model. Because Microsoft must respond to changing market conditions, it should not be interpreted to be a commitment on the part of Microsoft, and Microsoft cannot guarantee the accuracy of any information presented after the date of presentation and/or demonstration and for the duration of your access to the demonstration model.
+
+No Microsoft technology, nor any of its component technologies, including the demonstration model, is intended or made available as a substitute for the professional advice, opinion, or judgment of (1) a certified financial services professional, or (2) a certified medical professional. Partners or customers are responsible for ensuring the regulatory compliance of any solution they build using Microsoft technologies.
+
+**DISCLAIMER:** The information contained in this repository and any accompanying materials (including, but not limited to, scripts, sample codes, etc.) are provided "AS-IS" and "WITH ALL FAULTS." Any estimated pricing information is provided solely for demonstration purposes and does not represent final pricing and Microsoft assumes no liability arising from your use of the information. Microsoft makes NO GUARANTEES OR WARRANTIES OF ANY KIND, WHETHER EXPRESSED OR IMPLIED, in providing this information, including any pricing information.
 
 ---
 
