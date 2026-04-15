@@ -1489,6 +1489,4 @@ No Microsoft technology, nor any of its component technologies, including the de
 
 **Last Updated**: March 2026
 
-**Maintainer**: Microsoft Fabric Platform Engineering
-
 **Version**: 1.0.0
