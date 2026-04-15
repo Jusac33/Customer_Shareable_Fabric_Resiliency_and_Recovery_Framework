@@ -1,0 +1,600 @@
+{% extends "base.html" %}
+
+{% block title %}Operational Drift Analysis - Fabric BCDR Dashboard{% endblock %}
+
+{% block page_title %}Operational Drift Analysis{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-compass"></i> OPERATIONAL DRIFT ANALYSIS
+    </h2>
+    <p class="section-description">Identifies divergence between primary and secondary workspaces — expand each type to see details</p>
+
+    <div class="drift-stats">
+        <div class="drift-stat in-sync">
+            <span class="label">In Sync</span>
+            <span class="value" id="drift-in-sync">0</span>
+        </div>
+        <div class="drift-stat definition-changed">
+            <span class="label">Definition Changed</span>
+            <span class="value" id="drift-defchanged">0</span>
+        </div>
+        <div class="drift-stat warning">
+            <span class="label">Missing in Secondary</span>
+            <span class="value" id="drift-missing">0</span>
+        </div>
+        <div class="drift-stat error">
+            <span class="label">Type Mismatches</span>
+            <span class="value" id="drift-mismatch">0</span>
+        </div>
+        <div class="drift-stat">
+            <span class="label">Extra in Secondary</span>
+            <span class="value" id="drift-extra">0</span>
+        </div>
+    </div>
+
+    <!-- Targeted Delta Check & Sync -->
+    <div class="delta-controls" style="margin:16px 0; padding:14px 18px; background:#faf5ff; border:1px solid #ce93d8; border-radius:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <i class="fas fa-bolt" style="color:#7b1fa2;"></i>
+            <strong style="color:#7b1fa2;font-size:13px;">Definition Change Detection</strong>
+        </div>
+        <p style="font-size:12px;color:#555;margin:0 0 10px;">Select an artifact and check if its definition has changed. Only 2-3 API calls per item — fast and targeted.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <select id="delta-item-select" style="padding:6px 10px;border:1px solid #ce93d8;border-radius:5px;font-size:13px;min-width:220px;">
+                <option value="">— Select an artifact —</option>
+            </select>
+            <button class="btn btn-outline" onclick="runDeltaCheckItem()" id="btn-delta-check" style="border-color:#9c27b0;color:#7b1fa2;">
+                <i class="fas fa-search-plus"></i> Check & Sync
+            </button>
+            <button class="btn btn-outline" onclick="runDeltaSyncAll()" id="btn-delta-all" style="border-color:#9c27b0;color:#7b1fa2;">
+                <i class="fas fa-layer-group"></i> Check & Sync All
+            </button>
+            <span id="delta-status" style="font-size:12px;color:#666;"></span>
+        </div>
+        <!-- Auto Definition Check schedule -->
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;border-top:1px solid #e1bee7;padding-top:10px;">
+            <label style="font-size:12px;color:#7b1fa2;font-weight:600;"><i class="fas fa-clock"></i> Auto-Check & Sync:</label>
+            <label class="schedule-toggle" style="position:relative;display:inline-block;width:36px;height:20px;">
+                <input type="checkbox" id="defcheck-toggle" onchange="toggleDefCheck()" style="opacity:0;width:0;height:0;">
+                <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:20px;transition:.3s;" class="defcheck-slider"></span>
+            </label>
+            <label style="font-size:12px;color:#555;">Every</label>
+            <select id="defcheck-interval" onchange="updateDefCheckInterval()" style="padding:4px 8px;border:1px solid #ce93d8;border-radius:4px;font-size:12px;">
+                <option value="5">5 min</option>
+                <option value="10">10 min</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="60">1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="360">6 hours</option>
+                <option value="720">12 hours</option>
+                <option value="1440">24 hours</option>
+            </select>
+            <span id="defcheck-info" style="font-size:11px;color:#888;"></span>
+        </div>
+    </div>
+
+    <div id="drift-groups"></div>
+
+    <!-- System Replication Artifacts info -->
+    <div id="system-artifacts-section" style="display:none; margin-top: 20px; padding: 14px 18px; background: #f0f4ff; border: 1px solid #bbdefb; border-radius: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <i class="fas fa-info-circle" style="color: #1565c0;"></i>
+            <strong style="color: #1565c0; font-size: 13px;">System Replication Artifacts</strong>
+            <span id="system-artifacts-count" style="background: #1565c0; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;"></span>
+        </div>
+        <p style="font-size: 12px; color: #555; margin: 0 0 8px;">These items exist in the secondary workspace to support BCDR operations. They are excluded from drift analysis.</p>
+        <div id="system-artifacts-list" style="font-size: 12px; color: #444;"></div>
+    </div>
+</section>
+
+<style>
+    .drift-stats { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+    .drift-stat {
+        padding: 12px 20px; border-radius: 8px; background: #f5f5f5;
+        border-left: 4px solid #ccc; min-width: 130px; text-align: center;
+    }
+    .drift-stat .label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+    .drift-stat .value { display: block; font-size: 24px; font-weight: 700; }
+    .drift-stat.in-sync { border-left-color: #4caf50; }
+    .drift-stat.in-sync .value { color: #2e7d32; }
+    .drift-stat.definition-changed { border-left-color: #9c27b0; }
+    .drift-stat.definition-changed .value { color: #6a1b9a; }
+    .drift-stat.warning { border-left-color: #ff9800; }
+    .drift-stat.warning .value { color: #e65100; }
+    .drift-stat.error { border-left-color: #f44336; }
+    .drift-stat.error .value { color: #c62828; }
+
+    /* Collapsible type groups */
+    .type-group { margin-top: 12px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+    .type-group-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 16px; background: #fafafa; cursor: pointer; user-select: none;
+        border-bottom: 1px solid transparent; transition: background 0.15s;
+    }
+    .type-group-header:hover { background: #f0f0f0; }
+    .type-group-header.expanded { border-bottom-color: #e0e0e0; }
+    .type-group-header .group-left { display: flex; align-items: center; gap: 10px; }
+    .type-group-header .group-name { font-weight: 700; font-size: 14px; color: #333; }
+    .type-group-header .group-counts { display: flex; gap: 8px; }
+    .type-group-header .mini-badge {
+        font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    }
+    .mini-badge.sync { background: #e8f5e9; color: #2e7d32; }
+    .mini-badge.miss { background: #fff3e0; color: #e65100; }
+    .mini-badge.mis  { background: #ffebee; color: #c62828; }
+    .mini-badge.ext  { background: #e3f2fd; color: #1565c0; }
+    .mini-badge.defchg { background: #f3e5f5; color: #6a1b9a; }
+    .type-group-header .chevron {
+        font-size: 12px; color: #999; transition: transform 0.2s;
+    }
+    .type-group-header.expanded .chevron { transform: rotate(90deg); }
+
+    .type-group-body { display: none; }
+    .type-group-body.open { display: block; }
+
+    .drift-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .drift-table th {
+        padding: 8px 14px; text-align: left; font-weight: 600; color: #777;
+        background: #f5f5f5; border-bottom: 1px solid #e0e0e0; font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .drift-table td { padding: 8px 14px; border-bottom: 1px solid #f0f0f0; }
+    .drift-table tr:hover { background: #f8f9fa; }
+
+    .badge {
+        display: inline-block; padding: 3px 10px; border-radius: 12px;
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+    }
+    .badge.success { background: #e8f5e9; color: #2e7d32; }
+    .badge.warning { background: #fff3e0; color: #e65100; }
+    .badge.error { background: #ffebee; color: #c62828; }
+    .badge.info { background: #e3f2fd; color: #1565c0; }
+    .badge.defchg { background: #f3e5f5; color: #6a1b9a; }
+
+    .id-cell { font-family: monospace; font-size: 11px; color: #888; }
+    .no-data { color: #999; text-align: center; padding: 24px; }
+
+    .btn-sync-item, .btn-check-item {
+        padding: 3px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
+        border: 1px solid; font-weight: 600; white-space: nowrap;
+    }
+    .btn-sync-item { border-color: #9c27b0; color: #7b1fa2; background: #f3e5f5; }
+    .btn-sync-item:hover { background: #e1bee7; }
+    .btn-check-item { border-color: #bbb; color: #666; background: #f5f5f5; }
+    .btn-check-item:hover { background: #e0e0e0; }
+
+    .defcheck-slider:before {
+        position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px;
+        background: white; border-radius: 50%; transition: .3s;
+    }
+    #defcheck-toggle:checked + .defcheck-slider { background: #9c27b0; }
+    #defcheck-toggle:checked + .defcheck-slider:before { transform: translateX(16px); }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let syncPlanData = {{ sync_plan | safe }};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Show loading state then fetch drift data via AJAX
+        document.getElementById('drift-in-sync').textContent = '…';
+        document.getElementById('drift-defchanged').textContent = '…';
+        document.getElementById('drift-missing').textContent = '…';
+        document.getElementById('drift-mismatch').textContent = '…';
+        document.getElementById('drift-extra').textContent = '…';
+
+        fetch('/api/sync-plan')
+            .then(r => r.json())
+            .then(data => {
+                syncPlanData = data;
+                renderDriftAnalysis();
+            })
+            .catch(err => {
+                console.error('Drift load error:', err);
+                document.getElementById('drift-in-sync').textContent = 'Error';
+            });
+    });
+
+    function renderDriftAnalysis() {
+        const summary = syncPlanData.summary || {};
+        document.getElementById('drift-in-sync').textContent = summary.in_sync_count || 0;
+        document.getElementById('drift-defchanged').textContent = summary.definition_changed_count || 0;
+        document.getElementById('drift-missing').textContent = summary.missing_in_secondary_count || 0;
+        document.getElementById('drift-mismatch').textContent = summary.type_mismatch_count || 0;
+        document.getElementById('drift-extra').textContent = summary.extra_in_secondary_count || 0;
+
+        const sp = syncPlanData.sync_plan || {};
+
+        // Collect all items with their status, grouped by type
+        const byType = {};
+
+        function addItem(item, status, badge) {
+            const t = item.type || item.primary_type || 'Unknown';
+            if (!byType[t]) byType[t] = [];
+            byType[t].push({ ...item, _status: status, _badge: badge });
+        }
+
+        (sp.MISSING_IN_SECONDARY || []).forEach(i => addItem(i, 'missing', 'miss'));
+        (sp.TYPE_MISMATCH || []).forEach(i => addItem(i, 'mismatch', 'mis'));
+        // For IN_SYNC, check if individual items have definition_changed flag
+        (sp.IN_SYNC || []).forEach(i => {
+            if (i.definition_changed === true) {
+                addItem(i, 'defchanged', 'defchg');
+            } else {
+                addItem(i, 'sync', 'sync');
+            }
+        });
+        (sp.EXTRA_IN_SECONDARY || []).forEach(i => addItem(i, 'extra', 'ext'));
+
+        const container = document.getElementById('drift-groups');
+
+        if (Object.keys(byType).length === 0) {
+            container.innerHTML = '<p class="no-data">No workspace data available</p>';
+            return;
+        }
+
+        // Sort types alphabetically
+        const types = Object.keys(byType).sort();
+        let html = '';
+
+        types.forEach((typeName, idx) => {
+            const items = byType[typeName];
+            const counts = { sync: 0, miss: 0, mis: 0, ext: 0, defchg: 0 };
+            items.forEach(i => { counts[i._badge]++; });
+
+            const countBadges = [];
+            if (counts.sync) countBadges.push(`<span class="mini-badge sync">${counts.sync} synced</span>`);
+            if (counts.defchg) countBadges.push(`<span class="mini-badge defchg">${counts.defchg} changed</span>`);
+            if (counts.miss) countBadges.push(`<span class="mini-badge miss">${counts.miss} missing</span>`);
+            if (counts.mis)  countBadges.push(`<span class="mini-badge mis">${counts.mis} mismatch</span>`);
+            if (counts.ext)  countBadges.push(`<span class="mini-badge ext">${counts.ext} extra</span>`);
+
+            html += `<div class="type-group">
+                <div class="type-group-header" onclick="toggleGroup(this)" data-idx="${idx}">
+                    <div class="group-left">
+                        <i class="fas fa-chevron-right chevron"></i>
+                        <span class="group-name">${esc(typeName)}</span>
+                        <span style="color:#999;font-size:12px;">(${items.length})</span>
+                    </div>
+                    <div class="group-counts">${countBadges.join('')}</div>
+                </div>
+                <div class="type-group-body" id="group-body-${idx}">
+                    <table class="drift-table">
+                        <thead><tr>
+                            <th>Status</th><th>Name</th><th>Primary ID</th><th>Secondary ID</th>
+                        </tr></thead>
+                        <tbody>`;
+
+            // Sort: missing first, then defchanged, mismatch, extra, synced
+            const order = { missing: 0, defchanged: 1, mismatch: 2, extra: 3, sync: 4 };
+            items.sort((a, b) => (order[a._status] || 9) - (order[b._status] || 9));
+
+            items.forEach(item => {
+                let badgeHtml, pId, sId;
+                let actionHtml = '';
+                const safeName = esc(item.displayName).replace(/'/g, "\\'");
+                const hashableTypes = new Set(['Notebook','DataPipeline','SemanticModel','Report','SparkJobDefinition','Dataflow','Eventstream']);
+
+                if (item._status === 'missing') {
+                    badgeHtml = '<span class="badge warning">Missing</span>';
+                    pId = esc(item.id); sId = '&mdash;';
+                    if (item.type === 'WorkspacePermission' && item.principal_id) {
+                        const safePid = esc(item.principal_id).replace(/'/g, "\\'");
+                        const safeRole = esc(item.id).replace(/'/g, "\\'");
+                        const safePtype = esc(item.principal_type || 'User').replace(/'/g, "\\'");
+                        actionHtml = `<button class="btn-sync-item" onclick="fixPermission('${safePid}','${safeRole}','${safePtype}',this)" title="Add this permission to secondary"><i class="fas fa-user-plus"></i> Fix</button>`;
+                    }
+                } else if (item._status === 'defchanged') {
+                    badgeHtml = '<span class="badge defchg">Def Changed</span>';
+                    pId = esc(item.primary_id); sId = esc(item.secondary_id);
+                    actionHtml = `<button class="btn-sync-item" onclick="syncSingleItem('${safeName}', this)" title="Sync definition to secondary"><i class="fas fa-sync-alt"></i> Sync</button>`;
+                } else if (item._status === 'mismatch') {
+                    badgeHtml = '<span class="badge error">Mismatch</span>';
+                    pId = esc(item.primary_id); sId = esc(item.secondary_id);
+                    if (item.principal_id) {
+                        const safePid = esc(item.principal_id).replace(/'/g, "\\'");
+                        const safeRole = esc(item.primary_id).replace(/'/g, "\\'");
+                        const safePtype = esc(item.principal_type || 'User').replace(/'/g, "\\'");
+                        actionHtml = `<button class="btn-sync-item" onclick="fixPermission('${safePid}','${safeRole}','${safePtype}',this)" title="Update role to match primary"><i class="fas fa-user-shield"></i> Fix</button>`;
+                    }
+                } else if (item._status === 'extra') {
+                    badgeHtml = '<span class="badge info">Extra</span>';
+                    pId = '&mdash;'; sId = esc(item.id);
+                } else {
+                    badgeHtml = '<span class="badge success">In Sync</span>';
+                    pId = esc(item.primary_id); sId = esc(item.secondary_id);
+                    if (hashableTypes.has(item.type)) {
+                        actionHtml = `<button class="btn-check-item" onclick="checkSingleItem('${safeName}', this)" title="Check for changes"><i class="fas fa-search"></i></button>`;
+                    }
+                }
+
+                const opacity = item._status === 'extra' ? ' style="opacity:0.6"' : '';
+                html += `<tr${opacity}>
+                    <td>${badgeHtml}</td>
+                    <td><strong>${esc(item.displayName)}</strong> ${actionHtml}</td>
+                    <td class="id-cell">${pId}</td>
+                    <td class="id-cell">${sId}</td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div></div>`;
+        });
+
+        container.innerHTML = html;
+
+        // System replication artifacts
+        const sysArtifacts = syncPlanData.system_artifacts || [];
+        if (sysArtifacts.length > 0) {
+            document.getElementById('system-artifacts-section').style.display = '';
+            document.getElementById('system-artifacts-count').textContent = sysArtifacts.length + ' items in secondary';
+            document.getElementById('system-artifacts-list').innerHTML = sysArtifacts.map(a =>
+                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 10px;background:#e3f2fd;border-radius:4px;font-size:11px;">${esc(a.name)} <span style="color:#888;">(${esc(a.type)})</span></span>`
+            ).join('');
+        }
+    }
+
+    function toggleGroup(header) {
+        const idx = header.dataset.idx;
+        const body = document.getElementById('group-body-' + idx);
+        const isOpen = body.classList.contains('open');
+        body.classList.toggle('open');
+        header.classList.toggle('expanded');
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    // --- Populate artifact dropdown with hashable in-sync items ---
+    function populateDeltaDropdown() {
+        const select = document.getElementById('delta-item-select');
+        const sp = syncPlanData.sync_plan || {};
+        const hashableTypes = new Set(['Notebook', 'DataPipeline', 'SemanticModel', 'Report',
+                                       'SparkJobDefinition', 'Dataflow', 'Eventstream']);
+        const items = (sp.IN_SYNC || []).filter(i => hashableTypes.has(i.type));
+        items.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        items.forEach(i => {
+            const opt = document.createElement('option');
+            opt.value = i.displayName;
+            opt.textContent = `${i.displayName} (${i.type})`;
+            if (i.definition_changed === true) opt.textContent += ' ⚠ changed';
+            select.appendChild(opt);
+        });
+    }
+    populateDeltaDropdown();
+    loadDefCheckState();
+
+    // --- Per-item sync (from table row button) ---
+    async function syncSingleItem(name, btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const resp = await fetch('/api/bcdr/delta-check-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            const data = await resp.json();
+            if (data.action === 'synced') {
+                btn.innerHTML = '<i class="fas fa-check"></i> Done';
+                btn.style.color = '#2e7d32'; btn.style.borderColor = '#4caf50';
+                setTimeout(() => location.reload(), 1500);
+            } else if (data.action === 'unchanged') {
+                btn.innerHTML = '<i class="fas fa-check"></i> OK';
+                btn.style.color = '#2e7d32'; btn.style.borderColor = '#4caf50';
+            } else {
+                btn.innerHTML = '<i class="fas fa-times"></i> Fail';
+                btn.style.color = '#c62828'; btn.style.borderColor = '#f44336';
+                btn.title = data.error || data.action;
+            }
+        } catch (e) {
+            btn.innerHTML = '<i class="fas fa-times"></i>';
+            btn.style.color = '#c62828';
+        }
+        btn.disabled = false;
+    }
+
+    // --- Per-item check (from table row for in-sync items) ---
+    async function checkSingleItem(name, btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const resp = await fetch('/api/bcdr/delta-check-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            const data = await resp.json();
+            if (data.action === 'synced') {
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i> Synced!';
+                btn.style.color = '#7b1fa2';
+                setTimeout(() => location.reload(), 1500);
+            } else if (data.action === 'unchanged') {
+                btn.innerHTML = '<i class="fas fa-check"></i>';
+                btn.style.color = '#2e7d32'; btn.style.borderColor = '#4caf50';
+            } else {
+                btn.innerHTML = '<i class="fas fa-times"></i>';
+                btn.style.color = '#c62828';
+                btn.title = data.error || data.action;
+            }
+        } catch (e) {
+            btn.innerHTML = '<i class="fas fa-times"></i>';
+            btn.style.color = '#c62828';
+        }
+        btn.disabled = false;
+    }
+
+    // --- Fix missing/mismatched workspace permission ---
+    async function fixPermission(principalId, role, principalType, btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const resp = await fetch('/api/bcdr/sync-permission', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ principal_id: principalId, role: role, principal_type: principalType }),
+            });
+            const data = await resp.json();
+            if (data.status === 'ok') {
+                btn.innerHTML = '<i class="fas fa-check"></i> Fixed';
+                btn.style.color = '#2e7d32'; btn.style.borderColor = '#4caf50';
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                btn.innerHTML = '<i class="fas fa-times"></i> Failed';
+                btn.style.color = '#c62828'; btn.style.borderColor = '#f44336';
+                btn.title = data.error || 'Unknown error';
+            }
+        } catch (e) {
+            btn.innerHTML = '<i class="fas fa-times"></i>';
+            btn.style.color = '#c62828';
+            btn.title = e.message;
+        }
+        btn.disabled = false;
+    }
+
+    // --- Auto Definition Check schedule controls ---
+    async function loadDefCheckState() {
+        try {
+            const resp = await fetch('/api/bcdr/defcheck');
+            const data = await resp.json();
+            const toggle = document.getElementById('defcheck-toggle');
+            const select = document.getElementById('defcheck-interval');
+            const info = document.getElementById('defcheck-info');
+            toggle.checked = data.enabled;
+            select.value = String(data.interval_minutes);
+            if (data.enabled) {
+                let text = '<span style="color:#2e7d32;"><i class="fas fa-check-circle"></i> Active</span>';
+                if (data.check_count > 0) {
+                    text += ` · ${data.check_count} checks`;
+                }
+                if (data.synced_count > 0) {
+                    text += ` · ${data.synced_count} auto-synced`;
+                }
+                if (data.last_status) {
+                    text += ` · <small>${data.last_status}</small>`;
+                }
+                info.innerHTML = text;
+            } else {
+                info.innerHTML = '<span style="color:#999;">Off</span>';
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    async function toggleDefCheck() {
+        const toggle = document.getElementById('defcheck-toggle');
+        const select = document.getElementById('defcheck-interval');
+        const info = document.getElementById('defcheck-info');
+        info.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            await fetch('/api/bcdr/defcheck', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: toggle.checked, interval_minutes: parseInt(select.value, 10) }),
+            });
+            loadDefCheckState();
+        } catch (e) { info.textContent = 'Error'; }
+    }
+
+    async function updateDefCheckInterval() {
+        const toggle = document.getElementById('defcheck-toggle');
+        if (toggle.checked) toggleDefCheck();
+    }
+
+    // --- Targeted single-item check & sync ---
+    async function runDeltaCheckItem() {
+        const select = document.getElementById('delta-item-select');
+        const name = select.value;
+        const status = document.getElementById('delta-status');
+        const btn = document.getElementById('btn-delta-check');
+
+        if (!name) { status.textContent = 'Select an artifact first'; return; }
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+        status.textContent = '';
+
+        try {
+            const resp = await fetch('/api/bcdr/delta-check-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            const data = await resp.json();
+            if (data.error) { status.textContent = '❌ ' + data.error; status.style.color = '#c62828'; return; }
+
+            if (data.action === 'synced') {
+                status.innerHTML = `✅ <strong>${esc(name)}</strong> — definition changed, synced to secondary`;
+                status.style.color = '#2e7d32';
+            } else if (data.action === 'unchanged') {
+                status.innerHTML = `✅ <strong>${esc(name)}</strong> — definitions match (hash: ${data.primary_hash || '—'})`;
+                status.style.color = '#2e7d32';
+            } else if (data.action === 'sync_failed') {
+                status.innerHTML = `⚠️ <strong>${esc(name)}</strong> — changed but sync failed: ${esc(data.error)}`;
+                status.style.color = '#e65100';
+            } else if (data.action === 'not_supported') {
+                status.innerHTML = `ℹ️ <strong>${esc(name)}</strong> — type doesn't support definition export`;
+                status.style.color = '#666';
+            } else {
+                status.textContent = `${name}: ${data.action}`;
+            }
+
+            // Refresh drift page after a beat to show updated state
+            if (data.action === 'synced') {
+                setTimeout(() => location.reload(), 2000);
+            }
+        } catch (e) {
+            status.textContent = '❌ Error: ' + e.message;
+            status.style.color = '#c62828';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-search-plus"></i> Check & Sync';
+        }
+    }
+
+    // --- Check all hashable items (batch) ---
+    async function runDeltaSyncAll() {
+        const status = document.getElementById('delta-status');
+        const btn = document.getElementById('btn-delta-all');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking all...';
+        status.textContent = '';
+
+        try {
+            const resp = await fetch('/api/bcdr/delta-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            const data = await resp.json();
+            if (data.error) { status.textContent = '❌ ' + data.error; status.style.color = '#c62828'; return; }
+
+            const parts = [`${data.total_checked} checked`];
+            if (data.synced > 0) parts.push(`${data.synced} synced`);
+            if (data.unchanged > 0) parts.push(`${data.unchanged} unchanged`);
+            if (data.failed > 0) parts.push(`${data.failed} failed`);
+            status.textContent = parts.join(' · ');
+            status.style.color = data.failed > 0 ? '#e65100' : '#2e7d32';
+
+            document.getElementById('drift-defchanged').textContent = data.synced + data.failed;
+
+            if (data.synced > 0) {
+                setTimeout(() => location.reload(), 2000);
+            }
+        } catch (e) {
+            status.textContent = '❌ Error: ' + e.message;
+            status.style.color = '#c62828';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-layer-group"></i> Check All';
+        }
+    }
+</script>
+{% endblock %}

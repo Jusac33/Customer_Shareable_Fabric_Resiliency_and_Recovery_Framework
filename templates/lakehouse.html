@@ -1,0 +1,1154 @@
+{% extends "base.html" %}
+
+{% block title %}Lakehouse Data Sync{% endblock %}
+
+{% block page_title %}Lakehouse Data Sync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex; align-items: center; gap: 14px; margin-bottom: 24px; flex-wrap: wrap;
+    }
+    .page-header .icon {
+        width: 48px; height: 48px; border-radius: 12px;
+        background: linear-gradient(135deg, #e3f2fd, #e8eaf6);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; color: #1565c0;
+    }
+    .page-header h2 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0; }
+    .page-header p { font-size: 13px; color: #666; margin: 2px 0 0; }
+
+    /* Sync Panel shared styles */
+    .sync-panel {
+        background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+        border: 2px solid #90caf9;
+        border-radius: 12px;
+        padding: 24px 28px;
+        margin-bottom: 24px;
+    }
+    .sync-panel h4 {
+        font-size: 16px; font-weight: 700; color: #1a1a2e; margin: 0 0 8px;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .sync-panel p.desc { font-size: 13px; color: #555; margin: 0 0 16px; }
+    .sync-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    .btn-primary-action {
+        padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700;
+        border: 2px solid #1565c0; color: #1565c0; background: #fff;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+        transition: all 0.2s;
+    }
+    .btn-primary-action:hover { background: #1565c0; color: #fff; }
+    .btn-primary-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-success-action {
+        padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700;
+        border: 2px solid #2e7d32; color: #2e7d32; background: #fff;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+        transition: all 0.2s;
+    }
+    .btn-success-action:hover { background: #2e7d32; color: #fff; }
+    .btn-success-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-danger-action {
+        padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        border: 1px solid #ef9a9a; color: #c62828; background: #fff;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-danger-action:hover { background: #ffebee; }
+
+    .btn-secondary {
+        padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        background: #f5f5f5; color: #333; border: 1px solid #ddd; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-secondary:hover { background: #e0e0e0; }
+
+    .sync-status-pill {
+        font-size: 12px; color: #666; padding: 4px 12px;
+        background: #fff; border-radius: 16px; border: 1px solid #ddd;
+    }
+    .sync-status-pill.success { color: #2e7d32; border-color: #4caf50; background: #e8f5e9; }
+    .sync-status-pill.running { color: #1565c0; border-color: #42a5f5; background: #e3f2fd; }
+    .sync-status-pill.error { color: #c62828; border-color: #ef5350; background: #ffebee; }
+
+    /* Schedule rows */
+    .schedule-row {
+        display: flex; align-items: center; gap: 10px; margin-top: 14px;
+        padding: 12px 16px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;
+        flex-wrap: wrap;
+    }
+    .schedule-row label { font-size: 13px; font-weight: 600; color: #444; white-space: nowrap; }
+    .schedule-row select {
+        padding: 5px 10px; border-radius: 6px; border: 1px solid #ccc;
+        font-size: 13px; background: #fff;
+    }
+    .schedule-toggle {
+        position: relative; display: inline-block; width: 44px; height: 24px;
+    }
+    .schedule-toggle input { opacity: 0; width: 0; height: 0; }
+    .schedule-toggle .slider {
+        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+        background: #ccc; border-radius: 24px; transition: .3s;
+    }
+    .schedule-toggle .slider:before {
+        position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+        background: #fff; border-radius: 50%; transition: .3s;
+    }
+    .schedule-toggle input:checked + .slider { background: #2e7d32; }
+    .schedule-toggle input:checked + .slider:before { transform: translateX(20px); }
+    .schedule-info { font-size: 11px; color: #888; margin-left: auto; }
+    .schedule-info .active { color: #2e7d32; font-weight: 600; }
+    .schedule-info .inactive { color: #999; }
+
+    /* Table comparison */
+    .table-comparison { margin-top: 16px; font-size: 12px; }
+    .table-comparison table { width: 100%; border-collapse: collapse; }
+    .table-comparison th, .table-comparison td {
+        padding: 6px 12px; text-align: left; border-bottom: 1px solid #e0e0e0;
+    }
+    .table-comparison th { font-weight: 700; color: #666; background: #fafafa; }
+    .table-comparison .synced { color: #2e7d32; }
+    .table-comparison .missing { color: #c62828; }
+
+    /* Azcopy panel variant */
+    .sync-panel.azcopy {
+        border-color: #1565c0;
+        border-left: 4px solid #1565c0;
+    }
+
+    /* Delete panel */
+    .sync-panel.delete {
+        border-color: #ef5350;
+        border-left: 4px solid #ef5350;
+        background: linear-gradient(135deg, #fff3e0 0%, #ffebee 100%);
+    }
+
+    /* Dropdown styled */
+    .styled-select {
+        min-width: 170px; padding: 6px 10px; border-radius: 6px;
+        border: 1px solid #37474f; background: #263238; color: #eceff1;
+        font-size: 12px;
+    }
+
+    /* Result box */
+    .result-box {
+        display: none; margin-top: 12px; padding: 12px;
+        background: #1a2332; border-radius: 8px; font-size: 12px;
+        max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: #b0bec5;
+        font-family: 'Consolas', monospace;
+    }
+
+    /* Summary cards */
+    .summary-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 14px; margin-bottom: 24px;
+    }
+    .summary-card {
+        background: #fff; border: 2px solid #e0e0e0; border-radius: 10px;
+        padding: 16px 20px; text-align: center;
+    }
+    .summary-card .value { font-size: 28px; font-weight: 800; color: #1a1a2e; }
+    .summary-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+    .summary-card.ok { border-color: #4caf50; }
+    .summary-card.warn { border-color: #ff9800; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="icon"><i class="fas fa-database"></i></div>
+    <div>
+        <h2>Lakehouse Data Sync</h2>
+        <p>Replicate lakehouse tables and files between primary and secondary workspaces</p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="summary-grid" id="summary-grid">
+    <div class="summary-card" id="card-lakehouses">
+        <div class="value" id="val-lakehouses">-</div>
+        <div class="label">Lakehouse Pairs</div>
+    </div>
+    <div class="summary-card" id="card-tables-primary">
+        <div class="value" id="val-tables-primary">-</div>
+        <div class="label">Primary Tables</div>
+    </div>
+    <div class="summary-card" id="card-tables-secondary">
+        <div class="value" id="val-tables-secondary">-</div>
+        <div class="label">Secondary Tables</div>
+    </div>
+    <div class="summary-card" id="card-azcopy-runs">
+        <div class="value" id="val-azcopy-runs">-</div>
+        <div class="label">Azcopy Runs</div>
+    </div>
+</div>
+
+<!-- Section 1: Deploy Notebook + Pipeline -->
+<div class="sync-panel" id="panel-notebook">
+    <h4><i class="fas fa-sync-alt"></i> Notebook &amp; Pipeline Sync (Delta / Parquet)</h4>
+    <p class="desc">
+        <strong>Deploy</strong> creates a PySpark notebook + data pipeline in the secondary workspace that
+        registers Delta table schemas. <strong>Run Sync</strong> triggers the notebook to copy tables via OneLake.
+    </p>
+    <div class="sync-actions">
+        <button class="btn-primary-action" id="btn-deploy-sync" onclick="deploySyncArtifacts(this)">
+            <i class="fas fa-cloud-upload-alt"></i> Deploy Notebook + Pipeline
+        </button>
+        <button class="btn-success-action" id="btn-run-sync" onclick="runDataSync(this)">
+            <i class="fas fa-play"></i> Run Data Sync
+        </button>
+        <button class="btn-secondary" onclick="loadTableComparison()">
+            <i class="fas fa-table"></i> Compare Tables
+        </button>
+        <button class="btn-danger-action" onclick="cleanStaleTables(this)">
+            <i class="fas fa-broom"></i> Clean Stale Tables
+        </button>
+        <span class="sync-status-pill" id="sync-status" style="display:none;"></span>
+    </div>
+
+    <!-- Schedule controls -->
+    <div class="schedule-row" id="schedule-row">
+        <label><i class="fas fa-clock"></i> Scheduled Sync:</label>
+        <label class="schedule-toggle">
+            <input type="checkbox" id="schedule-toggle" onchange="toggleSchedule()">
+            <span class="slider"></span>
+        </label>
+        <label>Every</label>
+        <select id="schedule-interval" onchange="updateScheduleInterval()">
+            <option value="5">5 min</option>
+            <option value="10">10 min</option>
+            <option value="15" selected>15 min</option>
+            <option value="30">30 min</option>
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+            <option value="360">6 hours</option>
+            <option value="720">12 hours</option>
+            <option value="1440">24 hours</option>
+        </select>
+        <span class="schedule-info" id="schedule-info">
+            <span class="inactive">Off</span>
+        </span>
+    </div>
+
+    <!-- Auto-sync watcher -->
+    <div class="schedule-row" id="autosync-row">
+        <label><i class="fas fa-magic"></i> Auto-Replicate New Artifacts:</label>
+        <label class="schedule-toggle">
+            <input type="checkbox" id="autosync-toggle" onchange="toggleAutoSync()">
+            <span class="slider"></span>
+        </label>
+        <label>Check every</label>
+        <select id="autosync-interval" onchange="updateAutoSyncInterval()">
+            <option value="30">30 sec</option>
+            <option value="60" selected>1 min</option>
+            <option value="120">2 min</option>
+            <option value="300">5 min</option>
+            <option value="600">10 min</option>
+        </select>
+        <span class="schedule-info" id="autosync-info">
+            <span class="inactive">Off</span>
+        </span>
+    </div>
+
+    <div class="table-comparison" id="table-comparison"></div>
+</div>
+
+<!-- Section 2: Azcopy Data Replication -->
+<div class="sync-panel azcopy" id="panel-azcopy">
+    <h4><i class="fas fa-copy"></i> Lakehouse Data Replication (azcopy)</h4>
+    <p class="desc">
+        Copy lakehouse data (Delta tables + files) between OneLake endpoints using <strong>azcopy</strong>.
+        <strong>Full Copy</strong> for initial seeding.
+        <strong>Incremental Sync</strong> for ongoing replication (copies only changed blobs).
+    </p>
+    <div class="sync-actions">
+        <select id="azcopy-lh-select" class="styled-select">
+            <option value="ALL">All Lakehouses</option>
+        </select>
+        <select id="azcopy-subpath-select" class="styled-select" style="min-width:130px;">
+            <option value="Tables,Files" selected>Tables + Files</option>
+            <option value="Tables">Tables Only</option>
+            <option value="Files">Files Only</option>
+        </select>
+        <button class="btn-primary-action" onclick="runAzcopy('copy')" id="btn-azcopy-full">
+            <i class="fas fa-cloud-download-alt"></i> Full Copy
+        </button>
+        <button class="btn-success-action" onclick="runAzcopy('sync')" id="btn-azcopy-sync">
+            <i class="fas fa-sync-alt"></i> Incremental Sync
+        </button>
+        <button class="btn-secondary" onclick="runAzcopy('sync', true)">
+            <i class="fas fa-eye"></i> Dry Run
+        </button>
+        <span id="azcopy-status-badge" style="display:none;font-size:12px;padding:3px 8px;border-radius:4px;"></span>
+    </div>
+
+    <!-- Azcopy Scheduled Incremental Sync -->
+    <div style="margin-top:14px;padding:10px 14px;background:#f8f9fa;border-radius:8px;border:1px solid #e0e0e0;">
+        <div class="schedule-row" id="azcopy-schedule-row" style="margin-bottom:0;">
+            <label><i class="fas fa-clock" style="color:#7b1fa2;"></i> Scheduled azcopy Sync:</label>
+            <label class="schedule-toggle">
+                <input type="checkbox" id="azcopy-schedule-toggle" onchange="toggleAzcopySchedule()">
+                <span class="slider"></span>
+            </label>
+            <label>Every</label>
+            <select id="azcopy-schedule-interval" onchange="updateAzcopyScheduleInterval()" style="padding:3px 6px;border-radius:4px;border:1px solid #bbb;font-size:12px;">
+                <option value="5">5 min</option>
+                <option value="10">10 min</option>
+                <option value="15" selected>15 min</option>
+                <option value="30">30 min</option>
+                <option value="60">1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="360">6 hours</option>
+                <option value="720">12 hours</option>
+                <option value="1440">24 hours</option>
+            </select>
+            <label style="margin-left:8px;">
+                <input type="checkbox" id="azcopy-schedule-ml" checked style="margin-right:3px;">
+                <span style="font-size:12px;">Include ML</span>
+            </label>
+            <span class="schedule-info" id="azcopy-schedule-info">
+                <span class="inactive">Off</span>
+            </span>
+        </div>
+    </div>
+
+    <div class="result-box" id="azcopy-result"></div>
+</div>
+
+<!-- Section 3: Delete Secondary Tables -->
+<div class="sync-panel delete" id="panel-delete">
+    <h4><i class="fas fa-trash-alt"></i> Delete Secondary Tables</h4>
+    <p class="desc">
+        Remove all table data from secondary lakehouse(s) before a full re-copy.
+        Uses OneLake DFS API to recursively delete table folders.
+    </p>
+    <div class="sync-actions">
+        <select id="delete-lh-select" class="styled-select">
+            <option value="ALL">All Lakehouses</option>
+        </select>
+        <button class="btn-danger-action" onclick="deleteSecondaryTables(false)" id="btn-delete-tables">
+            <i class="fas fa-trash-alt"></i> Delete All Tables
+        </button>
+        <button class="btn-secondary" onclick="deleteSecondaryTables(true)">
+            <i class="fas fa-eye"></i> Dry Run
+        </button>
+        <span class="sync-status-pill" id="delete-status" style="display:none;"></span>
+    </div>
+    <div class="result-box" id="delete-result"></div>
+</div>
+
+<!-- Section 4: ML Model & Experiment Data Replication -->
+<div class="sync-panel" id="panel-ml" style="border-left: 4px solid #7b1fa2;">
+    <h4><i class="fas fa-brain"></i> ML Model &amp; Experiment Artifacts</h4>
+    <p class="desc">
+        Replicate MLflow model versions, experiment runs, metrics, and artifacts from primary to secondary via <strong>azcopy</strong>.
+        These are stored as files in OneLake under each ML item.
+    </p>
+    <div id="ml-pairs-info" style="margin-bottom:12px;font-size:13px;color:#666;">
+        <i class="fas fa-spinner fa-spin"></i> Loading ML items...
+    </div>
+    <div class="sync-actions">
+        <select id="ml-item-select" class="styled-select">
+            <option value="ALL">All ML Items</option>
+        </select>
+        <button class="btn-primary-action" onclick="runMlCopy('copy')" id="btn-ml-copy">
+            <i class="fas fa-cloud-download-alt"></i> Full Copy
+        </button>
+        <button class="btn-success-action" onclick="runMlCopy('sync')" id="btn-ml-sync">
+            <i class="fas fa-sync-alt"></i> Incremental Sync
+        </button>
+        <button class="btn-secondary" onclick="runMlCopy('copy', true)">
+            <i class="fas fa-eye"></i> Dry Run
+        </button>
+        <span class="sync-status-pill" id="ml-status" style="display:none;"></span>
+    </div>
+    <div class="result-box" id="ml-result"></div>
+
+    <!-- ML Model Definition-Based Registration -->
+    <div style="margin-top:16px;padding:14px 18px;background:#f3e5f5;border-radius:8px;">
+        <h5 style="margin:0 0 8px 0;font-size:14px;"><i class="fas fa-registered"></i> ML Model Registration (API-based)</h5>
+        <p style="font-size:12px;color:#666;margin:0 0 10px 0;">
+            Register ML Models in secondary using Fabric REST API — exports the model definition, remaps experiment references, and creates/updates in secondary.
+            No azcopy needed. Model data lives in the MLExperiment item.
+        </p>
+        <div class="sync-actions">
+            <select id="ml-model-select" class="styled-select">
+                <option value="ALL">All ML Models</option>
+            </select>
+            <button class="btn-primary-action" onclick="runMlModelRegister(false)" id="btn-ml-register">
+                <i class="fas fa-file-import"></i> Register Models
+            </button>
+            <button class="btn-secondary" onclick="runMlModelRegister(true)" id="btn-ml-register-dry">
+                <i class="fas fa-eye"></i> Dry Run
+            </button>
+            <span class="sync-status-pill" id="ml-register-status" style="display:none;"></span>
+        </div>
+        <div class="result-box" id="ml-register-result"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    // ================================================================
+    // Page Initialization
+    // ================================================================
+    async function initPage() {
+        await Promise.all([loadAzcopyStatus(), loadTableSummary(), loadScheduleState(), loadAutoSyncState(), loadAzcopyScheduleState()]);
+    }
+
+    // ================================================================
+    // Summary Cards
+    // ================================================================
+    async function loadTableSummary() {
+        try {
+            const resp = await fetch('/api/bcdr/lakehouse-tables');
+            const data = await resp.json();
+            if (data.error) return;
+
+            const pLakehouses = Object.keys(data.primary || {});
+            const sLakehouses = Object.keys(data.secondary || {});
+            let pCount = 0, sCount = 0;
+            pLakehouses.forEach(lh => { pCount += (data.primary[lh].tables || []).length; });
+            sLakehouses.forEach(lh => { sCount += (data.secondary[lh].tables || []).length; });
+
+            document.getElementById('val-lakehouses').textContent = Math.max(pLakehouses.length, sLakehouses.length);
+            document.getElementById('val-tables-primary').textContent = pCount;
+            document.getElementById('val-tables-secondary').textContent = sCount;
+
+            const lhCard = document.getElementById('card-lakehouses');
+            lhCard.classList.add(pLakehouses.length === sLakehouses.length ? 'ok' : 'warn');
+            const tblCard = document.getElementById('card-tables-secondary');
+            tblCard.classList.add(pCount === sCount ? 'ok' : 'warn');
+            document.getElementById('card-tables-primary').classList.add('ok');
+        } catch (e) { console.error('loadTableSummary:', e); }
+    }
+
+    // ================================================================
+    // Deploy Notebook/Pipeline and Run Sync
+    // ================================================================
+    async function deploySyncArtifacts(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deploying...';
+        const status = document.getElementById('sync-status');
+        status.style.display = 'inline';
+        status.className = 'sync-status-pill running';
+        status.textContent = 'Deploying notebook + pipeline...';
+        try {
+            const resp = await fetch('/api/bcdr/deploy-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await resp.json();
+            if (data.error) {
+                status.className = 'sync-status-pill error';
+                status.textContent = 'Deploy failed: ' + data.error;
+            } else {
+                const nbAction = data.notebook?.action || 'done';
+                const plAction = data.pipeline?.action || 'done';
+                status.className = 'sync-status-pill success';
+                status.textContent = `Notebook ${nbAction}, Pipeline ${plAction}`;
+            }
+        } catch (e) {
+            status.className = 'sync-status-pill error';
+            status.textContent = 'Error: ' + e.message;
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Deploy Notebook + Pipeline';
+    }
+
+    async function runDataSync(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+        const status = document.getElementById('sync-status');
+        status.style.display = 'inline';
+        status.className = 'sync-status-pill running';
+        status.textContent = 'Triggering replication notebook...';
+        try {
+            const resp = await fetch('/api/bcdr/run-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await resp.json();
+            if (data.error) {
+                status.className = 'sync-status-pill error';
+                status.textContent = 'Run failed: ' + data.error;
+            } else {
+                status.className = 'sync-status-pill success';
+                status.textContent = data.message;
+            }
+        } catch (e) {
+            status.className = 'sync-status-pill error';
+            status.textContent = 'Error: ' + e.message;
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Run Data Sync';
+    }
+
+    // ================================================================
+    // Table Comparison
+    // ================================================================
+    async function loadTableComparison() {
+        const div = document.getElementById('table-comparison');
+        div.innerHTML = '<p style="color:#666;"><i class="fas fa-spinner fa-spin"></i> Loading table comparison...</p>';
+        try {
+            const resp = await fetch('/api/bcdr/lakehouse-tables');
+            const data = await resp.json();
+            if (data.error) {
+                div.innerHTML = '<p style="color:#c62828;">Error: ' + escapeHtml(data.error) + '</p>';
+                return;
+            }
+            let html = '<table>';
+            html += '<tr><th>Lakehouse</th><th>Table</th><th>Primary</th><th>Secondary</th></tr>';
+            const allLH = new Set([...Object.keys(data.primary || {}), ...Object.keys(data.secondary || {})]);
+            if (allLH.size === 0) {
+                div.innerHTML = '<p style="color:#999;">No lakehouses found.</p>';
+                return;
+            }
+            allLH.forEach(lhName => {
+                const pInfo = data.primary?.[lhName] || {};
+                const sInfo = data.secondary?.[lhName] || {};
+                const pTables = (pInfo.tables || []).map(t => t.name);
+                const sTables = (sInfo.tables || []).map(t => t.name);
+                const allTables = [...new Set([...pTables, ...sTables])];
+                if (allTables.length === 0) {
+                    const pCapErr = pInfo.capacity_error;
+                    const sCapErr = sInfo.capacity_error;
+                    let note;
+                    if (pCapErr || sCapErr) {
+                        const which = pCapErr ? 'Primary' : 'Secondary';
+                        note = `<em style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> ${which} capacity is not active</em>`;
+                    } else {
+                        note = '<em style="color:#999;">No tables found</em>';
+                    }
+                    html += `<tr><td><strong>${escapeHtml(lhName)}</strong></td><td colspan="3">${note}</td></tr>`;
+                } else {
+                    allTables.forEach((tbl, idx) => {
+                        const inP = pTables.includes(tbl);
+                        const inS = sTables.includes(tbl);
+                        html += '<tr>';
+                        html += idx === 0 ? `<td rowspan="${allTables.length}"><strong>${escapeHtml(lhName)}</strong></td>` : '';
+                        html += `<td>${escapeHtml(tbl)}</td>`;
+                        html += `<td class="${inP ? 'synced' : 'missing'}">${inP ? '\u2713' : '\u2717'}</td>`;
+                        html += `<td class="${inS ? 'synced' : 'missing'}">${inS ? '\u2713' : '\u2717'}</td>`;
+                        html += '</tr>';
+                    });
+                }
+            });
+            html += '</table>';
+            div.innerHTML = html;
+        } catch (e) {
+            div.innerHTML = '<p style="color:#c62828;">Error: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
+
+    async function cleanStaleTables(btn) {
+        if (!confirm('Remove tables from secondary lakehouses that do not exist in primary?\n\nThis deletes stale/orphaned Delta tables.')) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cleaning...';
+        const status = document.getElementById('sync-status');
+        status.style.display = 'inline';
+        status.className = 'sync-status-pill running';
+        status.textContent = 'Cleaning stale tables...';
+        try {
+            const resp = await fetch('/api/bcdr/cleanup-tables', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dry_run: false }),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                status.className = 'sync-status-pill error';
+                status.textContent = 'Error: ' + data.error;
+            } else {
+                let total = 0;
+                (data.results || []).forEach(r => { total += (r.deleted || []).filter(d => d.status === 'deleted').length; });
+                status.className = 'sync-status-pill success';
+                status.textContent = total > 0 ? `Cleaned ${total} stale tables` : 'No stale tables found';
+                if (total > 0) loadTableComparison();
+            }
+        } catch (e) {
+            status.className = 'sync-status-pill error';
+            status.textContent = 'Error: ' + e.message;
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-broom"></i> Clean Stale Tables';
+    }
+
+    // ================================================================
+    // Azcopy
+    // ================================================================
+    async function loadAzcopyStatus() {
+        try {
+            const resp = await fetch('/api/bcdr/azcopy-status');
+            const data = await resp.json();
+
+            // Populate lakehouse dropdowns
+            if (data.lakehouse_pairs && data.lakehouse_pairs.length > 0) {
+                const selects = [document.getElementById('azcopy-lh-select'), document.getElementById('delete-lh-select')];
+                selects.forEach(select => {
+                    if (!select) return;
+                    select.innerHTML = '<option value="ALL">All Lakehouses</option>';
+                    for (const lh of data.lakehouse_pairs) {
+                        select.innerHTML += `<option value="${lh.name}">${lh.name}</option>`;
+                    }
+                });
+            }
+
+            // Azcopy badge
+            const badge = document.getElementById('azcopy-status-badge');
+            if (data.azcopy_available) {
+                badge.style.display = 'inline';
+                badge.style.background = '#1b5e20';
+                badge.style.color = '#a5d6a7';
+                badge.textContent = 'azcopy \u2713';
+            } else {
+                badge.style.display = 'inline';
+                badge.style.background = '#b71c1c';
+                badge.style.color = '#ef9a9a';
+                badge.textContent = 'azcopy not found';
+            }
+
+            // Run count summary card
+            document.getElementById('val-azcopy-runs').textContent = data.run_count || 0;
+            const runCard = document.getElementById('card-azcopy-runs');
+            if (data.run_count > 0) runCard.classList.add('ok');
+
+            if (data.last_run) {
+                badge.title = `Last run: ${data.last_run}\nMode: ${data.last_mode}\nRuns: ${data.run_count}\n${data.last_status}`;
+            }
+        } catch (e) { console.error('loadAzcopyStatus:', e); }
+    }
+
+    async function runAzcopy(mode, dryRun) {
+        const lakehouse = document.getElementById('azcopy-lh-select').value;
+        const subpath = document.getElementById('azcopy-subpath-select').value;
+        const modeLabel = mode === 'copy' ? 'FULL COPY' : 'INCREMENTAL SYNC';
+        const dryLabel = dryRun ? ' (DRY RUN)' : '';
+        const lhLabel = lakehouse === 'ALL' ? 'ALL lakehouses' : lakehouse;
+
+        if (!dryRun && !confirm(`Run azcopy ${modeLabel} for ${lhLabel}?\n\nSubpaths: ${subpath}`)) return;
+
+        const btnFull = document.getElementById('btn-azcopy-full');
+        const btnSync = document.getElementById('btn-azcopy-sync');
+        btnFull.disabled = true;
+        btnSync.disabled = true;
+        const activeBtn = mode === 'copy' ? btnFull : btnSync;
+        const origHtml = activeBtn.innerHTML;
+        activeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+
+        const resultDiv = document.getElementById('azcopy-result');
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = `Running azcopy ${modeLabel}${dryLabel} for ${lhLabel}...\n`;
+
+        try {
+            const resp = await fetch('/api/bcdr/azcopy-replicate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode, lakehouse, subpath, dry_run: !!dryRun}),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                resultDiv.textContent += `\nERROR: ${data.error}`;
+                resultDiv.style.color = '#ef9a9a';
+            } else {
+                let output = `Mode: ${data.mode}${data.dry_run ? ' (DRY RUN)' : ''}\n`;
+                for (const lh of (data.lakehouses || [])) {
+                    output += `\n── ${lh.lakehouse} (${lh.mode}) ──\n`;
+                    for (const sp of (lh.subpaths || [])) {
+                        output += `  ${sp.subpath}: ${sp.status}`;
+                        if (sp.command) output += `\n    cmd: ${sp.command}`;
+                        if (sp.summary_lines) output += '\n    ' + sp.summary_lines.join('\n    ');
+                        if (sp.stderr) output += `\n    stderr: ${sp.stderr}`;
+                        output += '\n';
+                    }
+                }
+                if (data.errors && data.errors.length) {
+                    output += '\nErrors:\n';
+                    data.errors.forEach(e => { output += `  \u2022 ${e}\n`; });
+                    resultDiv.style.color = '#ef9a9a';
+                } else {
+                    resultDiv.style.color = '#a5d6a7';
+                }
+                resultDiv.textContent += output;
+                loadAzcopyStatus();
+                loadTableSummary();
+            }
+        } catch (e) {
+            resultDiv.textContent += `\nError: ${e.message}`;
+            resultDiv.style.color = '#ef9a9a';
+        }
+
+        btnFull.disabled = false;
+        btnSync.disabled = false;
+        activeBtn.innerHTML = origHtml;
+    }
+
+    // ================================================================
+    // Delete Secondary Tables
+    // ================================================================
+    async function deleteSecondaryTables(dryRun) {
+        const lakehouse = document.getElementById('delete-lh-select').value;
+        const lhLabel = lakehouse === 'ALL' ? 'ALL secondary lakehouses' : lakehouse;
+
+        if (!dryRun && !confirm(`DELETE all table data from ${lhLabel}?\n\nThis will remove all Delta table folders from the secondary. You will need to re-copy data afterwards.`)) return;
+
+        const btn = document.getElementById('btn-delete-tables');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+
+        const status = document.getElementById('delete-status');
+        const resultDiv = document.getElementById('delete-result');
+        status.style.display = 'inline';
+        status.className = 'sync-status-pill running';
+        status.textContent = dryRun ? 'Running dry run...' : 'Deleting tables...';
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = '';
+
+        try {
+            const resp = await fetch('/api/bcdr/delete-secondary-tables', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({lakehouse, dry_run: !!dryRun}),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                status.className = 'sync-status-pill error';
+                status.textContent = 'Error: ' + data.error;
+                resultDiv.textContent = data.error;
+                resultDiv.style.color = '#ef9a9a';
+            } else {
+                let output = dryRun ? 'DRY RUN — no changes made\n\n' : '';
+                let totalDeleted = 0;
+                for (const r of (data.results || [])) {
+                    output += `── ${r.lakehouse} ──\n`;
+                    output += `  Status: ${r.status}\n`;
+                    output += `  Folders found: ${(r.tables_found || []).length}\n`;
+                    if (r.deleted && r.deleted.length) {
+                        output += `  Deleted: ${r.deleted.length}\n`;
+                        r.deleted.forEach(d => { output += `    \u2022 ${d}\n`; });
+                        totalDeleted += r.deleted.length;
+                    }
+                    if (r.errors && r.errors.length) {
+                        r.errors.forEach(e => { output += `  ERROR: ${e}\n`; });
+                    }
+                    output += '\n';
+                }
+                resultDiv.textContent = output;
+                if (data.results?.some(r => r.errors?.length)) {
+                    status.className = 'sync-status-pill error';
+                    status.textContent = 'Completed with errors';
+                    resultDiv.style.color = '#ef9a9a';
+                } else {
+                    status.className = 'sync-status-pill success';
+                    status.textContent = dryRun ? `Found ${totalDeleted || (data.results || []).reduce((s,r) => s + (r.tables_found||[]).length, 0)} folders` : `Deleted ${totalDeleted} folders`;
+                    resultDiv.style.color = '#a5d6a7';
+                }
+                loadTableSummary();
+            }
+        } catch (e) {
+            status.className = 'sync-status-pill error';
+            status.textContent = 'Error: ' + e.message;
+            resultDiv.textContent = e.message;
+            resultDiv.style.color = '#ef9a9a';
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete All Tables';
+    }
+
+    // ================================================================
+    // Schedule Controls
+    // ================================================================
+    async function loadScheduleState() {
+        try {
+            const resp = await fetch('/api/bcdr/schedule');
+            const data = await resp.json();
+            const toggle = document.getElementById('schedule-toggle');
+            const select = document.getElementById('schedule-interval');
+            const info = document.getElementById('schedule-info');
+            toggle.checked = data.enabled;
+            select.value = String(data.interval_minutes);
+            if (data.enabled) {
+                let text = '<span class="active"><i class="fas fa-check-circle"></i> Active</span>';
+                if (data.next_run) {
+                    const next = new Date(data.next_run);
+                    const mins = Math.max(0, Math.round((next - new Date()) / 60000));
+                    text += ` &mdash; next run in ~${mins} min`;
+                }
+                if (data.run_count > 0) {
+                    text += ` &middot; ${data.run_count} runs`;
+                    if (data.last_status) text += ` (${escapeHtml(data.last_status)})`;
+                }
+                info.innerHTML = text;
+            } else {
+                info.innerHTML = '<span class="inactive">Off</span>';
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    async function toggleSchedule() {
+        const toggle = document.getElementById('schedule-toggle');
+        const select = document.getElementById('schedule-interval');
+        const info = document.getElementById('schedule-info');
+        const enabled = toggle.checked;
+        const interval = parseInt(select.value, 10);
+        info.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const resp = await fetch('/api/bcdr/schedule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled, interval_minutes: interval }),
+            });
+            const data = await resp.json();
+            if (data.error) { info.innerHTML = '<span style="color:#c62828;">' + escapeHtml(data.error) + '</span>'; return; }
+        } catch (e) { info.innerHTML = '<span style="color:#c62828;">Error</span>'; return; }
+        loadScheduleState();
+    }
+
+    async function updateScheduleInterval() {
+        const toggle = document.getElementById('schedule-toggle');
+        if (toggle.checked) await toggleSchedule();
+    }
+
+    // ================================================================
+    // Auto-Sync Watcher
+    // ================================================================
+    async function loadAutoSyncState() {
+        try {
+            const resp = await fetch('/api/bcdr/autosync');
+            const data = await resp.json();
+            const toggle = document.getElementById('autosync-toggle');
+            const select = document.getElementById('autosync-interval');
+            const info = document.getElementById('autosync-info');
+            toggle.checked = data.enabled;
+            select.value = String(data.interval_seconds);
+            if (data.enabled) {
+                let text = '<span class="active"><i class="fas fa-check-circle"></i> Watching</span>';
+                if (data.check_count > 0) text += ` &middot; ${data.check_count} checks`;
+                if (data.replicated_count > 0) text += ` &middot; ${data.replicated_count} auto-replicated`;
+                if (data.last_status) text += ` <br><small style="color:#888;">${escapeHtml(data.last_status)}</small>`;
+                info.innerHTML = text;
+            } else {
+                info.innerHTML = '<span class="inactive">Off</span>';
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    async function toggleAutoSync() {
+        const toggle = document.getElementById('autosync-toggle');
+        const select = document.getElementById('autosync-interval');
+        const info = document.getElementById('autosync-info');
+        const enabled = toggle.checked;
+        const interval = parseInt(select.value, 10);
+        info.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            await fetch('/api/bcdr/autosync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled, interval_seconds: interval }),
+            });
+        } catch (e) { info.innerHTML = '<span style="color:#c62828;">Error</span>'; return; }
+        loadAutoSyncState();
+    }
+
+    async function updateAutoSyncInterval() {
+        const toggle = document.getElementById('autosync-toggle');
+        if (toggle.checked) await toggleAutoSync();
+    }
+
+    // ================================================================
+    // ================================================================
+    // Azcopy Scheduled Incremental Sync
+    // ================================================================
+    async function loadAzcopyScheduleState() {
+        try {
+            const resp = await fetch('/api/bcdr/azcopy-schedule');
+            const data = await resp.json();
+            const toggle = document.getElementById('azcopy-schedule-toggle');
+            const select = document.getElementById('azcopy-schedule-interval');
+            const mlCheck = document.getElementById('azcopy-schedule-ml');
+            const info = document.getElementById('azcopy-schedule-info');
+            toggle.checked = data.enabled;
+            select.value = String(data.interval_minutes);
+            mlCheck.checked = data.include_ml !== false;
+            if (data.enabled) {
+                let text = '<span class="active"><i class="fas fa-check-circle"></i> Active</span>';
+                if (data.next_run) {
+                    const next = new Date(data.next_run);
+                    const mins = Math.max(0, Math.round((next - new Date()) / 60000));
+                    text += ` &mdash; next in ~${mins} min`;
+                }
+                if (data.run_count > 0) {
+                    text += ` &middot; ${data.run_count} runs`;
+                    if (data.last_status) text += `<br><small style="color:#666;">${escapeHtml(data.last_status)}</small>`;
+                }
+                info.innerHTML = text;
+            } else {
+                info.innerHTML = '<span class="inactive">Off</span>';
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    async function toggleAzcopySchedule() {
+        const toggle = document.getElementById('azcopy-schedule-toggle');
+        const select = document.getElementById('azcopy-schedule-interval');
+        const mlCheck = document.getElementById('azcopy-schedule-ml');
+        const info = document.getElementById('azcopy-schedule-info');
+        info.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            await fetch('/api/bcdr/azcopy-schedule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    enabled: toggle.checked,
+                    interval_minutes: parseInt(select.value, 10),
+                    include_ml: mlCheck.checked,
+                }),
+            });
+        } catch (e) { info.innerHTML = '<span style="color:#c62828;">Error</span>'; return; }
+        loadAzcopyScheduleState();
+    }
+
+    async function updateAzcopyScheduleInterval() {
+        const toggle = document.getElementById('azcopy-schedule-toggle');
+        if (toggle.checked) await toggleAzcopySchedule();
+    }
+
+    // ================================================================
+    // ML Model & Experiment Replication
+    // ================================================================
+    async function loadMlStatus() {
+        try {
+            const resp = await fetch('/api/bcdr/ml-status');
+            const data = await resp.json();
+            const info = document.getElementById('ml-pairs-info');
+            const select = document.getElementById('ml-item-select');
+
+            if (!data.ml_pairs || data.ml_pairs.length === 0) {
+                info.innerHTML = '<em style="color:#999;">No ML Model/Experiment items found in primary workspace.</em>';
+                return;
+            }
+
+            // Populate dropdown
+            select.innerHTML = '<option value="ALL">All ML Items</option>';
+            let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+            html += '<tr style="background:#f5f5f5;"><th style="padding:6px 10px;text-align:left;">Type</th><th style="padding:6px 10px;text-align:left;">Name</th><th style="padding:6px 10px;text-align:right;">Primary Files</th><th style="padding:6px 10px;text-align:right;">Secondary Files</th><th style="padding:6px 10px;text-align:center;">Status</th></tr>';
+
+            let missingCount = 0;
+            for (const m of data.ml_pairs) {
+                select.innerHTML += `<option value="${m.name}">${m.type}: ${m.name}</option>`;
+                const isMissing = m.missing === true;
+                const isDefOnly = m.definition_only === true;
+                if (isMissing) missingCount++;
+                const match = !isMissing && !isDefOnly && m.primary_files === m.secondary_files;
+                let statusCell;
+                if (isMissing) {
+                    statusCell = '<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">Missing</span>';
+                } else if (isDefOnly) {
+                    statusCell = '<span style="color:#1565c0;" title="MLModel is replicated by definition only. Actual model artifacts live in the MLExperiment item."><i class="fas fa-file-alt"></i> Definition Only</span>';
+                } else if (match) {
+                    statusCell = '<span style="color:#2e7d32;">\u2713 In Sync</span>';
+                } else {
+                    statusCell = '<span style="color:#c62828;">\u2717 Drift (' + m.primary_files + ' vs ' + m.secondary_files + ')</span>';
+                }
+                html += `<tr style="border-bottom:1px solid #eee;">`;
+                html += `<td style="padding:5px 10px;"><span style="background:${m.type === 'MLModel' ? '#e8eaf6' : '#fce4ec'};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">${m.type}</span></td>`;
+                html += `<td style="padding:5px 10px;font-weight:600;">${escapeHtml(m.name)}</td>`;
+                html += `<td style="padding:5px 10px;text-align:right;">${isDefOnly ? '—' : m.primary_files}</td>`;
+                html += `<td style="padding:5px 10px;text-align:right;">${isMissing ? '—' : (isDefOnly ? '—' : m.secondary_files)}</td>`;
+                html += `<td style="padding:5px 10px;text-align:center;">${statusCell}</td>`;
+                html += `</tr>`;
+            }
+            html += '</table>';
+            if (missingCount > 0) {
+                html += `<div style="margin-top:8px;padding:6px 12px;background:#fff3e0;border-radius:6px;font-size:12px;color:#e65100;"><i class="fas fa-exclamation-triangle"></i> ${missingCount} item(s) missing in secondary. Use <strong>Full Copy</strong> or <strong>Incremental Sync</strong> to auto-create and copy data.</div>`;
+            }
+            info.innerHTML = html;
+
+            // Also populate the ML Model-only dropdown for registration
+            const modelSelect = document.getElementById('ml-model-select');
+            if (modelSelect) {
+                modelSelect.innerHTML = '<option value="ALL">All ML Models</option>';
+                for (const m of data.ml_pairs) {
+                    if (m.type === 'MLModel') {
+                        modelSelect.innerHTML += `<option value="${m.name}">${m.name}</option>`;
+                    }
+                }
+            }
+        } catch (e) {
+            document.getElementById('ml-pairs-info').innerHTML = '<em style="color:#c62828;">Error loading ML status: ' + escapeHtml(e.message) + '</em>';
+        }
+    }
+
+    async function runMlCopy(mode, dryRun) {
+        const item = document.getElementById('ml-item-select').value;
+        const modeLabel = mode === 'copy' ? 'FULL COPY' : 'INCREMENTAL SYNC';
+        const dryLabel = dryRun ? ' (DRY RUN)' : '';
+        const itemLabel = item === 'ALL' ? 'ALL ML items' : item;
+
+        if (!dryRun && !confirm(`Run azcopy ${modeLabel} for ${itemLabel}?`)) return;
+
+        const btnCopy = document.getElementById('btn-ml-copy');
+        const btnSync = document.getElementById('btn-ml-sync');
+        btnCopy.disabled = true;
+        btnSync.disabled = true;
+        const activeBtn = mode === 'copy' ? btnCopy : btnSync;
+        const origHtml = activeBtn.innerHTML;
+        activeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+
+        const status = document.getElementById('ml-status');
+        status.style.display = 'inline';
+        status.className = 'sync-status-pill running';
+        status.textContent = 'Running...';
+
+        const resultDiv = document.getElementById('ml-result');
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = `Running azcopy ${modeLabel}${dryLabel} for ${itemLabel}...\n`;
+
+        try {
+            const resp = await fetch('/api/bcdr/ml-replicate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode, item, dry_run: !!dryRun}),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                resultDiv.textContent += '\nERROR: ' + data.error;
+                resultDiv.style.color = '#ef9a9a';
+                status.className = 'sync-status-pill error';
+                status.textContent = data.error;
+            } else {
+                let output = `Mode: ${data.mode}${data.dry_run ? ' (DRY RUN)' : ''}\n`;
+                let hasErrors = false;
+                for (const r of (data.results || [])) {
+                    output += `\n\u2500\u2500 ${r.type}: ${r.name} (${r.mode}) \u2500\u2500\n`;
+                    if (r.created) output += `  \u2728 Created in secondary (was missing)\n`;
+                    output += `  Status: ${r.status}\n`;
+                    if (r.note) output += `  Note: ${r.note}\n`;
+                    if (r.command) output += `  Command: ${r.command}\n`;
+                    if (r.summary) output += `  Summary: ${r.summary}\n`;
+                    if (r.stderr) { output += `  Error: ${r.stderr}\n`; hasErrors = true; }
+                    if (r.stdout) output += `  Output: ${r.stdout}\n`;
+                    if (r.error) { output += `  Error: ${r.error}\n`; hasErrors = true; }
+                }
+                resultDiv.textContent += output;
+                resultDiv.style.color = hasErrors ? '#ef9a9a' : '#a5d6a7';
+                status.className = hasErrors ? 'sync-status-pill error' : 'sync-status-pill success';
+                status.textContent = hasErrors ? 'Completed with errors' : 'Success';
+                loadMlStatus();
+                loadTableSummary();
+            }
+        } catch (e) {
+            resultDiv.textContent += '\nError: ' + e.message;
+            resultDiv.style.color = '#ef9a9a';
+            status.className = 'sync-status-pill error';
+            status.textContent = 'Error';
+        }
+
+        btnCopy.disabled = false;
+        btnSync.disabled = false;
+        activeBtn.innerHTML = origHtml;
+    }
+
+    // ================================================================
+    // ML Model Registration (API-based)
+    // ================================================================
+    async function runMlModelRegister(dryRun) {
+        const item = document.getElementById('ml-model-select').value;
+        const dryLabel = dryRun ? ' (DRY RUN)' : '';
+        const itemLabel = item === 'ALL' ? 'ALL ML Models' : item;
+
+        if (!dryRun && !confirm(`Register ${itemLabel} in secondary via Fabric API?`)) return;
+
+        const btnReg = document.getElementById('btn-ml-register');
+        const btnDry = document.getElementById('btn-ml-register-dry');
+        btnReg.disabled = true;
+        btnDry.disabled = true;
+        const origHtml = btnReg.innerHTML;
+        if (!dryRun) btnReg.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
+        else btnDry.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+
+        const status = document.getElementById('ml-register-status');
+        status.style.display = 'inline';
+        status.className = 'sync-status-pill running';
+        status.textContent = 'Running...';
+
+        const resultDiv = document.getElementById('ml-register-result');
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = `Registering ML Models${dryLabel} for ${itemLabel}...\n`;
+
+        try {
+            const resp = await fetch('/api/bcdr/ml-model-register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({item, dry_run: !!dryRun}),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                resultDiv.textContent += '\nERROR: ' + data.error;
+                resultDiv.style.color = '#ef9a9a';
+                status.className = 'sync-status-pill error';
+                status.textContent = data.error;
+            } else {
+                let output = dryRun ? '=== DRY RUN ===\n' : '';
+                const s = data.summary || {};
+                output += `Total: ${s.total || 0} | Success: ${s.success || 0} | No Definition: ${s.no_definition || 0} | Fallback: ${s.fallback || 0} | Failed: ${s.failed || 0}\n\n`;
+                for (const r of (data.results || [])) {
+                    const icon = r.status === 'success' ? '✓' : r.status === 'dry_run' ? '◎' : r.status === 'no_definition' ? '○' : '✗';
+                    output += `${icon} ${r.name} — ${r.status}`;
+                    if (r.action) output += ` (${r.action})`;
+                    if (r.note) output += `\n  Note: ${r.note}`;
+                    if (r.parts_count) output += `\n  Definition parts: ${r.parts_count}`;
+                    if (r.error) output += `\n  Error: ${r.error}`;
+                    if (r.parts_preview) {
+                        output += '\n  Parts:';
+                        for (const p of r.parts_preview) {
+                            output += `\n    ${p.path}: ${p.preview}`;
+                        }
+                    }
+                    output += '\n';
+                }
+                resultDiv.textContent = output;
+                const hasErrors = (s.failed || 0) > 0;
+                resultDiv.style.color = hasErrors ? '#ef9a9a' : '#a5d6a7';
+                status.className = hasErrors ? 'sync-status-pill error' : 'sync-status-pill success';
+                status.textContent = hasErrors ? 'Completed with errors' : (dryRun ? 'Dry Run Complete' : 'Registered');
+                if (!dryRun) { loadMlStatus(); loadTableSummary(); }
+            }
+        } catch (e) {
+            resultDiv.textContent += '\nError: ' + e.message;
+            resultDiv.style.color = '#ef9a9a';
+            status.className = 'sync-status-pill error';
+            status.textContent = 'Error';
+        }
+
+        btnReg.disabled = false;
+        btnDry.disabled = false;
+        btnReg.innerHTML = origHtml;
+        if (dryRun) btnDry.innerHTML = '<i class="fas fa-eye"></i> Dry Run';
+    }
+
+    // ================================================================
+    // Init
+    // ================================================================
+    initPage();
+    loadMlStatus();
+    loadScheduleState();
+    setInterval(loadScheduleState, 30000);
+    loadAutoSyncState();
+    setInterval(loadAutoSyncState, 15000);
+    loadAzcopyScheduleState();
+    setInterval(loadAzcopyScheduleState, 30000);
+</script>
+{% endblock %}

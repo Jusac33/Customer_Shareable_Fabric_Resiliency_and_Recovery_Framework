@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Fabric BCDR Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 62.5L44 10h38L48 62.5H10Z" fill="#117865"/>
+                    <path d="M10 62.5L44 10h38L48 62.5H10Z" fill="url(#fg1)" opacity="0.5"/>
+                    <path d="M48 62.5H10L26 86h38l-16-23.5Z" fill="#33B890"/>
+                    <path d="M48 62.5L82 10H60L26 62.5h22Z" fill="#2D9F78"/>
+                    <path d="M48 62.5H26L42 86h22L48 62.5Z" fill="#117865"/>
+                    <defs>
+                        <linearGradient id="fg1" x1="44" y1="10" x2="48" y2="62.5" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#33B890"/><stop offset="1" stop-color="#117865"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <span>Microsoft Fabric</span>
+            </div>
+            <!-- Workspace Pair Switcher -->
+            <div class="pair-switcher" id="pair-switcher" style="display:none;">
+                <input type="text" id="pair-search" placeholder="Search pairs..." oninput="filterPairs(this.value)" style="
+                    width:100%;padding:6px 8px;border:1px solid rgba(255,255,255,0.15);
+                    border-radius:5px;background:rgba(255,255,255,0.08);color:#ccc;
+                    font-size:12px;outline:none;margin-top:6px;box-sizing:border-box;">
+                <select id="pair-select" size="1" onchange="switchActivePair(this.value)" style="
+                    width:100%;padding:6px 8px;border:1px solid rgba(255,255,255,0.15);
+                    border-radius:5px;background:rgba(255,255,255,0.08);color:#ccc;
+                    font-size:12px;outline:none;cursor:pointer;margin-top:4px;">
+                </select>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+                    <span id="pair-count" style="color:#888;font-size:10px;"></span>
+                    <a href="/setup" style="color:#64B5F6;font-size:11px;text-decoration:none;">
+                        <i class="fas fa-plus-circle"></i> Add Pair
+                    </a>
+                </div>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item{% if request.path == '/' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/' %} active{% endif %}" href="/">
+                        <i class="fas fa-home"></i>
+                        <span>Command Center</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/drift' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/drift' %} active{% endif %}" href="/drift">
+                        <i class="fas fa-compass"></i>
+                        <span>Operational Drift</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/integrity' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/integrity' %} active{% endif %}" href="/integrity">
+                        <i class="fas fa-database"></i>
+                        <span>Data Assurance</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/architecture' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/architecture' %} active{% endif %}" href="/architecture">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>Architecture</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/topology' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/topology' %} active{% endif %}" href="/topology">
+                        <i class="fas fa-globe-americas"></i>
+                        <span>Topology & Lineage</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/inventory' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/inventory' %} active{% endif %}" href="/inventory">
+                        <i class="fas fa-cubes"></i>
+                        <span>Workspace Inventory</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/lakehouse' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/lakehouse' %} active{% endif %}" href="/lakehouse">
+                        <i class="fas fa-database"></i>
+                        <span>Lakehouse Data Sync</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/security' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/security' %} active{% endif %}" href="/security">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>OneLake Security</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/failover' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/failover' %} active{% endif %}" href="/failover">
+                        <i class="fas fa-exchange-alt"></i>
+                        <span>Managed Failover</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/gateways' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/gateways' %} active{% endif %}" href="/gateways">
+                        <i class="fas fa-server"></i>
+                        <span>Data Gateways</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/rti' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/rti' %} active{% endif %}" href="/rti">
+                        <i class="fas fa-bolt"></i>
+                        <span>Real-Time Intelligence</span>
+                    </a>
+                </li>
+                <li class="nav-item{% if request.path == '/devops' %} active{% endif %}">
+                    <a class="nav-link{% if request.path == '/devops' %} active{% endif %}" href="/devops">
+                        <i class="fas fa-code-branch"></i>
+                        <span>DevOps</span>
+                    </a>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <p>Fabric BCDR v1.0</p>
+                <p class="text-muted">Disaster Recovery Control</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+                </div>
+                <div class="header-right">
+                    <button class="btn btn-secondary" onclick="location.reload()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </header>
+
+            <!-- Active Pair Context Banner -->
+            <div class="pair-context-banner" id="pair-context-banner" style="display:none;">
+                <div class="pair-context-inner">
+                    <div class="pair-context-label">
+                        <i class="fas fa-link"></i>
+                        <span id="pcb-label"></span>
+                    </div>
+                    <div class="pair-context-details">
+                        <div class="pair-context-ws primary">
+                            <span class="pcb-role">PRIMARY</span>
+                            <span class="pcb-ws-name" id="pcb-primary-name"></span>
+                            <span class="pcb-region" id="pcb-primary-region"></span>
+                        </div>
+                        <div class="pair-context-arrow">
+                            <i class="fas fa-arrows-alt-h"></i>
+                        </div>
+                        <div class="pair-context-ws secondary">
+                            <span class="pcb-role">SECONDARY</span>
+                            <span class="pcb-ws-name" id="pcb-secondary-name"></span>
+                            <span class="pcb-region" id="pcb-secondary-region"></span>
+                        </div>
+                    </div>
+                    <div class="pair-context-state" id="pcb-state-badge"></div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="content">
+                {% block content %}{% endblock %}
+            </div>
+
+            <!-- Footer -->
+            <footer class="footer">
+                <p>&copy; 2026 Microsoft Fabric BCDR | Last updated: <span id="update-time">now</span></p>
+            </footer>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/3.9.1/chart.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+    // Workspace pair switcher logic — supports 100s of pairs with search
+    let _allPairs = [];
+    let _activePairId = null;
+
+    (async function loadPairSwitcher() {
+        try {
+            const resp = await fetch('/api/workspace-pairs');
+            const data = await resp.json();
+            _allPairs = data.pairs || [];
+            _activePairId = data.active_pair;
+
+            // Always load active pair context banner
+            loadPairContextBanner();
+
+            const switcher = document.getElementById('pair-switcher');
+            if (_allPairs.length < 1) return; // Hide if no pairs at all
+            switcher.style.display = '';
+            // Show search box only when 10+ pairs
+            document.getElementById('pair-search').style.display = _allPairs.length >= 10 ? '' : 'none';
+            // Show count badge
+            document.getElementById('pair-count').textContent = `${_allPairs.length} pairs`;
+            renderPairOptions(_allPairs);
+        } catch (e) { /* ignore */ }
+    })();
+
+    async function loadPairContextBanner() {
+        try {
+            const resp = await fetch('/api/active-pair-info');
+            const info = await resp.json();
+            if (!info.configured) return;
+            const banner = document.getElementById('pair-context-banner');
+            document.getElementById('pcb-label').textContent = info.label || 'Active Pair';
+            document.getElementById('pcb-primary-name').textContent = info.primary_name || '—';
+            document.getElementById('pcb-secondary-name').textContent = info.secondary_name || '—';
+            document.getElementById('pcb-primary-region').textContent = info.primary_region
+                ? `${info.primary_region}${info.primary_capacity ? ' · ' + info.primary_capacity : ''}`
+                : '';
+            document.getElementById('pcb-secondary-region').textContent = info.secondary_region
+                ? `${info.secondary_region}${info.secondary_capacity ? ' · ' + info.secondary_capacity : ''}`
+                : '';
+            // DR state badge
+            const stateEl = document.getElementById('pcb-state-badge');
+            const st = info.dr_state || 'normal';
+            const stateMap = {
+                normal: { label: 'Normal', cls: 'state-normal', icon: 'fa-check-circle' },
+                failing_over: { label: 'Failing Over', cls: 'state-failover', icon: 'fa-spinner fa-spin' },
+                failed_over: { label: 'Failed Over', cls: 'state-failedover', icon: 'fa-exclamation-triangle' },
+                failing_back: { label: 'Failing Back', cls: 'state-failback', icon: 'fa-spinner fa-spin' },
+            };
+            const s = stateMap[st] || stateMap.normal;
+            stateEl.className = `pair-context-state ${s.cls}`;
+            stateEl.innerHTML = `<i class="fas ${s.icon}"></i> ${s.label}`;
+            banner.style.display = '';
+        } catch (e) { /* ignore */ }
+    }
+
+    function renderPairOptions(pairs) {
+        const select = document.getElementById('pair-select');
+        select.size = Math.min(pairs.length, 1); // Keep as normal dropdown
+        select.innerHTML = pairs.map(p =>
+            `<option value="${p.id}" ${p.id === _activePairId ? 'selected' : ''}>${p.label || p.primary_name || 'Pair'}</option>`
+        ).join('');
+    }
+
+    function filterPairs(query) {
+        const q = query.toLowerCase();
+        const filtered = q ? _allPairs.filter(p => {
+            const searchable = `${p.label || ''} ${p.primary_name || ''} ${p.secondary_name || ''}`.toLowerCase();
+            return searchable.includes(q);
+        }) : _allPairs;
+        renderPairOptions(filtered);
+    }
+
+    async function switchActivePair(pairId) {
+        try {
+            await fetch('/api/workspace-pairs/active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pair_id: pairId }),
+            });
+            window.location.reload();
+        } catch (e) { alert('Error switching pair: ' + e.message); }
+    }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

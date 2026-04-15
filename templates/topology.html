@@ -1,0 +1,1521 @@
+{% extends "base.html" %}
+
+{% block title %}Topology & Lineage - Microsoft Fabric BCDR{% endblock %}
+
+{% block page_title %}Topology & Lineage{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-globe-americas"></i> REGIONAL TOPOLOGY
+    </h2>
+    <p class="section-description">Cross-region workspace health, replication status and capacity management</p>
+
+    <!-- System status badge -->
+    <div class="topo-status-bar">
+        <span class="live-dot"></span> LIVE API
+        <span class="topo-status-badge" id="system-status">LOADING...</span>
+    </div>
+
+    <!-- Region cards -->
+    <div class="region-cards" id="region-cards">
+        <div class="region-card" id="region-primary">
+            <div class="region-card-header">
+                <span class="region-dot" id="primary-dot"></span>
+                <span class="region-name" id="primary-region-name">—</span>
+                <span class="region-role-badge primary-badge">PRIMARY</span>
+            </div>
+            <div class="region-meta" id="primary-region-meta"></div>
+            <div class="region-stats">
+                <div class="region-stat">
+                    <span class="stat-label">Health</span>
+                    <span class="stat-value" id="primary-health">—</span>
+                    <div class="health-bar"><div class="health-fill" id="primary-health-bar" style="width:0%"></div></div>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Items</span>
+                    <span class="stat-value" id="primary-items">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Region</span>
+                    <span class="stat-value" id="primary-region-val" style="font-size:14px;">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Capacity</span>
+                    <span class="stat-value" id="primary-capacity-val" style="font-size:13px;">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Status</span>
+                    <span class="stat-value" id="primary-status-val">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Last Heartbeat</span>
+                    <span class="stat-value" id="primary-heartbeat">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="region-card" id="region-secondary">
+            <div class="region-card-header">
+                <span class="region-dot" id="secondary-dot"></span>
+                <span class="region-name" id="secondary-region-name">—</span>
+                <span class="region-role-badge standby-badge" id="secondary-role-badge">STANDBY</span>
+            </div>
+            <div class="region-meta" id="secondary-region-meta"></div>
+            <div class="region-stats">
+                <div class="region-stat">
+                    <span class="stat-label">Health</span>
+                    <span class="stat-value" id="secondary-health">—</span>
+                    <div class="health-bar"><div class="health-fill" id="secondary-health-bar" style="width:0%"></div></div>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Items</span>
+                    <span class="stat-value" id="secondary-items">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Region</span>
+                    <span class="stat-value" id="secondary-region-val" style="font-size:14px;">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Capacity</span>
+                    <span class="stat-value" id="secondary-capacity-val" style="font-size:13px;">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Status</span>
+                    <span class="stat-value" id="secondary-status-val">—</span>
+                </div>
+                <div class="region-stat">
+                    <span class="stat-label">Last Heartbeat</span>
+                    <span class="stat-value" id="secondary-heartbeat">—</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Topology diagram -->
+    <div id="cross-region-banner" style="display:none;text-align:center;padding:8px;background:#e8f5e9;border-radius:6px;margin-bottom:12px;font-size:13px;color:#2e7d32;font-weight:600;">
+        <i class="fas fa-globe"></i> Cross-region replication active
+    </div>
+    <div class="topo-diagram">
+        <div class="topo-node primary-node">
+            <div class="topo-node-region" id="topo-primary-region"></div>
+            <div class="topo-node-name" id="topo-primary-name">—</div>
+            <div class="topo-node-role">PRIMARY</div>
+            <div class="topo-node-cap" id="topo-primary-cap">—</div>
+            <div class="topo-node-health"><span class="dot" id="topo-primary-dot"></span> <span id="topo-primary-status">—</span></div>
+        </div>
+        <div class="topo-link">
+            <div class="topo-link-label" id="topo-lag">Lag: —</div>
+            <div class="topo-link-arrow">- - - - - - - - - - - &rarr;</div>
+            <div class="topo-link-rpo">RPO Target: 15 min</div>
+            <div class="topo-link-source" id="topo-lag-source" style="font-size:11px;color:#888;margin-top:2px;"></div>
+        </div>
+        <div class="topo-node standby-node">
+            <div class="topo-node-region" id="topo-secondary-region"></div>
+            <div class="topo-node-name" id="topo-secondary-name">—</div>
+            <div class="topo-node-role" id="topo-secondary-role">STANDBY</div>
+            <div class="topo-node-cap" id="topo-secondary-cap">—</div>
+            <div class="topo-node-health"><span class="dot" id="topo-secondary-dot"></span> <span id="topo-secondary-status">—</span></div>
+        </div>
+    </div>
+
+    <div class="topo-footer">
+        <span id="last-sync-time">Last sync: —</span>
+        <span id="overall-status">Status: —</span>
+    </div>
+
+    <!-- Replication Summary -->
+    <div class="section-divider"></div>
+    <h3 class="sub-title">REPLICATION SUMMARY</h3>
+    <div class="repl-summary" id="repl-summary">
+        <div class="repl-stat">
+            <span class="repl-label">Primary Items</span>
+            <span class="repl-value" id="repl-primary-count">—</span>
+        </div>
+        <div class="repl-stat">
+            <span class="repl-label">Secondary Items</span>
+            <span class="repl-value" id="repl-secondary-count">—</span>
+        </div>
+        <div class="repl-stat">
+            <span class="repl-label">Replication Lag</span>
+            <span class="repl-value" id="repl-lag">—</span>
+            <span class="repl-sub" id="repl-lag-source" style="font-size:11px;color:#888;"></span>
+        </div>
+        <div class="repl-stat">
+            <span class="repl-label">Artifact Drift</span>
+            <span class="repl-value" id="repl-drift">—</span>
+        </div>
+        <div class="repl-stat">
+            <span class="repl-label">Last Data Sync</span>
+            <span class="repl-value" id="repl-last-sync" style="font-size:16px;">—</span>
+        </div>
+        <div class="repl-stat">
+            <span class="repl-label">Overall Status</span>
+            <span class="repl-value" id="repl-overall">—</span>
+        </div>
+    </div>
+
+    <!-- All Workspace Pairs Overview -->
+    <div class="section-divider"></div>
+    <h3 class="sub-title">ALL WORKSPACE PAIRS</h3>
+    <div id="all-pairs-section" style="display:none;">
+        <div class="pairs-search-bar" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+            <input type="text" id="pairs-search" placeholder="Search pairs..." oninput="searchPairsTable(this.value)"
+                   style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+            <span id="pairs-count" style="font-size:12px;color:#888;white-space:nowrap;"></span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;" id="all-pairs-table">
+            <thead>
+                <tr style="background:#f5f7fa;text-align:left;">
+                    <th style="padding:10px 12px;font-weight:700;color:#555;">Pair</th>
+                    <th style="padding:10px 12px;font-weight:700;color:#555;">Primary</th>
+                    <th style="padding:10px 12px;font-weight:700;color:#555;">Region</th>
+                    <th style="padding:10px 12px;font-weight:700;color:#555;">Secondary</th>
+                    <th style="padding:10px 12px;font-weight:700;color:#555;">Region</th>
+                    <th style="padding:10px 12px;font-weight:700;color:#555;text-align:center;">Items</th>
+                    <th style="padding:10px 12px;font-weight:700;color:#555;text-align:center;">Sync %</th>
+                    <th style="padding:10px 12px;font-weight:700;color:#555;text-align:center;">Status</th>
+                </tr>
+            </thead>
+            <tbody id="all-pairs-body"></tbody>
+        </table>
+        <div class="pairs-pagination" id="pairs-pagination" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;font-size:13px;">
+        </div>
+    </div>
+    <div id="all-pairs-single" style="color:#888;font-size:13px;">
+        <i class="fas fa-info-circle"></i> Only one workspace pair configured.
+        <a href="/setup" style="color:#2196F3;">Add another pair</a> to see multi-workspace topology.
+    </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- LINEAGE PAIRS SECTION                                            -->
+<!-- ================================================================ -->
+<section class="card" id="lineage-section">
+    <h2 class="section-title">
+        <i class="fas fa-project-diagram"></i> ARTIFACT LINEAGE PAIRS
+    </h2>
+    <p class="section-description">
+        Primary ↔ Secondary reference mapping with live health verification.
+        Stale or broken references are flagged automatically.
+    </p>
+
+    <!-- Lineage status bar -->
+    <div class="topo-status-bar">
+        <span class="live-dot"></span> LINEAGE HEALTH
+        <span class="topo-status-badge" id="lineage-status-badge">LOADING...</span>
+        <button onclick="loadLineage(false)" class="lin-btn lin-btn-sm" style="margin-left:8px;" title="Refresh">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+        <button onclick="loadLineage(true)" class="lin-btn lin-btn-sm lin-btn-deep" title="Deep scan definitions for stale IDs">
+            <i class="fas fa-search"></i> Deep Scan
+        </button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="lin-summary" id="lineage-summary">
+        <div class="lin-stat">
+            <span class="lin-stat-value" id="lin-total">—</span>
+            <span class="lin-stat-label">Total Pairs</span>
+        </div>
+        <div class="lin-stat lin-stat-green">
+            <span class="lin-stat-value" id="lin-healthy">—</span>
+            <span class="lin-stat-label">Healthy</span>
+        </div>
+        <div class="lin-stat lin-stat-orange">
+            <span class="lin-stat-value" id="lin-unmatched">—</span>
+            <span class="lin-stat-label">Unmatched</span>
+        </div>
+        <div class="lin-stat lin-stat-red">
+            <span class="lin-stat-value" id="lin-stale">—</span>
+            <span class="lin-stat-label">Stale Refs</span>
+        </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="lin-filter-bar">
+        <input type="text" id="lineage-filter" placeholder="Filter by name or type..."
+               oninput="filterLineageTable()" class="lin-filter-input">
+        <select id="lineage-status-filter" onchange="filterLineageTable()" class="lin-filter-select">
+            <option value="all">All Statuses</option>
+            <option value="healthy">Healthy</option>
+            <option value="missing">Missing</option>
+            <option value="stale">Stale</option>
+        </select>
+    </div>
+
+    <!-- Reference Mapping (collapsible) -->
+    <details class="lin-details">
+        <summary class="lin-details-summary">
+            <i class="fas fa-key"></i> Reference Mapping (Workspace & Infrastructure IDs)
+        </summary>
+        <table class="lin-table" id="ref-mapping-table">
+            <thead>
+                <tr>
+                    <th>Reference Type</th>
+                    <th>Primary ID</th>
+                    <th class="lin-arrow-col"></th>
+                    <th>Secondary ID</th>
+                </tr>
+            </thead>
+            <tbody id="ref-mapping-body"></tbody>
+        </table>
+    </details>
+
+    <!-- Artifact Pairs Table -->
+    <h3 class="sub-title" style="margin-top:20px;">ARTIFACT PAIRS</h3>
+    <table class="lin-table" id="lineage-table">
+        <thead>
+            <tr>
+                <th style="width:28px;"></th>
+                <th>Artifact Name</th>
+                <th>Type</th>
+                <th>Primary ID</th>
+                <th class="lin-arrow-col"></th>
+                <th>Secondary ID</th>
+                <th style="text-align:center;">Status</th>
+            </tr>
+        </thead>
+        <tbody id="lineage-body"></tbody>
+    </table>
+
+    <!-- Dependency Graph: actual artifact-to-artifact connections -->
+    <div class="section-divider"></div>
+    <h3 class="sub-title">
+        DEPENDENCY GRAPH
+        <button onclick="loadConnections(true)" class="lin-btn lin-btn-sm" style="margin-left:12px;vertical-align:middle;" title="Rescan definitions (fresh)">
+            <i class="fas fa-sync-alt"></i> Rescan
+        </button>
+        <span class="lin-spinner" id="conn-spinner" style="display:none;"></span>
+        <span id="conn-cache-info" style="font-size:11px;color:#999;margin-left:12px;vertical-align:middle;"></span>
+    </h3>
+    <p style="font-size:12px;color:#888;margin:-8px 0 12px;">
+        Shows which artifacts reference which inside secondary definitions.
+        Stale connections (still pointing to primary IDs) are flagged red.
+        <strong>Auto-loads from cache</strong> — click Rescan for a fresh definition inspection.
+    </p>
+
+    <!-- Connection summary bar -->
+    <div class="conn-summary" id="conn-summary" style="display:none;">
+        <div class="conn-stat conn-stat-blue">
+            <span class="conn-stat-val" id="conn-total">0</span>
+            <span class="conn-stat-lbl">Connections</span>
+        </div>
+        <div class="conn-stat conn-stat-green">
+            <span class="conn-stat-val" id="conn-healthy">0</span>
+            <span class="conn-stat-lbl">Healthy</span>
+        </div>
+        <div class="conn-stat conn-stat-red">
+            <span class="conn-stat-val" id="conn-stale">0</span>
+            <span class="conn-stat-lbl">Stale</span>
+        </div>
+        <div class="conn-stat">
+            <span class="conn-stat-val" id="conn-inspected">0</span>
+            <span class="conn-stat-lbl">Inspected</span>
+        </div>
+    </div>
+
+    <!-- Visual dependency diagram -->
+    <details class="lin-details" id="conn-graph-details" style="display:none;">
+        <summary class="lin-details-summary" style="cursor:pointer;font-size:13px;color:#555;">
+            <i class="fas fa-project-diagram"></i> Visual Dependency Graph
+        </summary>
+        <div class="lineage-flow-container" id="conn-graph-container" style="margin-top:8px;">
+            <div class="lineage-flow-canvas" id="lineage-canvas">
+                <svg class="lineage-flow-svg" id="lineage-svg"></svg>
+                <div class="lineage-flow-nodes" id="lineage-nodes"></div>
+            </div>
+        </div>
+    </details>
+
+    <!-- Connection detail table -->
+    <div id="conn-table-wrap" style="display:none;">
+        <div class="lin-filter-bar" style="margin-top:8px;">
+            <input type="text" id="conn-filter" placeholder="Filter connections..."
+                   oninput="filterConnections()" class="lin-filter-input">
+            <select id="conn-status-filter" onchange="filterConnections()" class="lin-filter-select">
+                <option value="all">All</option>
+                <option value="healthy">Healthy</option>
+                <option value="stale">Stale</option>
+            </select>
+        </div>
+        <div id="conn-grouped"></div>
+        <details class="lin-details" style="margin-top:12px;">
+            <summary class="lin-details-summary" style="cursor:pointer;font-size:12px;color:#888;">
+                <i class="fas fa-list"></i> Show raw connection details
+            </summary>
+            <table class="lin-table" id="conn-table" style="margin-top:8px;">
+                <thead>
+                    <tr>
+                        <th style="width:28px;"></th>
+                        <th>Source Artifact</th>
+                        <th>Type</th>
+                        <th class="lin-arrow-col"></th>
+                        <th style="width:28px;"></th>
+                        <th>Target Artifact</th>
+                        <th>Target Type</th>
+                        <th>Definition Part</th>
+                        <th style="text-align:center;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="conn-body"></tbody>
+            </table>
+        </details>
+    </div>
+
+    <div id="conn-placeholder" style="text-align:center;color:#aaa;padding:24px 0;font-size:13px;">
+        <span class="lin-spinner"></span> Loading dependency graph...
+    </div>
+
+    <!-- Unmatched items -->
+    <details class="lin-details" id="unmatched-details" style="display:none;">
+        <summary class="lin-details-summary lin-details-warn">
+            <i class="fas fa-exclamation-triangle"></i> Unmatched Primary Items
+            <span class="lin-badge-count" id="unmatched-badge">0</span>
+        </summary>
+        <table class="lin-table">
+            <thead><tr><th>Name</th><th>Type</th><th>Primary ID</th></tr></thead>
+            <tbody id="unmatched-body"></tbody>
+        </table>
+    </details>
+
+    <!-- Stale references (deep scan results) -->
+    <details class="lin-details" id="stale-details" style="display:none;">
+        <summary class="lin-details-summary lin-details-danger">
+            <i class="fas fa-bug"></i> Stale References Found
+            <span class="lin-badge-count lin-badge-red" id="stale-badge">0</span>
+        </summary>
+        <p class="lin-stale-desc">These secondary items still contain primary workspace IDs that should have been remapped.</p>
+        <table class="lin-table">
+            <thead><tr><th>Item</th><th>Type</th><th>Part</th><th>Stale ID</th></tr></thead>
+            <tbody id="stale-body"></tbody>
+        </table>
+    </details>
+</section>
+
+<style>
+    .topo-status-bar {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+        font-size: 12px; font-weight: 600; color: #2e7d32;
+    }
+    .live-dot {
+        width: 8px; height: 8px; border-radius: 50%; background: #4caf50;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .topo-status-badge {
+        margin-left: auto; padding: 6px 16px; border-radius: 4px;
+        font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    .topo-status-badge.healthy { background: #e8f5e9; color: #2e7d32; }
+    .topo-status-badge.warning { background: #fff3e0; color: #e65100; }
+    .topo-status-badge.error { background: #ffebee; color: #c62828; }
+
+    /* Region cards */
+    .region-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+    .region-card {
+        border: 1px solid #e0e0e0; border-radius: 10px; padding: 18px 20px; background: #fff;
+    }
+    .region-card-header {
+        display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+    }
+    .region-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #bdbdbd; }
+    .region-dot.green { background: #4caf50; }
+    .region-dot.red { background: #e53935; }
+    .region-dot.grey { background: #bdbdbd; }
+    .region-name { font-size: 16px; font-weight: 700; color: #333; }
+    .region-meta { font-size: 12px; color: #888; margin: -8px 0 10px 20px; }
+    .region-role-badge {
+        margin-left: auto; padding: 3px 12px; border-radius: 4px;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    .primary-badge { background: #388e3c; color: #fff; }
+    .standby-badge { background: #78909c; color: #fff; }
+
+    .region-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+    .region-stat { flex: 1; min-width: 80px; }
+    .stat-label { display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.4px; }
+    .stat-value { display: block; font-size: 18px; font-weight: 700; color: #333; margin: 2px 0 4px; }
+    .health-bar { height: 4px; background: #eee; border-radius: 2px; overflow: hidden; }
+    .health-fill { height: 100%; border-radius: 2px; transition: width 0.5s; background: #4caf50; }
+
+    /* Topology diagram */
+    .topo-diagram {
+        display: flex; align-items: center; justify-content: center; gap: 24px;
+        padding: 32px 20px; margin: 8px 0; background: #f8fafb; border-radius: 10px;
+    }
+    .topo-node {
+        border: 2px dashed; border-radius: 12px; padding: 24px 32px;
+        text-align: center; min-width: 180px;
+    }
+    .primary-node { border-color: #2196f3; background: #e3f2fd; }
+    .standby-node { border-color: #78909c; background: #eceff1; }
+    .topo-node-name { font-size: 20px; font-weight: 700; color: #333; }
+    .topo-node-region { font-size: 11px; font-weight: 600; color: #888; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
+    .topo-node-role { font-size: 13px; font-weight: 700; color: #1565c0; margin: 4px 0; }
+    .standby-node .topo-node-role { color: #546e7a; }
+    .topo-node-cap { font-size: 14px; color: #666; }
+    .topo-node-health { font-size: 13px; color: #666; margin-top: 8px; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; background: #bdbdbd; }
+    .dot.green { background: #4caf50; }
+    .dot.grey { background: #bdbdbd; }
+    .dot.red { background: #e53935; }
+
+    .topo-link { text-align: center; flex: 1; max-width: 220px; }
+    .topo-link-label {
+        display: inline-block; padding: 6px 18px; border: 1px solid #bdbdbd;
+        border-radius: 20px; font-size: 13px; font-weight: 600; color: #333;
+        background: #fff; margin-bottom: 6px;
+    }
+    .topo-link-arrow { font-size: 16px; color: #388e3c; letter-spacing: 2px; font-weight: 700; }
+    .topo-link-rpo { font-size: 12px; color: #888; margin-top: 4px; }
+
+    .topo-footer {
+        display: flex; justify-content: space-between; font-size: 13px; color: #666;
+        margin-top: 8px; padding: 0 4px;
+    }
+
+    /* Replication summary */
+    .section-divider { border-top: 1px solid #e0e0e0; margin: 28px 0 20px; }
+    .sub-title { font-size: 14px; font-weight: 700; color: #555; letter-spacing: 1px; margin: 0 0 14px; }
+    .repl-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .repl-stat {
+        text-align: center; padding: 16px; background: #fff;
+        border: 1px solid #e0e0e0; border-radius: 8px;
+    }
+    .repl-label { display: block; font-size: 12px; color: #888; margin-bottom: 6px; }
+    .repl-value { display: block; font-size: 22px; font-weight: 700; color: #333; }
+
+    @media (max-width: 768px) {
+        .region-cards { grid-template-columns: 1fr; }
+        .topo-diagram { flex-direction: column; }
+        .repl-summary { grid-template-columns: 1fr 1fr; }
+        .lin-summary { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ============================================================ */
+    /* LINEAGE STYLES                                                */
+    /* ============================================================ */
+    .lin-summary {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
+    }
+    .lin-stat {
+        text-align: center; padding: 16px 12px; background: #f8fafb;
+        border: 1px solid #e0e0e0; border-radius: 8px;
+    }
+    .lin-stat-green { border-left: 4px solid #4caf50; }
+    .lin-stat-orange { border-left: 4px solid #ff9800; }
+    .lin-stat-red { border-left: 4px solid #e53935; }
+    .lin-stat-value { display: block; font-size: 28px; font-weight: 700; color: #333; }
+    .lin-stat-label { display: block; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    .lin-filter-bar {
+        display: flex; gap: 10px; margin-bottom: 16px; align-items: center;
+    }
+    .lin-filter-input {
+        flex: 1; padding: 8px 14px; border: 1px solid #ddd; border-radius: 6px;
+        font-size: 13px; outline: none;
+    }
+    .lin-filter-input:focus { border-color: #2196F3; }
+    .lin-filter-select {
+        padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
+        font-size: 13px; background: #fff; cursor: pointer;
+    }
+
+    .lin-table {
+        width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px;
+    }
+    .lin-table th {
+        padding: 10px 12px; background: #f5f7fa; font-weight: 700; color: #555;
+        text-align: left; border-bottom: 2px solid #e0e0e0;
+    }
+    .lin-table td {
+        padding: 10px 12px; border-bottom: 1px solid #eee; vertical-align: middle;
+    }
+    .lin-table tr:hover td { background: #f0f7ff; }
+    .lin-arrow-col { width: 36px; text-align: center !important; }
+    .lin-arrow { color: #4caf50; font-weight: 700; font-size: 16px; }
+    .lin-id { font-family: 'Courier New', monospace; font-size: 12px; color: #555; word-break: break-all; }
+    .lin-id-missing { color: #e53935; font-style: italic; }
+
+    .lin-badge {
+        display: inline-block; padding: 3px 10px; border-radius: 12px;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    }
+    .lin-badge-healthy { background: #e8f5e9; color: #2e7d32; }
+    .lin-badge-missing { background: #fff3e0; color: #e65100; }
+    .lin-badge-stale { background: #ffebee; color: #c62828; }
+
+    .lin-badge-count {
+        display: inline-block; padding: 1px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: 700; background: #ff9800; color: #fff; margin-left: 8px;
+    }
+    .lin-badge-red { background: #e53935; }
+
+    .lin-type-icon {
+        display: inline-block; width: 24px; height: 24px; border-radius: 4px;
+        text-align: center; line-height: 24px; font-size: 12px; color: #fff;
+        margin-right: 6px; flex-shrink: 0;
+    }
+
+    .lin-btn {
+        padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px;
+        background: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+        transition: all 0.2s;
+    }
+    .lin-btn:hover { background: #f0f7ff; border-color: #2196F3; }
+    .lin-btn-sm { padding: 5px 10px; }
+    .lin-btn-deep { border-color: #ff9800; color: #e65100; }
+    .lin-btn-deep:hover { background: #fff3e0; }
+
+    .lin-details {
+        margin-top: 16px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;
+    }
+    .lin-details-summary {
+        padding: 12px 16px; background: #f8fafb; font-weight: 600; font-size: 13px;
+        cursor: pointer; user-select: none;
+    }
+    .lin-details-summary:hover { background: #eef3f8; }
+    .lin-details-warn { color: #e65100; }
+    .lin-details-danger { color: #c62828; }
+    .lin-stale-desc { padding: 8px 16px; font-size: 12px; color: #888; margin: 0; }
+
+    .lin-row-stale td { background: #fff8f0 !important; }
+    .lin-spinner {
+        display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd;
+        border-top-color: #2196F3; border-radius: 50%; animation: lin-spin 0.6s linear infinite;
+        margin-right: 6px; vertical-align: middle;
+    }
+    @keyframes lin-spin { to { transform: rotate(360deg); } }
+
+    /* ============================================================ */
+    /* DEPENDENCY GRAPH STYLES                                       */
+    /* ============================================================ */
+    .conn-summary {
+        display: flex; gap: 12px; margin-bottom: 16px;
+    }
+    .conn-stat {
+        flex: 1; text-align: center; padding: 10px 8px; background: #f8fafb;
+        border: 1px solid #e0e0e0; border-radius: 6px;
+    }
+    .conn-stat-blue { border-left: 4px solid #1565c0; }
+    .conn-stat-green { border-left: 4px solid #4caf50; }
+    .conn-stat-red { border-left: 4px solid #e53935; }
+    .conn-stat-val { display: block; font-size: 22px; font-weight: 700; color: #333; }
+    .conn-stat-lbl { display: block; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .lineage-flow-container {
+        background: #faf9f8; border: 1px solid #e0e0e0; border-radius: 10px;
+        padding: 24px; margin-bottom: 16px; overflow: auto; position: relative;
+    }
+    .lineage-flow-canvas {
+        position: relative; min-height: 200px;
+    }
+    .lineage-flow-svg {
+        position: absolute; top: 0; left: 0; pointer-events: none;
+    }
+    .lineage-flow-nodes {
+        position: relative;
+    }
+    /* Flow card nodes */
+    .lf-node {
+        position: absolute; width: 200px;
+        background: #fff; border: 1.5px solid #e0e0e0; border-radius: 10px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 10px 14px;
+        transition: box-shadow 0.15s, border-color 0.15s;
+        cursor: default;
+    }
+    .lf-node:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.1); border-color: #bbb; }
+    .lf-node-head { display: flex; align-items: center; gap: 8px; }
+    .lf-node-icon {
+        width: 28px; height: 28px; border-radius: 6px; display: flex;
+        align-items: center; justify-content: center; color: #fff;
+        font-size: 12px; flex-shrink: 0;
+    }
+    .lf-node-info { flex: 1; min-width: 0; }
+    .lf-node-name {
+        font-size: 12px; font-weight: 600; color: #333; line-height: 1.3;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lf-node-type { font-size: 10px; color: #888; }
+    /* Flow edges */
+    .lf-edge { fill: none; stroke-width: 1.5; }
+    .lf-edge-healthy { stroke: #c8c6c4; }
+    .lf-edge-stale { stroke: #e53935; stroke-dasharray: 6,3; }
+    .lf-edge-arrow { fill: #c8c6c4; }
+    .lf-edge-arrow-stale { fill: #e53935; }
+    .conn-edge-healthy { stroke: #4caf50; stroke-width: 2; fill: none; marker-end: url(#arrow-green); }
+    .conn-edge-stale { stroke: #e53935; stroke-width: 2.5; stroke-dasharray: 6,3; fill: none; marker-end: url(#arrow-red); }
+
+    .conn-legend {
+        display: flex; gap: 20px; justify-content: center; margin-top: 8px;
+        font-size: 12px; color: #666;
+    }
+    .conn-legend-item { display: flex; align-items: center; gap: 4px; }
+    .conn-legend-line { display: inline-block; width: 24px; height: 3px; border-radius: 1px; }
+    .conn-legend-green { background: #4caf50; }
+    .conn-legend-red { background: #e53935; border-top: 1px dashed #e53935; }
+
+    /* ── Type section headers ── */
+    .conn-type-section {
+        margin-bottom: 4px; border: none; background: none;
+    }
+    .conn-type-section > summary { list-style: none; }
+    .conn-type-section > summary::-webkit-details-marker { display: none; }
+    .conn-type-header {
+        display: flex; align-items: center; gap: 8px; cursor: pointer;
+        padding: 8px 12px; background: #f7f8fa; border-radius: 6px;
+        border: 1px solid #e8e8e8; user-select: none; margin-bottom: 4px;
+    }
+    .conn-type-header:hover { background: #eef1f5; }
+    .conn-type-section[open] > .conn-type-header { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; }
+    .conn-type-icon {
+        width: 24px; height: 24px; border-radius: 5px; display: flex;
+        align-items: center; justify-content: center; color: #fff; font-size: 11px; flex-shrink: 0;
+    }
+    .conn-type-label { font-size: 13px; font-weight: 700; color: #333; }
+    .conn-type-count {
+        font-size: 11px; font-weight: 600; color: #fff; background: #90a4ae;
+        border-radius: 10px; padding: 1px 8px; min-width: 18px; text-align: center;
+    }
+
+    /* ── Grouped connection cards ── */
+    .conn-group-grid {
+        display: grid; grid-template-columns: 1fr; gap: 0;
+        border: 1px solid #e8e8e8; border-top: none; border-radius: 0 0 6px 6px;
+        overflow: hidden; margin-bottom: 8px;
+    }
+    .conn-group-card {
+        padding: 0; background: #fff; border-bottom: 1px solid #f0f0f0;
+        transition: background 0.15s;
+    }
+    .conn-group-card:last-child { border-bottom: none; }
+    .conn-grp-header {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 14px;
+    }
+    .conn-grp-header:hover { background: #fafbfc; }
+    .conn-card-chevron {
+        font-size: 10px; color: #aaa; transition: transform 0.15s; flex-shrink: 0; width: 12px;
+    }
+    .conn-card-open > .conn-grp-header .conn-card-chevron { transform: rotate(90deg); }
+    .conn-grp-info { display: flex; flex-direction: column; flex: 1; }
+    .conn-grp-name { font-size: 13px; font-weight: 600; color: #333; line-height: 1.2; }
+    .conn-grp-target-count {
+        font-size: 11px; color: #888; margin-left: auto; flex-shrink: 0;
+    }
+    .conn-grp-stale-flag { color: #e53935; font-size: 13px; margin-left: 4px; flex-shrink: 0; }
+    .conn-grp-body {
+        display: none; padding: 4px 14px 10px 34px;
+    }
+    .conn-card-open > .conn-grp-body { display: block; }
+    .conn-grp-targets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .conn-chip {
+        display: inline-flex; align-items: center; gap: 2px;
+        padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
+        background: #f0f4f8; color: #333; border: 1px solid #e0e0e0;
+    }
+    .conn-chip-stale { background: #ffebee; color: #c62828; border-color: #ef9a9a; }
+    .conn-chip-type { font-size: 9px; color: #999; margin-left: 4px; text-transform: uppercase; }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => loadTopology(1));
+
+    let _topoPairsPage = 1;
+    let _topoPairsSearch = '';
+
+    async function loadTopology(pairsPage) {
+        _topoPairsPage = pairsPage || 1;
+        try {
+            const resp = await fetch(`/api/topology?page=${_topoPairsPage}&page_size=25`);
+            const d = await resp.json();
+            if (d.error) { console.error(d.error); return; }
+
+            const p = d.primary || {};
+            const s = d.secondary || {};
+            const now = new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12: true }) + ' ET';
+
+            // Status badge
+            const badge = document.getElementById('system-status');
+            const statusMap = { HEALTHY: ['ALL SYSTEMS NOMINAL', 'healthy'], NEEDS_SYNC: ['SYNC REQUIRED', 'warning'], NO_DR: ['NO DR CONFIGURED', 'error'], STALE: ['STALE — SYNC OVERDUE', 'error'] };
+            const [label, cls] = statusMap[d.status] || ['UNKNOWN', 'error'];
+            badge.textContent = label;
+            badge.className = 'topo-status-badge ' + cls;
+
+            // Primary card
+            const pHealth = p.health || 0;
+            document.getElementById('primary-region-name').textContent = p.name || '(not set)';
+            document.getElementById('primary-health').textContent = pHealth + '%';
+            document.getElementById('primary-health-bar').style.width = Math.min(pHealth, 100) + '%';
+            document.getElementById('primary-items').textContent = p.item_count || 0;
+            document.getElementById('primary-region-val').textContent = p.region || '(unknown)';
+            document.getElementById('primary-capacity-val').textContent = p.capacity_name ? `${p.capacity_name} (${p.capacity_sku || '?'})` : '—';
+            document.getElementById('primary-status-val').textContent = p.status || '—';
+            document.getElementById('primary-heartbeat').textContent = fmtTime(p.last_heartbeat);
+            document.getElementById('primary-region-meta').textContent = p.region ? `Region: ${p.region}` : '';
+            setDot('primary-dot', p.status);
+
+            // Secondary card
+            const sHealth = s.health || 0;
+            document.getElementById('secondary-region-name').textContent = s.name || '(not set)';
+            document.getElementById('secondary-health').textContent = sHealth + '%';
+            document.getElementById('secondary-health-bar').style.width = Math.min(sHealth, 100) + '%';
+            document.getElementById('secondary-items').textContent = s.item_count || 0;
+            document.getElementById('secondary-region-val').textContent = s.region || '(unknown)';
+            document.getElementById('secondary-capacity-val').textContent = s.capacity_name ? `${s.capacity_name} (${s.capacity_sku || '?'})` : '—';
+            document.getElementById('secondary-status-val').textContent = s.status || '—';
+            document.getElementById('secondary-heartbeat').textContent = fmtTime(s.last_heartbeat);
+            document.getElementById('secondary-region-meta').textContent = s.region ? `Region: ${s.region}` : '';
+            document.getElementById('secondary-role-badge').textContent = s.role || 'STANDBY';
+            setDot('secondary-dot', s.status);
+
+            // Cross-region banner
+            if (d.cross_region) {
+                document.getElementById('cross-region-banner').style.display = '';
+                document.getElementById('cross-region-banner').innerHTML =
+                    `<i class="fas fa-globe"></i> Cross-region replication: <strong>${esc(p.region)}</strong> → <strong>${esc(s.region)}</strong>`;
+            }
+
+            // Topology diagram
+            document.getElementById('topo-primary-name').textContent = p.name || '—';
+            document.getElementById('topo-primary-region').textContent = p.region || '';
+            document.getElementById('topo-primary-cap').textContent = p.capacity || '—';
+            document.getElementById('topo-primary-status').textContent = (p.status || 'unknown').toLowerCase();
+            setDot('topo-primary-dot', p.status);
+
+            document.getElementById('topo-secondary-name').textContent = s.name || '—';
+            document.getElementById('topo-secondary-region').textContent = s.region || '';
+            document.getElementById('topo-secondary-role').textContent = s.role || 'STANDBY';
+            document.getElementById('topo-secondary-cap').textContent = s.capacity || '—';
+            document.getElementById('topo-secondary-status').textContent = (s.status || 'unknown').toLowerCase();
+            setDot('topo-secondary-dot', s.status);
+
+            const lag = d.replication_lag;
+            const lagDisplay = lag != null ? (lag < 1 ? '< 1 min' : Math.round(lag) + ' min') : 'Never synced';
+            const lagColor = lag == null ? '#c62828' : (lag <= 15 ? '#2e7d32' : (lag <= 60 ? '#e65100' : '#c62828'));
+            document.getElementById('topo-lag').textContent = 'Lag: ' + lagDisplay;
+            document.getElementById('topo-lag').style.borderColor = lagColor;
+            document.getElementById('topo-lag').style.color = lagColor;
+
+            // Lag source
+            const sourceLabels = { schedule: 'Scheduled sync', autosync: 'Auto-sync watcher', notebook_job: 'Notebook job run', azcopy: 'azcopy data sync', azcopy_schedule: 'Scheduled azcopy sync', never: 'No sync recorded' };
+            document.getElementById('topo-lag-source').textContent = sourceLabels[d.lag_source] || '';
+
+            document.getElementById('last-sync-time').textContent = 'Last data sync: ' + (d.last_sync_ts ? fmtTime(d.last_sync_ts) : 'Never');
+            document.getElementById('overall-status').innerHTML = 'Status: <strong>' + esc(d.status || '—') + '</strong>';
+
+            // Replication summary
+            document.getElementById('repl-primary-count').textContent = p.item_count || 0;
+            document.getElementById('repl-secondary-count').textContent = s.item_count || 0;
+            document.getElementById('repl-lag').textContent = lagDisplay;
+            document.getElementById('repl-lag').style.color = lagColor;
+            document.getElementById('repl-lag-source').textContent = sourceLabels[d.lag_source] || '';
+            document.getElementById('repl-drift').textContent = d.artifact_drift || 0;
+            document.getElementById('repl-drift').style.color = (d.artifact_drift || 0) === 0 ? '#2e7d32' : '#e65100';
+            document.getElementById('repl-last-sync').textContent = d.last_sync_ts ? fmtTime(d.last_sync_ts) : 'Never';
+            const overallEl = document.getElementById('repl-overall');
+            overallEl.textContent = d.status || '—';
+            overallEl.style.color = d.status === 'HEALTHY' ? '#2e7d32' : (d.status === 'NEEDS_SYNC' ? '#e65100' : '#c62828');
+
+            // All workspace pairs
+            const allPairs = d.all_pairs || [];
+            const pp = d.pairs_pagination || {};
+            if (allPairs.length > 0) {
+                document.getElementById('all-pairs-section').style.display = '';
+                document.getElementById('all-pairs-single').style.display = 'none';
+                document.getElementById('pairs-count').textContent = `${pp.total || allPairs.length} total pairs`;
+
+                const tbody = document.getElementById('all-pairs-body');
+                tbody.innerHTML = allPairs.map(ap => {
+                    const syncColor = ap.sync_pct >= 90 ? '#2e7d32' : (ap.sync_pct >= 50 ? '#e65100' : '#c62828');
+                    const crossRegion = ap.primary_region && ap.secondary_region && ap.primary_region !== ap.secondary_region;
+                    return `<tr style="border-bottom:1px solid #eee;${ap.active?'background:#e3f2fd;':''}" class="pair-row" data-pair-id="${esc(ap.id)}">
+                        <td style="padding:10px 12px;font-weight:600;">${esc(ap.label || '—')} ${ap.active ? '<span style="font-size:10px;background:#2196F3;color:#fff;padding:1px 6px;border-radius:8px;">ACTIVE</span>':''}</td>
+                        <td style="padding:10px 12px;">${esc(ap.primary_name || '—')}</td>
+                        <td style="padding:10px 12px;font-size:12px;color:#666;">${esc(ap.primary_region || '—')}</td>
+                        <td style="padding:10px 12px;">${esc(ap.secondary_name || '(none)')}</td>
+                        <td style="padding:10px 12px;font-size:12px;color:#666;">${crossRegion ? '<i class="fas fa-globe" style="color:#2e7d32;margin-right:4px;" title="Cross-region"></i>' : ''}${esc(ap.secondary_region || '—')}</td>
+                        <td style="padding:10px 12px;text-align:center;">${ap.primary_items} / ${ap.secondary_items}</td>
+                        <td style="padding:10px 12px;text-align:center;"><span style="color:${syncColor};font-weight:700;">${ap.sync_pct}%</span></td>
+                        <td style="padding:10px 12px;text-align:center;">${ap.sync_pct >= 90 ? '<span style="color:#2e7d32;">&#10003; Synced</span>' : '<span style="color:#e65100;">&#9888; Drift</span>'}</td>
+                    </tr>`;
+                }).join('');
+
+                // Pagination controls
+                const pagDiv = document.getElementById('pairs-pagination');
+                if (pp.total_pages > 1) {
+                    let html = '';
+                    html += `<button onclick="loadTopology(${Math.max(1, pp.page-1)})" ${pp.page <= 1 ? 'disabled' : ''} style="padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;">&laquo; Prev</button>`;
+                    html += `<span style="color:#666;">Page ${pp.page} of ${pp.total_pages}</span>`;
+                    html += `<button onclick="loadTopology(${Math.min(pp.total_pages, pp.page+1)})" ${pp.page >= pp.total_pages ? 'disabled' : ''} style="padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;">Next &raquo;</button>`;
+                    pagDiv.innerHTML = html;
+                    pagDiv.style.display = 'flex';
+                } else {
+                    pagDiv.style.display = 'none';
+                }
+            }
+
+        } catch (e) { console.error(e); }
+    }
+
+    function fmtTime(iso) {
+        if (!iso) return '—';
+        try {
+            return new Date(iso).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12: true });
+        } catch(e) { return iso; }
+    }
+
+    function setDot(id, status) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = el.className.replace(/green|red|grey/g, '').trim();
+        if (status === 'HEALTHY') el.classList.add('green');
+        else if (status === 'ERROR' || status === 'NOT_SET') el.classList.add('grey');
+        else el.classList.add('green');
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    function searchPairsTable(query) {
+        _topoPairsSearch = query.toLowerCase();
+        const rows = document.querySelectorAll('#all-pairs-body .pair-row');
+        let shown = 0;
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            const match = !_topoPairsSearch || text.includes(_topoPairsSearch);
+            row.style.display = match ? '' : 'none';
+            if (match) shown++;
+        });
+        document.getElementById('pairs-count').textContent = _topoPairsSearch
+            ? `${shown} matching`
+            : `${rows.length} total pairs`;
+    }
+
+    /* ============================================================ */
+    /* LINEAGE LOGIC                                                  */
+    /* ============================================================ */
+    let _lineageData = null;
+    let _lineageStaleSet = new Set();
+
+    // Load lineage + connections on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLineage(false);
+        loadConnections(false);  // auto-load (uses cache if available)
+    });
+
+    const TYPE_ICONS = {
+        Lakehouse:        { icon: 'fa-database',       bg: '#1565c0' },
+        SemanticModel:    { icon: 'fa-chart-bar',      bg: '#7b1fa2' },
+        Report:           { icon: 'fa-file-alt',       bg: '#00838f' },
+        Notebook:         { icon: 'fa-book',           bg: '#2e7d32' },
+        DataPipeline:     { icon: 'fa-cogs',           bg: '#ef6c00' },
+        MLModel:          { icon: 'fa-brain',          bg: '#ad1457' },
+        MLExperiment:     { icon: 'fa-flask',          bg: '#6a1b9a' },
+        GraphQLApi:       { icon: 'fa-robot',          bg: '#00695c' },
+        DataAgent:        { icon: 'fa-robot',          bg: '#00695c' },
+        SparkJobDefinition:{ icon: 'fa-fire',          bg: '#d84315' },
+        Environment:      { icon: 'fa-leaf',           bg: '#33691e' },
+        Eventstream:      { icon: 'fa-bolt',           bg: '#f9a825' },
+        KQLQueryset:      { icon: 'fa-search',         bg: '#4527a0' },
+        Eventhouse:       { icon: 'fa-warehouse',      bg: '#283593' },
+        KQLDatabase:      { icon: 'fa-database',       bg: '#1a237e' },
+    };
+
+    function typeIcon(type) {
+        const t = TYPE_ICONS[type] || { icon: 'fa-cube', bg: '#616161' };
+        return `<span class="lin-type-icon" style="background:${t.bg};"><i class="fas ${t.icon}"></i></span>`;
+    }
+
+    function shortId(id) {
+        if (!id || id.length < 12) return id || '—';
+        return id.substring(0, 8) + '...' + id.substring(id.length - 4);
+    }
+
+    async function loadLineage(deep) {
+        const badge = document.getElementById('lineage-status-badge');
+        badge.innerHTML = '<span class="lin-spinner"></span> ' + (deep ? 'DEEP SCANNING...' : 'LOADING...');
+        badge.className = 'topo-status-badge';
+
+        try {
+            const url = deep ? '/api/lineage?deep=true&max_checks=15' : '/api/lineage';
+            const resp = await fetch(url);
+            const d = await resp.json();
+            if (d.error) {
+                badge.textContent = 'ERROR';
+                badge.className = 'topo-status-badge error';
+                console.error(d.error);
+                return;
+            }
+            _lineageData = d;
+
+            // Build stale set for highlighting
+            _lineageStaleSet = new Set();
+            (d.stale_refs || []).forEach(s => _lineageStaleSet.add(s.item_id));
+
+            const sm = d.summary || {};
+            document.getElementById('lin-total').textContent = sm.total_pairs || 0;
+            document.getElementById('lin-healthy').textContent = sm.healthy || 0;
+            document.getElementById('lin-unmatched').textContent = sm.unmatched_count || 0;
+            document.getElementById('lin-stale').textContent = sm.stale_count || 0;
+
+            // Status badge
+            const staleCount = sm.stale_count || 0;
+            const unmatchedCount = sm.unmatched_count || 0;
+            const missingCount = sm.missing_secondary || 0;
+            if (staleCount > 0) {
+                badge.textContent = `${staleCount} STALE REFERENCE${staleCount > 1 ? 'S' : ''}`;
+                badge.className = 'topo-status-badge error';
+            } else if (missingCount > 0 || unmatchedCount > 0) {
+                badge.textContent = `${missingCount + unmatchedCount} WARNING${(missingCount + unmatchedCount) > 1 ? 'S' : ''}`;
+                badge.className = 'topo-status-badge warning';
+            } else {
+                badge.textContent = 'ALL PAIRS HEALTHY';
+                badge.className = 'topo-status-badge healthy';
+            }
+
+            renderRefMapping(d.reference_mapping || []);
+            renderLineageTable(d.pairs || []);
+            renderUnmatched(d.unmatched_items || []);
+            renderStale(d.stale_refs || []);
+            filterLineageTable();
+
+        } catch (e) {
+            console.error('Lineage load error:', e);
+            badge.textContent = 'ERROR';
+            badge.className = 'topo-status-badge error';
+        }
+    }
+
+    function renderRefMapping(refs) {
+        const tbody = document.getElementById('ref-mapping-body');
+        if (!refs.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">No reference mapping found. Populate data/reference_mapping.csv</td></tr>';
+            return;
+        }
+        tbody.innerHTML = refs.map(r => `
+            <tr>
+                <td><strong>${esc(r.reference_type)}</strong></td>
+                <td class="lin-id" title="${esc(r.primary_ref)}">${esc(shortId(r.primary_ref))}</td>
+                <td class="lin-arrow-col"><span class="lin-arrow">→</span></td>
+                <td class="lin-id" title="${esc(r.secondary_ref)}">${esc(shortId(r.secondary_ref))}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderLineageTable(pairs) {
+        const tbody = document.getElementById('lineage-body');
+        if (!pairs.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">No artifact pairs mapped. Populate data/artifact_mapping.csv</td></tr>';
+            return;
+        }
+        tbody.innerHTML = pairs.map(p => {
+            const ok = p.primary_exists && p.secondary_exists;
+            const isStale = _lineageStaleSet.has(p.secondary_id);
+            let statusBadge, statusClass;
+            if (isStale) {
+                statusBadge = '<span class="lin-badge lin-badge-stale">STALE</span>';
+                statusClass = 'stale';
+            } else if (ok) {
+                statusBadge = '<span class="lin-badge lin-badge-healthy">HEALTHY</span>';
+                statusClass = 'healthy';
+            } else {
+                statusBadge = '<span class="lin-badge lin-badge-missing">MISSING</span>';
+                statusClass = 'missing';
+            }
+            const rowClass = isStale ? ' class="lin-row-stale"' : '';
+            return `<tr${rowClass} data-status="${statusClass}" data-search="${esc((p.name + ' ' + p.type).toLowerCase())}">
+                <td>${typeIcon(p.type)}</td>
+                <td><strong>${esc(p.name)}</strong></td>
+                <td style="font-size:12px;color:#666;">${esc(p.type)}</td>
+                <td class="lin-id${p.primary_exists ? '' : ' lin-id-missing'}" title="${esc(p.primary_id)}">
+                    ${esc(shortId(p.primary_id))}
+                    ${p.primary_exists ? '' : ' <i class="fas fa-times-circle" style="color:#e53935;" title="Not found in primary"></i>'}
+                </td>
+                <td class="lin-arrow-col"><span class="lin-arrow">→</span></td>
+                <td class="lin-id${p.secondary_exists ? '' : ' lin-id-missing'}" title="${esc(p.secondary_id)}">
+                    ${esc(shortId(p.secondary_id))}
+                    ${p.secondary_exists ? '' : ' <i class="fas fa-times-circle" style="color:#e53935;" title="Not found in secondary"></i>'}
+                </td>
+                <td style="text-align:center;">${statusBadge}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderUnmatched(items) {
+        const details = document.getElementById('unmatched-details');
+        const tbody = document.getElementById('unmatched-body');
+        const badge = document.getElementById('unmatched-badge');
+        if (!items.length) {
+            details.style.display = 'none';
+            return;
+        }
+        details.style.display = '';
+        badge.textContent = items.length;
+        tbody.innerHTML = items.map(i => `
+            <tr>
+                <td>${typeIcon(i.type)} <strong>${esc(i.name)}</strong></td>
+                <td style="font-size:12px;color:#666;">${esc(i.type)}</td>
+                <td class="lin-id" title="${esc(i.primary_id)}">${esc(shortId(i.primary_id))}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderStale(refs) {
+        const details = document.getElementById('stale-details');
+        const tbody = document.getElementById('stale-body');
+        const badge = document.getElementById('stale-badge');
+        if (!refs.length) {
+            details.style.display = 'none';
+            return;
+        }
+        details.style.display = '';
+        badge.textContent = refs.length;
+        tbody.innerHTML = refs.map(r => `
+            <tr>
+                <td>${typeIcon(r.item_type)} <strong>${esc(r.item_name)}</strong></td>
+                <td style="font-size:12px;color:#666;">${esc(r.item_type)}</td>
+                <td class="lin-id">${esc(r.part_path)}</td>
+                <td class="lin-id lin-id-missing" title="${esc(r.stale_ref)}">${esc(shortId(r.stale_ref))} <i class="fas fa-exclamation-triangle" style="color:#e53935;"></i></td>
+            </tr>
+        `).join('');
+    }
+
+    function filterLineageTable() {
+        const text = (document.getElementById('lineage-filter').value || '').toLowerCase();
+        const statusFilter = document.getElementById('lineage-status-filter').value;
+        const rows = document.querySelectorAll('#lineage-body tr');
+        rows.forEach(row => {
+            const search = row.getAttribute('data-search') || '';
+            const status = row.getAttribute('data-status') || '';
+            const textMatch = !text || search.includes(text);
+            const statusMatch = statusFilter === 'all' || status === statusFilter;
+            row.style.display = (textMatch && statusMatch) ? '' : 'none';
+        });
+    }
+
+    /* ============================================================ */
+    /* DEPENDENCY GRAPH LOGIC                                         */
+    /* ============================================================ */
+
+    const TYPE_COLORS = {
+        Lakehouse:         { fill: '#e3f2fd', stroke: '#1565c0' },
+        SQLEndpoint:       { fill: '#e8eaf6', stroke: '#283593' },
+        SemanticModel:     { fill: '#f3e5f5', stroke: '#7b1fa2' },
+        Report:            { fill: '#e0f7fa', stroke: '#00838f' },
+        Notebook:          { fill: '#e8f5e9', stroke: '#2e7d32' },
+        DataPipeline:      { fill: '#fff3e0', stroke: '#ef6c00' },
+        MLModel:           { fill: '#fce4ec', stroke: '#ad1457' },
+        MLExperiment:      { fill: '#f3e5f5', stroke: '#6a1b9a' },
+        GraphQLApi:        { fill: '#e0f2f1', stroke: '#00695c' },
+        DataAgent:         { fill: '#e0f2f1', stroke: '#00695c' },
+        SparkJobDefinition:{ fill: '#fbe9e7', stroke: '#d84315' },
+        WorkspaceId:       { fill: '#ffebee', stroke: '#c62828' },
+    };
+
+    function getTypeColor(type) {
+        return TYPE_COLORS[type] || { fill: '#f5f5f5', stroke: '#616161' };
+    }
+
+    async function loadConnections(refresh) {
+        const spinner = document.getElementById('conn-spinner');
+        const placeholder = document.getElementById('conn-placeholder');
+        const cacheInfo = document.getElementById('conn-cache-info');
+        spinner.style.display = 'inline-block';
+        if (cacheInfo) cacheInfo.textContent = refresh ? 'Scanning definitions...' : 'Loading...';
+
+        try {
+            const url = refresh
+                ? '/api/lineage/connections?refresh=true&max_inspect=20'
+                : '/api/lineage/connections?max_inspect=20';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), refresh ? 600000 : 300000);
+            const resp = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            const d = await resp.json();
+            if (d.error) { console.error(d.error); spinner.style.display = 'none'; return; }
+
+            spinner.style.display = 'none';
+            placeholder.style.display = 'none';
+
+            // Show cache status
+            if (cacheInfo) {
+                if (d.scanned_at) {
+                    const scannedDate = new Date(d.scanned_at);
+                    const ageMin = Math.round((d.cache_age_sec || 0) / 60);
+                    const timeStr = scannedDate.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true });
+                    const label = d.cached ? `Cached \u2022 scanned at ${timeStr} (${ageMin}m ago)` : `Scanned at ${timeStr}`;
+                    cacheInfo.innerHTML = `<i class="fas fa-clock"></i> ${label}`;
+                    cacheInfo.style.color = d.cached ? '#999' : '#2e7d32';
+                } else {
+                    cacheInfo.textContent = '';
+                }
+            }
+
+            // Update summary
+            const sm = d.summary || {};
+            document.getElementById('conn-summary').style.display = 'flex';
+            document.getElementById('conn-total').textContent = sm.total_connections || 0;
+            document.getElementById('conn-healthy').textContent = sm.healthy || 0;
+            document.getElementById('conn-stale').textContent = sm.stale || 0;
+            document.getElementById('conn-inspected').textContent = d.inspected_count || 0;
+
+            try {
+                renderConnectionGraph(d.connections || [], d.nodes || {});
+            } catch (graphErr) {
+                console.error('Graph render error:', graphErr);
+                document.getElementById('lineage-nodes').innerHTML = '<div style="color:#c62828;padding:12px;">Graph render error: ' + (graphErr.message || graphErr) + '</div>';
+            }
+            renderConnectionTable(d.connections || []);
+
+            const graphDetails = document.getElementById('conn-graph-details');
+            graphDetails.style.display = '';
+            graphDetails.setAttribute('open', '');
+            document.getElementById('conn-table-wrap').style.display = '';
+
+        } catch (e) {
+            console.error('Connection scan error:', e);
+            spinner.style.display = 'none';
+            if (placeholder) placeholder.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> Error loading graph: ' + (e.message || e) + '</span>';
+        }
+    }
+
+    function renderConnectionGraph(connections, nodeMap) {
+        const nodesDiv = document.getElementById('lineage-nodes');
+        const svg = document.getElementById('lineage-svg');
+        if (!connections.length) {
+            nodesDiv.innerHTML = '<div style="text-align:center;color:#999;padding:32px;">No connections found</div>';
+            svg.innerHTML = '';
+            return;
+        }
+
+        // ── Build adjacency from connections ──
+        const nodeIds = new Set();
+        const edges = []; // {from, to, status}
+        const edgeDedup = new Set();
+        connections.forEach(c => {
+            nodeIds.add(c.source_id);
+            nodeIds.add(c.target_id);
+            const eKey = c.source_id + '>' + c.target_id;
+            if (!edgeDedup.has(eKey)) {
+                edgeDedup.add(eKey);
+                edges.push({ from: c.source_id, to: c.target_id, status: c.status });
+            }
+        });
+
+        // Build node info objects
+        const nodeInfo = {};
+        nodeIds.forEach(nid => {
+            const info = nodeMap[nid] || {};
+            const asSrc = connections.find(c => c.source_id === nid);
+            const asTgt = connections.find(c => c.target_id === nid);
+            nodeInfo[nid] = {
+                id: nid,
+                name: info.name || (asSrc ? asSrc.source_name : (asTgt ? asTgt.target_name : nid.substring(0, 8))),
+                type: info.type || (asSrc ? asSrc.source_type : (asTgt ? asTgt.target_type : '?')),
+            };
+        });
+
+        // ── Assign columns (left-to-right tiers) ──
+        // Column 0: data stores (Lakehouse, Eventhouse, KQLDatabase, SQLEndpoint)
+        // Column 1: compute (Notebook, DataPipeline, MLExperiment, Eventstream, etc.)
+        // Column 2: semantic (SemanticModel)
+        // Column 3: consumers (Report, DataAgent, GraphQLApi)
+        const colMap = {
+            Lakehouse: 0, SQLEndpoint: 0, Eventhouse: 0, KQLDatabase: 0,
+            Notebook: 1, DataPipeline: 1, SparkJobDefinition: 1, Environment: 1,
+            Eventstream: 1, KQLQueryset: 1, MLExperiment: 1, MLModel: 1,
+            Ontology: 1, GraphModel: 1,
+            SemanticModel: 2,
+            Report: 3, GraphQLApi: 3, DataAgent: 3,
+        };
+
+        // Group nodes by column
+        const columns = {};
+        Object.values(nodeInfo).forEach(n => {
+            const col = colMap[n.type] ?? 1;
+            n.col = col;
+            if (!columns[col]) columns[col] = [];
+            columns[col].push(n);
+        });
+
+        // Sort within each column
+        Object.values(columns).forEach(col => col.sort((a, b) => a.name.localeCompare(b.name)));
+
+        // ── Layout ──
+        const nodeW = 200, nodeH = 60, padX = 100, padY = 20;
+        const sortedCols = Object.keys(columns).map(Number).sort((a, b) => a - b);
+
+        // Assign positions
+        let maxColH = 0;
+        sortedCols.forEach((colIdx, ci) => {
+            const col = columns[colIdx];
+            const colH = col.length * (nodeH + padY) - padY;
+            if (colH > maxColH) maxColH = colH;
+        });
+
+        sortedCols.forEach((colIdx, ci) => {
+            const col = columns[colIdx];
+            const colH = col.length * (nodeH + padY) - padY;
+            const startY = (maxColH - colH) / 2; // vertically center
+            col.forEach((n, ri) => {
+                n.x = ci * (nodeW + padX);
+                n.y = startY + ri * (nodeH + padY);
+            });
+        });
+
+        const totalW = sortedCols.length * (nodeW + padX) - padX;
+        const totalH = maxColH;
+
+        // ── Render HTML card nodes ──
+        let nodesHtml = '';
+        Object.values(nodeInfo).forEach(n => {
+            const icon = TYPE_ICONS[n.type] || { icon: 'fa-cube', bg: '#616161' };
+            const colors = getTypeColor(n.type);
+            nodesHtml += `<div class="lf-node" style="left:${n.x}px;top:${n.y}px;border-color:${colors.stroke};" data-nid="${n.id}">
+                <div class="lf-node-head">
+                    <span class="lf-node-icon" style="background:${icon.bg};"><i class="fas ${icon.icon}"></i></span>
+                    <div class="lf-node-info">
+                        <div class="lf-node-name" title="${esc(n.name)}">${esc(n.name)}</div>
+                        <div class="lf-node-type">${esc(n.type)}</div>
+                    </div>
+                </div>
+            </div>`;
+        });
+        nodesDiv.innerHTML = nodesHtml;
+        nodesDiv.style.width = (totalW + nodeW) + 'px';
+        nodesDiv.style.height = (totalH + nodeH) + 'px';
+
+        // ── Render SVG edges ──
+        const svgW = totalW + nodeW;
+        const svgH = totalH + nodeH;
+        svg.setAttribute('width', svgW);
+        svg.setAttribute('height', svgH);
+        svg.style.width = svgW + 'px';
+        svg.style.height = svgH + 'px';
+
+        let edgeHtml = `<defs>
+            <marker id="lf-arr" viewBox="0 0 8 6" refX="8" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+                <path d="M0,0 L8,3 L0,6 Z" class="lf-edge-arrow"/>
+            </marker>
+            <marker id="lf-arr-stale" viewBox="0 0 8 6" refX="8" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+                <path d="M0,0 L8,3 L0,6 Z" class="lf-edge-arrow-stale"/>
+            </marker>
+        </defs>`;
+
+        edges.forEach(e => {
+            const sn = nodeInfo[e.from];
+            const tn = nodeInfo[e.to];
+            if (!sn || !tn) return;
+
+            // Determine port sides based on column position
+            let sx, sy, tx, ty;
+            if (sn.col <= tn.col) {
+                // left-to-right: source right edge → target left edge
+                sx = sn.x + nodeW;
+                sy = sn.y + nodeH / 2;
+                tx = tn.x;
+                ty = tn.y + nodeH / 2;
+            } else {
+                // right-to-left: source left edge → target right edge
+                sx = sn.x;
+                sy = sn.y + nodeH / 2;
+                tx = tn.x + nodeW;
+                ty = tn.y + nodeH / 2;
+            }
+
+            const dx = Math.abs(tx - sx);
+            const cp = Math.max(60, dx * 0.4);
+            const isStale = e.status === 'stale';
+            const cls = isStale ? 'lf-edge lf-edge-stale' : 'lf-edge lf-edge-healthy';
+            const marker = isStale ? 'url(#lf-arr-stale)' : 'url(#lf-arr)';
+
+            edgeHtml += `<path d="M${sx},${sy} C${sx + (sn.col <= tn.col ? cp : -cp)},${sy} ${tx + (sn.col <= tn.col ? -cp : cp)},${ty} ${tx},${ty}"
+                class="${cls}" marker-end="${marker}">
+                <title>${esc(sn.name)} → ${esc(tn.name)}</title>
+            </path>`;
+        });
+
+        svg.innerHTML = edgeHtml;
+
+        // Legend
+        const container = document.getElementById('conn-graph-container');
+        let legendDiv = container.querySelector('.conn-legend');
+        if (!legendDiv) {
+            legendDiv = document.createElement('div');
+            legendDiv.className = 'conn-legend';
+            container.appendChild(legendDiv);
+        }
+        legendDiv.innerHTML = `
+            <span class="conn-legend-item"><span class="conn-legend-line" style="background:#c8c6c4;"></span> Healthy</span>
+            <span class="conn-legend-item"><span class="conn-legend-line" style="background:#e53935;border-style:dashed;"></span> Stale (primary ID)</span>
+        `;
+    }
+
+    function renderConnectionTable(connections) {
+        // ── Grouped compact view ──
+        renderGroupedView(connections);
+
+        // ── Raw detail table (inside collapsible) ──
+        const tbody = document.getElementById('conn-body');
+        if (!connections.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">No connections discovered</td></tr>';
+            return;
+        }
+        tbody.innerHTML = connections.map(c => {
+            const statusBadge = c.status === 'stale'
+                ? '<span class="lin-badge lin-badge-stale"><i class="fas fa-exclamation-triangle"></i> STALE</span>'
+                : '<span class="lin-badge lin-badge-healthy"><i class="fas fa-check"></i> OK</span>';
+            const rowClass = c.status === 'stale' ? ' class="lin-row-stale"' : '';
+            return `<tr${rowClass} data-conn-status="${c.status}" data-conn-search="${esc((c.source_name + ' ' + c.target_name + ' ' + c.source_type + ' ' + c.target_type).toLowerCase())}">
+                <td>${typeIcon(c.source_type)}</td>
+                <td><strong>${esc(c.source_name)}</strong></td>
+                <td style="font-size:12px;color:#666;">${esc(c.source_type)}</td>
+                <td class="lin-arrow-col"><span class="lin-arrow" style="color:${c.status === 'stale' ? '#e53935' : '#4caf50'};">→</span></td>
+                <td>${typeIcon(c.target_type)}</td>
+                <td><strong>${esc(c.target_name)}</strong></td>
+                <td style="font-size:12px;color:#666;">${esc(c.target_type)}</td>
+                <td class="lin-id" style="font-size:11px;" title="${esc(c.detail)}">${esc(c.part_path)}</td>
+                <td style="text-align:center;">${statusBadge}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderGroupedView(connections) {
+        const container = document.getElementById('conn-grouped');
+        if (!connections.length) {
+            container.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">No connections discovered</div>';
+            return;
+        }
+
+        // Group by source artifact
+        const artifactGroups = {};
+        const artifactOrder = [];
+        connections.forEach(c => {
+            const key = c.source_id;
+            if (!artifactGroups[key]) {
+                artifactGroups[key] = { name: c.source_name, type: c.source_type, targets: [], hasStale: false };
+                artifactOrder.push(key);
+            }
+            artifactGroups[key].targets.push(c);
+            if (c.status === 'stale') artifactGroups[key].hasStale = true;
+        });
+
+        // Group artifacts by type
+        const typeGroups = {};
+        const typeOrder = [];
+        const typePriority = { DataAgent: 0, SemanticModel: 1, Report: 1, MLModel: 2, MLExperiment: 2, KQLDatabase: 2, Notebook: 3 };
+        artifactOrder.forEach(key => {
+            const g = artifactGroups[key];
+            if (!typeGroups[g.type]) {
+                typeGroups[g.type] = [];
+                typeOrder.push(g.type);
+            }
+            typeGroups[g.type].push(key);
+        });
+        typeOrder.sort((a, b) => (typePriority[a] ?? 1) - (typePriority[b] ?? 1));
+
+        let html = '';
+        typeOrder.forEach(typeName => {
+            const keys = typeGroups[typeName];
+            keys.sort((a, b) => artifactGroups[a].name.localeCompare(artifactGroups[b].name));
+            const typeIcon = TYPE_ICONS[typeName] || { icon: 'fa-cube', bg: '#616161' };
+            const hasAnyStale = keys.some(k => artifactGroups[k].hasStale);
+            const staleIndicator = hasAnyStale ? ' <span style="color:#e53935;font-size:11px;"><i class="fas fa-exclamation-triangle"></i></span>' : '';
+            // Non-notebook types expanded by default, notebooks collapsed
+            const isOpen = typeName !== 'Notebook' ? 'open' : '';
+
+            html += `<details class="conn-type-section" ${isOpen} data-conn-type="${esc(typeName)}">
+                <summary class="conn-type-header">
+                    <span class="conn-type-icon" style="background:${typeIcon.bg};"><i class="fas ${typeIcon.icon}"></i></span>
+                    <span class="conn-type-label">${esc(typeName)}</span>
+                    <span class="conn-type-count">${keys.length}</span>
+                    ${staleIndicator}
+                </summary>
+                <div class="conn-group-grid">`;
+
+            keys.forEach(key => {
+                const g = artifactGroups[key];
+                const borderColor = g.hasStale ? '#e53935' : '#e0e0e0';
+                const staleFlag = g.hasStale ? '<span class="conn-grp-stale-flag"><i class="fas fa-exclamation-triangle"></i></span>' : '';
+
+                // Deduplicate targets
+                const uniqueTargets = {};
+                g.targets.forEach(t => {
+                    const tk = t.target_id;
+                    if (!uniqueTargets[tk]) {
+                        uniqueTargets[tk] = { name: t.target_name, type: t.target_type, status: t.status, parts: [] };
+                }
+                uniqueTargets[tk].parts.push(t.part_path);
+                if (t.status === 'stale') uniqueTargets[tk].status = 'stale';
+            });
+
+                let targetsHtml = Object.values(uniqueTargets).map(t => {
+                    const chipClass = t.status === 'stale' ? 'conn-chip conn-chip-stale' : 'conn-chip';
+                    const icon = TYPE_ICONS[t.type] || { icon: 'fa-cube', bg: '#616161' };
+                    return `<span class="${chipClass}" title="${esc(t.parts.join(', '))}">
+                        <i class="fas ${icon.icon}" style="color:${icon.bg};margin-right:4px;font-size:10px;"></i>${esc(t.name)}
+                        <span class="conn-chip-type">${esc(t.type)}</span>
+                    </span>`;
+                }).join('');
+
+                const targetCount = Object.keys(uniqueTargets).length;
+                html += `<div class="conn-group-card" data-conn-grp-search="${esc((g.name + ' ' + g.type + ' ' + g.targets.map(t=>t.target_name+' '+t.target_type).join(' ')).toLowerCase())}" data-conn-grp-stale="${g.hasStale}" style="border-left:3px solid ${borderColor};">
+                    <div class="conn-grp-header" onclick="this.parentElement.classList.toggle('conn-card-open')" style="cursor:pointer;">
+                        <i class="fas fa-chevron-right conn-card-chevron"></i>
+                        <div class="conn-grp-info">
+                            <span class="conn-grp-name">${esc(g.name)}</span>
+                        </div>
+                        <span class="conn-grp-target-count">${targetCount} target${targetCount !== 1 ? 's' : ''}</span>
+                        ${staleFlag}
+                    </div>
+                    <div class="conn-grp-body">
+                        <div class="conn-grp-targets">${targetsHtml}</div>
+                    </div>
+                </div>`;
+            });
+            html += '</div></details>';
+        });
+        container.innerHTML = html;
+    }
+
+    function filterConnections() {
+        const text = (document.getElementById('conn-filter').value || '').toLowerCase();
+        const statusFilter = document.getElementById('conn-status-filter').value;
+
+        // Filter grouped view - cards inside type sections
+        document.querySelectorAll('.conn-type-section').forEach(section => {
+            let visibleCards = 0;
+            section.querySelectorAll('.conn-group-card').forEach(card => {
+                const search = card.getAttribute('data-conn-grp-search') || '';
+                const hasStale = card.getAttribute('data-conn-grp-stale') === 'true';
+                const textMatch = !text || search.includes(text);
+                const statusMatch = statusFilter === 'all'
+                    || (statusFilter === 'stale' && hasStale)
+                    || (statusFilter === 'healthy' && !hasStale);
+                const show = textMatch && statusMatch;
+                card.style.display = show ? '' : 'none';
+                if (show) visibleCards++;
+            });
+            section.style.display = visibleCards > 0 ? '' : 'none';
+        });
+
+        // Filter raw table rows
+        document.querySelectorAll('#conn-body tr').forEach(row => {
+            const search = row.getAttribute('data-conn-search') || '';
+            const status = row.getAttribute('data-conn-status') || '';
+            const textMatch = !text || search.includes(text);
+            const statusMatch = statusFilter === 'all' || status === statusFilter;
+            row.style.display = (textMatch && statusMatch) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

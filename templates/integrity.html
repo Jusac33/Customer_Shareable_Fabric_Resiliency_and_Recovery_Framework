@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Data Assurance - Fabric BCDR Dashboard{% endblock %}
+
+{% block page_title %}Data Assurance{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-database"></i> DATA ASSURANCE VALIDATION
+    </h2>
+    <p class="section-description">Verify row counts, schema consistency and data parity between primary and secondary regions</p>
+
+    <div class="assurance-stats">
+        <div class="assurance-stat success">
+            <span class="label">Verified</span>
+            <span class="value" id="stat-verified">3</span>
+        </div>
+        <div class="assurance-stat warning">
+            <span class="label">Warnings</span>
+            <span class="value" id="stat-warnings">0</span>
+        </div>
+        <div class="assurance-stat error">
+            <span class="label">Failures</span>
+            <span class="value" id="stat-failures">0</span>
+        </div>
+    </div>
+
+    <div class="assurance-table-container">
+        <table class="assurance-table">
+            <thead>
+                <tr>
+                    <th>Artifact</th>
+                    <th>Check</th>
+                    <th>Primary</th>
+                    <th>Secondary</th>
+                    <th>Variance</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="assurance-table-body">
+            </tbody>
+        </table>
+    </div>
+
+    <!-- System Replication Artifacts info -->
+    <div id="system-artifacts-section" style="display:none; margin-top: 20px; padding: 14px 18px; background: #f0f4ff; border: 1px solid #bbdefb; border-radius: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <i class="fas fa-info-circle" style="color: #1565c0;"></i>
+            <strong style="color: #1565c0; font-size: 13px;">System Replication Artifacts</strong>
+            <span id="system-artifacts-count" style="background: #1565c0; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;"></span>
+        </div>
+        <p style="font-size: 12px; color: #555; margin: 0 0 8px;">These items exist in the secondary workspace to support BCDR operations. They are excluded from sync comparisons.</p>
+        <div id="system-artifacts-list" style="font-size: 12px; color: #444;"></div>
+    </div>
+</section>
+
+<style>
+    .assurance-stats { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+    .assurance-stat {
+        padding: 12px 20px; border-radius: 8px; background: #f5f5f5;
+        border-left: 4px solid #ccc; min-width: 120px; text-align: center;
+    }
+    .assurance-stat .label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+    .assurance-stat .value { display: block; font-size: 24px; font-weight: 700; }
+    .assurance-stat.success { border-left-color: #4caf50; }
+    .assurance-stat.success .value { color: #2e7d32; }
+    .assurance-stat.warning { border-left-color: #ff9800; }
+    .assurance-stat.warning .value { color: #e65100; }
+    .assurance-stat.error { border-left-color: #f44336; }
+    .assurance-stat.error .value { color: #c62828; }
+
+    .assurance-table-container { margin-top: 16px; overflow-x: auto; }
+    .assurance-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .assurance-table th {
+        padding: 10px 14px; text-align: left; font-weight: 700; color: #555;
+        background: #fafafa; border-bottom: 2px solid #e0e0e0;
+    }
+    .assurance-table td { padding: 10px 14px; border-bottom: 1px solid #eee; }
+    .assurance-table tr:hover { background: #f8f9fa; }
+
+    .badge {
+        display: inline-block; padding: 3px 10px; border-radius: 12px;
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+    }
+    .badge.success { background: #e8f5e9; color: #2e7d32; }
+    .badge.warning { background: #fff3e0; color: #e65100; }
+    .badge.error { background: #ffebee; color: #c62828; }
+
+    .variance-zero { color: #4caf50; font-weight: 600; }
+    .variance-nonzero { color: #f44336; font-weight: 600; }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let assuranceData = {{ assurance_data | safe }};
+    let slowChecks = [];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Show loading state
+        document.getElementById('assurance-table-body').innerHTML =
+            '<tr><td colspan="6" style="text-align:center;padding:30px;color:#888;">' +
+            '<i class="fas fa-spinner fa-spin" style="font-size:20px;margin-right:8px;"></i> Loading assurance checks…</td></tr>';
+        document.getElementById('stat-verified').textContent = '…';
+        document.getElementById('stat-warnings').textContent = '…';
+        document.getElementById('stat-failures').textContent = '…';
+
+        // Phase 1: Fast checks (artifact counts) — renders in ~2s
+        fetch('/api/bcdr/integrity-checks?phase=fast')
+            .then(r => r.json())
+            .then(data => {
+                assuranceData = data;
+                renderAssuranceTable('Loading Lakehouse & KQL checks…');
+                // Phase 2: Slow checks (DFS + KQL) — renders when ready
+                return fetch('/api/bcdr/integrity-checks?phase=slow');
+            })
+            .then(r => r.json())
+            .then(data => {
+                slowChecks = data.checks || [];
+                assuranceData.checks = slowChecks.concat(assuranceData.checks || []);
+                renderAssuranceTable();
+            })
+            .catch(err => {
+                document.getElementById('assurance-table-body').innerHTML =
+                    '<tr><td colspan="6" style="text-align:center;padding:20px;color:#c62828;">' +
+                    '<i class="fas fa-exclamation-triangle"></i> Failed to load assurance data: ' + esc(String(err)) + '</td></tr>';
+            });
+    });
+
+    function renderAssuranceTable(loadingMsg) {
+        const checks = assuranceData.checks || [];
+        let verified = 0, warnings = 0, failures = 0;
+        let rows = '';
+
+        checks.forEach(c => {
+            if (c.status === 'pass') verified++;
+            else if (c.status === 'warning') warnings++;
+            else failures++;
+
+            const badgeClass = c.status === 'pass' ? 'success' : (c.status === 'warning' ? 'warning' : 'error');
+            const badgeLabel = c.status === 'pass' ? '✓ Verified' : (c.status === 'warning' ? '⚠ Warning' : '✗ Failed');
+            const varClass = c.variance === '0' || c.variance === '0 rows' || c.variance === '100%' ? 'variance-zero' : 'variance-nonzero';
+
+            rows += `<tr>
+                <td><strong>${esc(c.artifact)}</strong></td>
+                <td>${esc(c.check)}</td>
+                <td>${esc(c.primary)}</td>
+                <td>${esc(c.secondary)}</td>
+                <td class="${varClass}">${esc(c.variance)}</td>
+                <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
+            </tr>`;
+        });
+
+        // Show a loading row at top if slow phase is still pending
+        if (loadingMsg) {
+            rows = '<tr><td colspan="6" style="text-align:center;padding:12px;color:#888;background:#fafafa;">' +
+                '<i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>' + esc(loadingMsg) + '</td></tr>' + rows;
+        }
+
+        document.getElementById('stat-verified').textContent = verified;
+        document.getElementById('stat-warnings').textContent = warnings;
+        document.getElementById('stat-failures').textContent = failures;
+        document.getElementById('assurance-table-body').innerHTML = rows || '<tr><td colspan="6" style="color:#999;text-align:center;padding:20px;">No assurance data available</td></tr>';
+
+        // System replication artifacts
+        const sysArtifacts = assuranceData.system_artifacts || [];
+        if (sysArtifacts.length > 0) {
+            document.getElementById('system-artifacts-section').style.display = '';
+            document.getElementById('system-artifacts-count').textContent = sysArtifacts.length + ' items in secondary';
+            document.getElementById('system-artifacts-list').innerHTML = sysArtifacts.map(a =>
+                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 10px;background:#e3f2fd;border-radius:4px;font-size:11px;">${esc(a.name)} <span style="color:#888;">(${esc(a.type)})</span></span>`
+            ).join('');
+        }
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+</script>
+{% endblock %}

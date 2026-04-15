@@ -1,0 +1,13 @@
+primary_reference,secondary_reference,reference_type
+your-primary-workspace-id,your-secondary-workspace-id,WorkspaceId
+your-primary-bronze-lakehouse-id,your-secondary-bronze-lakehouse-id,Lakehouse_bronze
+your-primary-silver-lakehouse-id,your-secondary-silver-lakehouse-id,Lakehouse_silver
+your-primary-gold-lakehouse-id,your-secondary-gold-lakehouse-id,Lakehouse_gold
+your-primary-bronze-sqlendpoint-id,your-secondary-bronze-sqlendpoint-id,SQLEndpoint_bronze
+your-primary-silver-sqlendpoint-id,your-secondary-silver-sqlendpoint-id,SQLEndpoint_silver
+your-primary-gold-sqlendpoint-id,your-secondary-gold-sqlendpoint-id,SQLEndpoint_gold
+your-primary-semanticmodel-id,your-secondary-semanticmodel-id,SemanticModel
+your-primary-report-id,your-secondary-report-id,Report
+your-primary-mlmodel-id,your-secondary-mlmodel-id,MLModel
+your-primary-mlexperiment-id,your-secondary-mlexperiment-id,MLExperiment
+your-primary-dataagent-id,your-secondary-dataagent-id,DataAgent

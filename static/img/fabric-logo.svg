@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Microsoft Fabric logo - green layered F shape -->
+  <defs>
+    <linearGradient id="a" x1="22" y1="4" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60CDAE"/>
+      <stop offset="1" stop-color="#1E9E75"/>
+    </linearGradient>
+    <linearGradient id="b" x1="22" y1="16" x2="22" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35B48F"/>
+      <stop offset="1" stop-color="#1A8C6A"/>
+    </linearGradient>
+    <linearGradient id="c" x1="16" y1="28" x2="16" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E9E75"/>
+      <stop offset="1" stop-color="#117865"/>
+    </linearGradient>
+  </defs>
+  <!-- Top bar of F -->
+  <path d="M8 4h32l-6 12H8V4Z" fill="url(#a)" rx="2"/>
+  <!-- Middle bar of F -->
+  <path d="M8 16h20l-6 12H8V16Z" fill="url(#b)"/>
+  <!-- Vertical stem of F -->
+  <path d="M8 28h8v16H8V28Z" fill="url(#c)"/>
+  <!-- Subtle shadow/depth -->
+  <path d="M8 16h20l-6 12H8V16Z" fill="#000" opacity="0.06"/>
+</svg>

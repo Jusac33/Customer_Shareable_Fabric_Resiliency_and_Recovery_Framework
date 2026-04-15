@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+.workspace_state.json
+.msal_token_cache.bin
+.sync_schedule.json
+.autosync_state.json
+.dr_events.json
+.devops_config.json
+.sp_config.json
+.artifact_hashes.json
+.defcheck_state.json
+
+# Logs
+logs/
+*.log
+
+# Data (ignore generated reports but track templates)
+data/*.json
+data/*.bak
+
+# Cache
+.cache/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+azcopy.exe
+.azcopy_state.json
+.azcopy_schedule.json

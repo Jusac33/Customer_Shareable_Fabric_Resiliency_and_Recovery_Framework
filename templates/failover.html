@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+
+{% block title %}Managed Failover - Fabric BCDR Dashboard{% endblock %}
+
+{% block page_title %}Managed Failover{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-exchange-alt"></i> MANAGED FAILOVER & FAILBACK
+    </h2>
+    <p class="section-description">Execute controlled failover and failback procedures with full state tracking</p>
+
+    <!-- DR State Banner -->
+    <div class="dr-state-banner" id="dr-state-banner">
+        <div class="dr-state-icon" id="dr-state-icon"><i class="fas fa-spinner fa-spin"></i></div>
+        <div class="dr-state-info">
+            <div class="dr-state-label" id="dr-state-label">Loading...</div>
+            <div class="dr-state-desc" id="dr-state-desc"></div>
+        </div>
+    </div>
+
+    <!-- Workspace Pair Info -->
+    <div class="fo-pair-info" id="fo-pair-info">
+        <div class="fo-ws-box" id="fo-primary-box">
+            <div class="fo-ws-role">PRIMARY</div>
+            <div class="fo-ws-name" id="fo-primary-name">—</div>
+            <div class="fo-ws-status" id="fo-primary-status">Checking...</div>
+            <div class="fo-ws-items" id="fo-primary-items">—</div>
+        </div>
+        <div class="fo-arrow" id="fo-arrow">
+            <i class="fas fa-arrows-alt-h"></i>
+        </div>
+        <div class="fo-ws-box" id="fo-secondary-box">
+            <div class="fo-ws-role">SECONDARY</div>
+            <div class="fo-ws-name" id="fo-secondary-name">—</div>
+            <div class="fo-ws-status" id="fo-secondary-status">Checking...</div>
+            <div class="fo-ws-items" id="fo-secondary-items">—</div>
+        </div>
+    </div>
+
+    <!-- Sync coverage bar -->
+    <div class="fo-sync-bar-wrap">
+        <div class="fo-sync-label">Artifact Sync Coverage</div>
+        <div class="fo-sync-track">
+            <div class="fo-sync-fill" id="fo-sync-fill" style="width:0%"></div>
+        </div>
+        <div class="fo-sync-pct" id="fo-sync-pct">—</div>
+    </div>
+
+    <!-- Action Buttons Row -->
+    <div class="fo-actions" id="fo-actions">
+        <!-- Buttons injected by JS based on dr_state -->
+    </div>
+
+    <!-- Step Progress Console -->
+    <div id="fo-console" class="fo-console" style="display:none;">
+        <div class="fo-console-header">
+            <h4 id="fo-console-title">Operation Progress</h4>
+            <button class="fo-console-close" onclick="document.getElementById('fo-console').style.display='none'">&times;</button>
+        </div>
+        <div class="fo-log" id="fo-log-body"></div>
+    </div>
+
+    <!-- DR Event History -->
+    <div class="fo-section" style="margin-top:28px;">
+        <h3><i class="fas fa-history"></i> DR Event History</h3>
+        <div id="fo-event-list" class="fo-event-list">
+            <p style="color:#999; font-size:13px;">Loading events...</p>
+        </div>
+    </div>
+</section>
+
+<style>
+    /* DR State Banner */
+    .dr-state-banner {
+        display: flex; align-items: center; gap: 14px;
+        padding: 16px 20px; border-radius: 8px; margin: 16px 0;
+        border-left: 5px solid #bdbdbd; background: #f5f5f5;
+    }
+    .dr-state-banner.normal { border-left-color: #4caf50; background: #e8f5e9; }
+    .dr-state-banner.failed_over { border-left-color: #ff9800; background: #fff3e0; }
+    .dr-state-banner.failing_over, .dr-state-banner.failing_back {
+        border-left-color: #2196f3; background: #e3f2fd;
+    }
+    .dr-state-icon { font-size: 24px; flex-shrink: 0; }
+    .dr-state-label { font-size: 16px; font-weight: 700; color: #333; }
+    .dr-state-desc { font-size: 13px; color: #666; margin-top: 2px; }
+
+    /* Workspace pair boxes */
+    .fo-pair-info {
+        display: flex; align-items: stretch; gap: 16px; margin: 20px 0;
+    }
+    .fo-ws-box {
+        flex: 1; padding: 16px 20px; border-radius: 8px;
+        border: 1px solid #e0e0e0; background: #fff; text-align: center;
+    }
+    .fo-ws-box.active-primary { border-color: #4caf50; background: #f1f8e9; }
+    .fo-ws-box.active-secondary { border-color: #ff9800; background: #fff8e1; }
+    .fo-ws-role {
+        font-size: 10px; font-weight: 800; letter-spacing: 1px; color: #999;
+        margin-bottom: 6px;
+    }
+    .fo-ws-name { font-size: 16px; font-weight: 700; color: #333; }
+    .fo-ws-status { font-size: 12px; margin-top: 6px; }
+    .fo-ws-status.online { color: #2e7d32; }
+    .fo-ws-status.offline { color: #c62828; }
+    .fo-ws-items { font-size: 12px; color: #888; margin-top: 2px; }
+    .fo-arrow {
+        display: flex; align-items: center; font-size: 22px; color: #999; flex-shrink: 0;
+    }
+
+    /* Sync bar */
+    .fo-sync-bar-wrap {
+        display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+    }
+    .fo-sync-label { font-size: 12px; font-weight: 600; color: #555; white-space: nowrap; }
+    .fo-sync-track {
+        flex: 1; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden;
+    }
+    .fo-sync-fill { height: 100%; background: #4caf50; border-radius: 4px; transition: width 0.5s; }
+    .fo-sync-pct { font-size: 13px; font-weight: 700; color: #333; min-width: 40px; text-align: right; }
+
+    /* Actions */
+    .fo-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .fo-btn {
+        padding: 10px 22px; border: none; border-radius: 6px; cursor: pointer;
+        font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;
+        transition: all 0.2s;
+    }
+    .fo-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .fo-btn-simulate { background: #e3f2fd; color: #1565c0; border: 1px solid #42a5f5; }
+    .fo-btn-simulate:hover:not(:disabled) { background: #bbdefb; }
+    .fo-btn-failover { background: #c62828; color: #fff; }
+    .fo-btn-failover:hover:not(:disabled) { background: #b71c1c; }
+    .fo-btn-failback { background: #2e7d32; color: #fff; }
+    .fo-btn-failback:hover:not(:disabled) { background: #1b5e20; }
+    .fo-btn-secondary { background: #f5f5f5; color: #333; border: 1px solid #ddd; }
+    .fo-btn-secondary:hover:not(:disabled) { background: #e0e0e0; }
+
+    /* Console */
+    .fo-console {
+        background: #1a1a2e; color: #e0e0e0; padding: 16px; border-radius: 8px;
+        margin: 12px 0; font-family: 'Courier New', monospace; font-size: 12px;
+    }
+    .fo-console-header {
+        display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+    }
+    .fo-console-header h4 { color: #fff; margin: 0; font-size: 14px; }
+    .fo-console-close {
+        background: none; border: none; color: #888; font-size: 18px; cursor: pointer;
+    }
+    .fo-log { max-height: 280px; overflow-y: auto; }
+    .fo-log-line { margin: 4px 0; line-height: 1.5; }
+    .fo-log-line.success { color: #4caf50; }
+    .fo-log-line.error { color: #ef5350; }
+    .fo-log-line.info { color: #64b5f6; }
+    .fo-log-line.step { color: #fff; font-weight: 600; }
+
+    .fo-section h3 {
+        margin: 0 0 12px 0; font-size: 16px; color: #333;
+        display: flex; align-items: center; gap: 8px;
+    }
+
+    /* Event history */
+    .fo-event-list { display: flex; flex-direction: column; gap: 8px; }
+    .fo-event-card {
+        display: flex; align-items: center; gap: 14px;
+        padding: 12px 16px; border-radius: 6px; background: #fafafa;
+        border: 1px solid #eee; font-size: 13px;
+    }
+    .fo-event-icon { font-size: 16px; flex-shrink: 0; }
+    .fo-event-icon.failover { color: #c62828; }
+    .fo-event-icon.failback { color: #2e7d32; }
+    .fo-event-type { font-weight: 700; text-transform: uppercase; font-size: 11px; min-width: 70px; }
+    .fo-event-type.failover { color: #c62828; }
+    .fo-event-type.failback { color: #2e7d32; }
+    .fo-event-time { color: #888; font-size: 12px; }
+    .fo-event-rto {
+        margin-left: auto; padding: 2px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: 600;
+    }
+    .fo-event-rto.success { background: #e8f5e9; color: #2e7d32; }
+    .fo-event-rto.failed { background: #ffebee; color: #c62828; }
+    .fo-event-empty { color: #999; font-size: 13px; font-style: italic; }
+
+    @media (max-width: 768px) {
+        .fo-pair-info { flex-direction: column; }
+        .fo-arrow { transform: rotate(90deg); justify-content: center; }
+        .fo-actions { flex-direction: column; }
+    }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let drStatus = null;
+
+document.addEventListener('DOMContentLoaded', loadFailoverStatus);
+
+async function loadFailoverStatus() {
+    try {
+        const resp = await fetch('/api/failover/status');
+        drStatus = await resp.json();
+        if (drStatus.error) {
+            document.getElementById('dr-state-label').textContent = 'Error: ' + drStatus.error;
+            return;
+        }
+        renderState();
+    } catch (e) {
+        document.getElementById('dr-state-label').textContent = 'Failed to load status';
+    }
+}
+
+function renderState() {
+    const s = drStatus;
+    const banner = document.getElementById('dr-state-banner');
+    const icon = document.getElementById('dr-state-icon');
+    const label = document.getElementById('dr-state-label');
+    const desc = document.getElementById('dr-state-desc');
+
+    const states = {
+        normal: {
+            cls: 'normal', icon: 'fas fa-check-circle', iconColor: '#4caf50',
+            label: 'NORMAL — Primary Active',
+            desc: `'${s.primary_name}' is the active primary. Secondary '${s.secondary_name}' is on standby.`
+        },
+        failed_over: {
+            cls: 'failed_over', icon: 'fas fa-exclamation-triangle', iconColor: '#ff9800',
+            label: 'FAILED OVER — Running on DR',
+            desc: `'${s.primary_name}' is the failover primary (originally secondary). Failback available to restore '${s.secondary_name}'.`
+        },
+        failing_over: {
+            cls: 'failing_over', icon: 'fas fa-spinner fa-spin', iconColor: '#2196f3',
+            label: 'FAILOVER IN PROGRESS',
+            desc: 'Failover is currently executing. Please wait...'
+        },
+        failing_back: {
+            cls: 'failing_back', icon: 'fas fa-spinner fa-spin', iconColor: '#2196f3',
+            label: 'FAILBACK IN PROGRESS',
+            desc: 'Failback is currently executing. Please wait...'
+        }
+    };
+    const st = states[s.dr_state] || states.normal;
+    banner.className = 'dr-state-banner ' + st.cls;
+    icon.innerHTML = `<i class="${st.icon}" style="color:${st.iconColor}"></i>`;
+    label.textContent = st.label;
+    desc.textContent = st.desc;
+
+    // Workspace boxes
+    document.getElementById('fo-primary-name').textContent = s.primary_name || '—';
+    document.getElementById('fo-secondary-name').textContent = s.secondary_name || '—';
+    const pStatus = document.getElementById('fo-primary-status');
+    const sStatus = document.getElementById('fo-secondary-status');
+    pStatus.textContent = s.primary_ok ? 'Online' : 'Unreachable';
+    pStatus.className = 'fo-ws-status ' + (s.primary_ok ? 'online' : 'offline');
+    sStatus.textContent = s.secondary_ok ? 'Online' : 'Unreachable';
+    sStatus.className = 'fo-ws-status ' + (s.secondary_ok ? 'online' : 'offline');
+    document.getElementById('fo-primary-items').textContent = s.primary_items + ' artifacts';
+    document.getElementById('fo-secondary-items').textContent = s.secondary_items + ' artifacts';
+
+    const pBox = document.getElementById('fo-primary-box');
+    const sBox = document.getElementById('fo-secondary-box');
+    pBox.className = 'fo-ws-box' + (s.dr_state === 'normal' ? ' active-primary' : '');
+    sBox.className = 'fo-ws-box' + (s.dr_state === 'failed_over' ? ' active-secondary' : '');
+
+    // Sync bar
+    document.getElementById('fo-sync-fill').style.width = s.sync_pct + '%';
+    document.getElementById('fo-sync-fill').style.background = s.sync_pct >= 80 ? '#4caf50' : s.sync_pct >= 50 ? '#ff9800' : '#c62828';
+    document.getElementById('fo-sync-pct').textContent = s.sync_pct + '%';
+
+    // Action buttons based on state
+    const actions = document.getElementById('fo-actions');
+    if (s.dr_state === 'normal') {
+        actions.innerHTML = `
+            <button class="fo-btn fo-btn-simulate" onclick="runSimulation()">
+                <i class="fas fa-flask"></i> Dry-Run Validation
+            </button>
+            <button class="fo-btn fo-btn-failover" onclick="confirmFailover()">
+                <i class="fas fa-bolt"></i> Execute Failover
+            </button>
+            <button class="fo-btn fo-btn-secondary" onclick="loadEvents()">
+                <i class="fas fa-history"></i> Refresh Events
+            </button>`;
+    } else if (s.dr_state === 'failed_over') {
+        actions.innerHTML = `
+            <button class="fo-btn fo-btn-failback" onclick="confirmFailback()">
+                <i class="fas fa-undo"></i> Execute Failback
+            </button>
+            <button class="fo-btn fo-btn-secondary" onclick="loadEvents()">
+                <i class="fas fa-history"></i> Refresh Events
+            </button>`;
+    } else {
+        actions.innerHTML = `
+            <button class="fo-btn fo-btn-secondary" disabled>
+                <i class="fas fa-spinner fa-spin"></i> Operation in progress...
+            </button>`;
+    }
+
+    // Events
+    renderEvents(s.events || []);
+}
+
+function renderEvents(events) {
+    const el = document.getElementById('fo-event-list');
+    if (!events.length) {
+        el.innerHTML = '<p class="fo-event-empty">No DR events recorded yet.</p>';
+        return;
+    }
+    el.innerHTML = events.slice().reverse().map(ev => {
+        const iconCls = ev.type === 'failover' ? 'failover' : 'failback';
+        const iconI = ev.type === 'failover' ? 'fas fa-bolt' : 'fas fa-undo';
+        const rtoText = ev.success ? `RTO: ${ev.rto_seconds}s` : 'FAILED';
+        const rtoCls = ev.success ? 'success' : 'failed';
+        const time = ev.started ? new Date(ev.started + 'Z').toLocaleString() : '—';
+        return `<div class="fo-event-card">
+            <div class="fo-event-icon ${iconCls}"><i class="${iconI}"></i></div>
+            <span class="fo-event-type ${iconCls}">${esc(ev.type)}</span>
+            <span class="fo-event-time">${esc(time)}</span>
+            <span class="fo-event-rto ${rtoCls}">${esc(rtoText)}</span>
+        </div>`;
+    }).join('');
+}
+
+async function loadEvents() {
+    try {
+        const resp = await fetch('/api/failover/events');
+        const d = await resp.json();
+        renderEvents(d.events || []);
+    } catch (e) { console.error(e); }
+}
+
+async function runSimulation() {
+    showConsole('Dry-Run Validation');
+    logLine('Starting failover dry-run validation...', 'info');
+
+    try {
+        const resp = await fetch('/api/failover/simulate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }
+        });
+        const d = await resp.json();
+        if (d.steps) {
+            d.steps.forEach(s => {
+                const cls = s.passed ? 'success' : 'error';
+                const mark = s.passed ? '✓' : '✗';
+                logLine(`${mark} ${s.step} — ${s.detail}`, cls);
+            });
+        }
+        const finalCls = d.validation_passed ? 'success' : 'error';
+        logLine(`\nResult: ${d.status} (Sync: ${d.sync_pct}%)`, finalCls);
+    } catch (e) {
+        logLine('Error: ' + e.message, 'error');
+    }
+}
+
+function confirmFailover() {
+    const msg = 'EXECUTE FAILOVER?\n\n' +
+        'This will:\n' +
+        '1. Run a final sync from primary → secondary\n' +
+        '2. Validate secondary readiness\n' +
+        '3. Swap roles (secondary becomes the new primary)\n\n' +
+        'Type "FAILOVER" to confirm:';
+    const input = prompt(msg);
+    if (input === 'FAILOVER') executeFailover();
+}
+
+async function executeFailover() {
+    showConsole('Executing Failover');
+    logLine('Initiating managed failover...', 'step');
+    logLine('Step 1: Running final sync (primary → secondary)...', 'info');
+
+    try {
+        const resp = await fetch('/api/failover/execute', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }
+        });
+        const d = await resp.json();
+        if (d.error) {
+            logLine('FAILOVER FAILED: ' + d.error, 'error');
+            if (d.steps) d.steps.forEach(s => logLine(`  ${s.step}: ${s.status}`, s.status === 'done' ? 'success' : 'error'));
+        } else {
+            if (d.steps) d.steps.forEach(s => logLine(`✓ ${s.step}`, 'success'));
+            logLine(`\n${d.message}`, 'success');
+            logLine(`New Primary: ${d.new_primary}`, 'info');
+            logLine(`New Secondary: ${d.new_secondary}`, 'info');
+            logLine(`RTO: ${d.rto_seconds}s`, 'success');
+            setTimeout(loadFailoverStatus, 1000);
+        }
+    } catch (e) {
+        logLine('Error: ' + e.message, 'error');
+    }
+}
+
+function confirmFailback() {
+    const msg = 'EXECUTE FAILBACK?\n\n' +
+        'This will:\n' +
+        '1. Reverse-sync changes from active (DR) primary back to original primary\n' +
+        '2. Validate original primary readiness\n' +
+        '3. Swap roles back to restore original configuration\n\n' +
+        'Type "FAILBACK" to confirm:';
+    const input = prompt(msg);
+    if (input === 'FAILBACK') executeFailback();
+}
+
+async function executeFailback() {
+    showConsole('Executing Failback');
+    logLine('Initiating failback to original primary...', 'step');
+    logLine('Step 1: Reverse syncing changes to original primary...', 'info');
+
+    try {
+        const resp = await fetch('/api/failback/execute', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }
+        });
+        const d = await resp.json();
+        if (d.error) {
+            logLine('FAILBACK FAILED: ' + d.error, 'error');
+            if (d.steps) d.steps.forEach(s => logLine(`  ${s.step}: ${s.status}`, s.status === 'done' ? 'success' : 'error'));
+        } else {
+            if (d.steps) d.steps.forEach(s => logLine(`✓ ${s.step}`, 'success'));
+            logLine(`\n${d.message}`, 'success');
+            logLine(`Restored Primary: ${d.new_primary}`, 'info');
+            logLine(`Restored Secondary: ${d.new_secondary}`, 'info');
+            logLine(`RTO: ${d.rto_seconds}s`, 'success');
+            setTimeout(loadFailoverStatus, 1000);
+        }
+    } catch (e) {
+        logLine('Error: ' + e.message, 'error');
+    }
+}
+
+function showConsole(title) {
+    const con = document.getElementById('fo-console');
+    document.getElementById('fo-console-title').textContent = title;
+    document.getElementById('fo-log-body').innerHTML = '';
+    con.style.display = 'block';
+    con.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function logLine(text, cls) {
+    const body = document.getElementById('fo-log-body');
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const p = document.createElement('div');
+    p.className = 'fo-log-line ' + (cls || '');
+    p.textContent = `[${ts}] ${text}`;
+    body.appendChild(p);
+    body.scrollTop = body.scrollHeight;
+}
+
+function esc(s) {
+    if (!s) return '';
+    const el = document.createElement('span');
+    el.textContent = String(s);
+    return el.innerHTML;
+}
+</script>
+{% endblock %}

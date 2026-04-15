@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Workspace Inventory - Microsoft Fabric BCDR{% endblock %}
+
+{% block page_title %}Workspace Inventory{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-cubes"></i> FABRIC WORKSPACE INVENTORY
+    </h2>
+    <p class="section-description">Live status of all connected Fabric workspaces and their artifact inventory</p>
+
+    <div class="inv-status-bar">
+        <span class="live-dot"></span> LIVE
+    </div>
+
+    <div class="inv-grid" id="inv-grid">
+        <p style="color:#999; text-align:center; padding:30px;">Loading workspaces...</p>
+    </div>
+</section>
+
+<style>
+    .inv-status-bar {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+        font-size: 12px; font-weight: 600; color: #2e7d32;
+    }
+    .live-dot {
+        width: 8px; height: 8px; border-radius: 50%; background: #4caf50;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .inv-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+    }
+    .inv-card {
+        border: 1px solid #e0e0e0; border-radius: 10px; padding: 18px 20px;
+        background: #fff; transition: box-shadow 0.2s;
+    }
+    .inv-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .inv-card-header {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .inv-card-name { font-size: 16px; font-weight: 700; color: #333; }
+    .inv-live-badge {
+        padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+        background: #e8f5e9; color: #2e7d32; border: 1px solid #4caf50;
+    }
+    .inv-dot { width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-left: auto; flex-shrink: 0; }
+    .inv-card-desc { font-size: 12px; color: #888; margin-bottom: 10px; line-height: 1.4; }
+    .inv-card-footer {
+        display: flex; align-items: center; gap: 12px; font-size: 12px; color: #999;
+    }
+    .inv-item-count { font-weight: 600; color: #333; }
+    .inv-region { color: #888; }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', loadInventory);
+
+    async function loadInventory() {
+        try {
+            const resp = await fetch('/api/inventory');
+            const d = await resp.json();
+            if (d.error) {
+                document.getElementById('inv-grid').innerHTML = '<p style="color:#c62828;">Error loading inventory</p>';
+                return;
+            }
+
+            const allPairs = d.all_pairs || [];
+            const grid = document.getElementById('inv-grid');
+
+            if (allPairs.length === 0) {
+                grid.innerHTML = '<p style="color:#999; text-align:center;">No workspace pairs configured. <a href="/setup">Set up a pair</a></p>';
+                return;
+            }
+
+            let html = '';
+            allPairs.forEach((pair, idx) => {
+                // Pair header if multiple
+                if (allPairs.length > 1) {
+                    html += `<div style="grid-column:1/-1;margin-top:${idx>0?'20':'0'}px;padding:8px 0;border-bottom:2px solid ${pair.active?'#2196F3':'#e0e0e0'};">
+                        <span style="font-weight:700;font-size:14px;color:#333;">${esc(pair.label || 'Pair '+(idx+1))}</span>
+                        ${pair.active ? '<span style="font-size:10px;background:#2196F3;color:#fff;padding:2px 8px;border-radius:8px;margin-left:8px;">ACTIVE</span>' : ''}
+                    </div>`;
+                }
+
+                // Primary card
+                html += `
+                <div class="inv-card" style="${pair.active?'border-color:#2196F3;':''}">
+                    <div class="inv-card-header">
+                        <span class="inv-card-name">${esc(pair.primary_name || '—')}</span>
+                        <span class="inv-live-badge">LIVE</span>
+                        <span class="inv-dot"></span>
+                    </div>
+                    <div class="inv-card-desc"><i class="fas fa-cube" style="color:#2196F3;margin-right:4px;"></i> Primary Workspace</div>
+                    <div style="font-size:12px;color:#666;margin-bottom:8px;">
+                        ${Object.entries(pair.primary_by_type || {}).map(([t,c]) => `<span style="margin-right:8px;">${esc(t)}: <strong>${c}</strong></span>`).join('')}
+                    </div>
+                    <div class="inv-card-footer">
+                        <span class="inv-item-count">${pair.primary_total} items</span>
+                    </div>
+                </div>`;
+
+                // Secondary card
+                if (pair.secondary_name) {
+                    html += `
+                    <div class="inv-card" style="${pair.active?'border-color:#FF9800;':''}">
+                        <div class="inv-card-header">
+                            <span class="inv-card-name">${esc(pair.secondary_name)}</span>
+                            <span class="inv-live-badge">LIVE</span>
+                            <span class="inv-dot"></span>
+                        </div>
+                        <div class="inv-card-desc"><i class="fas fa-cube" style="color:#FF9800;margin-right:4px;"></i> Secondary Workspace</div>
+                        <div style="font-size:12px;color:#666;margin-bottom:8px;">
+                            ${Object.entries(pair.secondary_by_type || {}).map(([t,c]) => `<span style="margin-right:8px;">${esc(t)}: <strong>${c}</strong></span>`).join('')}
+                        </div>
+                        <div class="inv-card-footer">
+                            <span class="inv-item-count">${pair.secondary_total} items</span>
+                        </div>
+                    </div>`;
+                } else {
+                    html += `
+                    <div class="inv-card" style="border-style:dashed;opacity:0.6;">
+                        <div class="inv-card-header">
+                            <span class="inv-card-name">No Secondary</span>
+                        </div>
+                        <div class="inv-card-desc">Configure a secondary workspace in <a href="/setup">Setup</a>.</div>
+                    </div>`;
+                }
+            });
+
+            grid.innerHTML = html;
+
+        } catch (e) {
+            document.getElementById('inv-grid').innerHTML = '<p style="color:#c62828;">Error: ' + esc(e.message) + '</p>';
+        }
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+</script>
+{% endblock %}

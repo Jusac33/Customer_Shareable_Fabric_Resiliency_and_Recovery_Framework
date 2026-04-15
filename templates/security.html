@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+
+{% block title %}OneLake Security{% endblock %}
+
+{% block page_title %}OneLake Security{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex; align-items: center; gap: 14px; margin-bottom: 24px; flex-wrap: wrap;
+    }
+    .page-header .icon {
+        width: 48px; height: 48px; border-radius: 12px;
+        background: linear-gradient(135deg, #e8eaf6, #fce4ec);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; color: #5c6bc0;
+    }
+    .page-header h2 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0; }
+    .page-header p { font-size: 13px; color: #666; margin: 2px 0 0; }
+
+    .sec-panel {
+        background: #fff; border-radius: 12px; border: 1px solid #e0e0e0;
+        padding: 24px 28px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.04);
+    }
+    .sec-panel h4 {
+        font-size: 16px; font-weight: 700; color: #1a1a2e; margin: 0 0 6px;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .sec-panel p.desc { font-size: 13px; color: #555; margin: 0 0 16px; }
+
+    .btn-action {
+        padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700;
+        border: 2px solid #5c6bc0; color: #5c6bc0; background: #fff;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+        transition: all 0.2s;
+    }
+    .btn-action:hover { background: #5c6bc0; color: #fff; }
+    .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-action.green { border-color: #2e7d32; color: #2e7d32; }
+    .btn-action.green:hover { background: #2e7d32; color: #fff; }
+
+    .btn-action.orange { border-color: #e65100; color: #e65100; }
+    .btn-action.orange:hover { background: #e65100; color: #fff; }
+
+    .btn-action.red { border-color: #c62828; color: #c62828; }
+    .btn-action.red:hover { background: #c62828; color: #fff; }
+
+    .actions-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+
+    /* Form styles */
+    .form-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px;
+        margin-bottom: 16px;
+    }
+    .form-grid.three-col { grid-template-columns: 1fr 1fr 1fr; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 12px; font-weight: 600; color: #555; }
+    .form-group input, .form-group select, .form-group textarea {
+        padding: 7px 10px; border-radius: 6px; border: 1px solid #ccc;
+        font-size: 13px; background: #fafafa;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+        outline: none; border-color: #5c6bc0; background: #fff;
+    }
+    .form-group textarea { resize: vertical; min-height: 60px; font-family: monospace; }
+    .form-group .help { font-size: 11px; color: #888; margin-top: 2px; }
+
+    /* Status table */
+    .status-table {
+        width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px;
+    }
+    .status-table th {
+        padding: 8px 12px; text-align: left; background: #f5f5f5; color: #444;
+        font-weight: 600; border-bottom: 2px solid #e0e0e0; font-size: 12px;
+    }
+    .status-table td {
+        padding: 8px 12px; border-bottom: 1px solid #eee; color: #333;
+    }
+    .status-table tr:hover td { background: #f8f9ff; }
+
+    .badge {
+        display: inline-block; padding: 2px 10px; border-radius: 12px;
+        font-size: 11px; font-weight: 600;
+    }
+    .badge.ok { background: #e8f5e9; color: #2e7d32; }
+    .badge.warn { background: #fff3e0; color: #e65100; }
+    .badge.error { background: #ffebee; color: #c62828; }
+    .badge.info { background: #e3f2fd; color: #1565c0; }
+    .badge.sync { background: #e8f5e9; color: #2e7d32; }
+    .badge.drift { background: #fff3e0; color: #e65100; }
+
+    /* Log output */
+    .log-output {
+        background: #1a1a2e; color: #a5d6a7; font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 12px; padding: 14px 18px; border-radius: 8px;
+        max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+        display: none; margin-top: 12px;
+    }
+    .log-output.visible { display: block; }
+
+    /* Tabs */
+    .tab-bar {
+        display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 20px;
+    }
+    .tab-bar .tab {
+        padding: 10px 20px; font-size: 13px; font-weight: 600; color: #666;
+        cursor: pointer; background: none; border: none; border-bottom: 2px solid transparent;
+        margin-bottom: -2px; transition: all .2s;
+    }
+    .tab-bar .tab:hover { color: #5c6bc0; }
+    .tab-bar .tab.active { color: #5c6bc0; border-bottom-color: #5c6bc0; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Spinner */
+    .spinner-sm {
+        display: inline-block; width: 14px; height: 14px;
+        border: 2px solid rgba(0,0,0,.15); border-top-color: #5c6bc0;
+        border-radius: 50%; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Replicate panel */
+    .replicate-panel {
+        background: linear-gradient(135deg, #e8eaf6 0%, #f3e5f5 100%);
+        border: 2px solid #7986cb;
+        border-radius: 12px; padding: 24px 28px; margin-bottom: 24px;
+    }
+
+    .checkbox-group { display: flex; gap: 20px; align-items: center; margin: 12px 0; }
+    .checkbox-group label {
+        font-size: 13px; color: #333; display: flex; align-items: center; gap: 6px; cursor: pointer;
+    }
+    .checkbox-group input[type="checkbox"] { width: 16px; height: 16px; accent-color: #5c6bc0; }
+
+    .perm-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .perm-col h5 { font-size: 13px; font-weight: 600; color: #444; margin: 0 0 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="icon"><i class="fas fa-shield-alt"></i></div>
+    <div>
+        <h2>OneLake Security &amp; Permissions</h2>
+        <p>Data Access Roles (RLS/CLS) and Artifact Permissions across Primary &amp; Secondary</p>
+    </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="tab-bar">
+    <button class="tab active" data-tab="roles">
+        <i class="fas fa-key"></i>&nbsp; Data Access Roles
+    </button>
+    <button class="tab" data-tab="replicate">
+        <i class="fas fa-sync-alt"></i>&nbsp; Replicate to Secondary
+    </button>
+</div>
+
+<!-- ============ TAB: Data Access Roles ============ -->
+<div class="tab-content active" id="tab-roles">
+    <!-- Scan Roles -->
+    <div class="sec-panel">
+        <h4><i class="fas fa-eye"></i> Current Data Access Roles</h4>
+        <p class="desc">Scans OneLake Data Access Roles API for all lakehouses (includes RLS table access and CLS column restrictions).</p>
+        <div class="actions-row">
+            <button class="btn-action" onclick="loadRolesStatus()">
+                <i class="fas fa-search"></i> Scan Roles
+            </button>
+            <span id="roles-status-pill" class="badge" style="display:none;"></span>
+        </div>
+        <div id="roles-status-table"></div>
+    </div>
+</div>
+
+<!-- ============ TAB: Replicate ============ -->
+<div class="tab-content" id="tab-replicate">
+    <div class="replicate-panel">
+        <h4><i class="fas fa-sync-alt"></i> Replicate Data Access Roles to Secondary</h4>
+        <p class="desc">Copy OneLake Data Access Roles (RLS + CLS) from Primary to Secondary. Only lakehouses with roles on Primary are replicated.</p>
+        <div class="actions-row">
+            <button class="btn-action green" id="btn-replicate" onclick="replicateAll()">
+                <i class="fas fa-cloud-upload-alt"></i> Replicate to Secondary
+            </button>
+            <span id="replicate-status" class="badge" style="display:none;"></span>
+        </div>
+        <div id="replicate-log" class="log-output"></div>
+        <div id="replicate-results" style="margin-top:16px;"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ───── Tab switching ─────
+document.querySelectorAll('.tab-bar .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab-bar .tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+});
+
+// ───── Helpers ─────
+function showBadge(id, text, cls) {
+    const el = document.getElementById(id);
+    el.style.display = 'inline-block';
+    el.className = 'badge ' + cls;
+    el.textContent = text;
+}
+function appendLog(id, msg) {
+    const el = document.getElementById(id);
+    el.classList.add('visible');
+    el.textContent += msg + '\n';
+    el.scrollTop = el.scrollHeight;
+}
+function clearLog(id) {
+    const el = document.getElementById(id);
+    el.textContent = '';
+    el.classList.remove('visible');
+}
+
+// ───── Enable OneLake Security ─────
+async function enableOneLakeSecurity(wsLabel, lhName, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-sm"></span> Enabling...';
+    try {
+        // Try to enable via API (PUT with DefaultReader)
+        const resp = await fetch('/api/security/apply-rls', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                workspace: wsLabel,
+                lakehouse: lhName,
+                role_name: 'DefaultReader',
+                tables: [],
+                cls_columns: [],
+                members: {
+                    microsoftEntraMembers: [],
+                    fabricItemMembers: [{itemAccess: ['ReadAll'], sourcePath: ''}]
+                }
+            })
+        });
+        const data = await resp.json();
+        if (data.error) {
+            // API can't enable it; open Fabric portal for manual enablement
+            btn.innerHTML = '<i class="fas fa-external-link-alt"></i> Open Fabric Portal';
+            btn.style.borderColor = '#1565c0';
+            btn.style.color = '#1565c0';
+            btn.disabled = false;
+            btn.onclick = function() {
+                window.open('https://app.fabric.microsoft.com/', '_blank');
+            };
+            alert('OneLake security is a preview feature that must be enabled through the Fabric portal.\\n\\n' +
+                  'Steps:\\n1. Open the lakehouse "' + lhName + '" in Fabric\\n' +
+                  '2. Click "Manage OneLake security (preview)"\\n' +
+                  '3. Enable security and click Continue\\n\\n' +
+                  'Then come back here and click Scan Roles again.');
+        } else {
+            btn.innerHTML = '<i class="fas fa-check"></i> Enabled!';
+            btn.style.borderColor = '#2e7d32';
+            btn.style.color = '#2e7d32';
+            setTimeout(() => loadRolesStatus(), 2000);
+        }
+    } catch (e) {
+        btn.innerHTML = '<i class="fas fa-times"></i> Error';
+        alert('Error: ' + e.message);
+    }
+}
+
+// ───── Scan Data Access Roles ─────
+async function loadRolesStatus() {
+    showBadge('roles-status-pill', 'Scanning...', 'info');
+    try {
+        const resp = await fetch('/api/security/rls-status');
+        const data = await resp.json();
+        if (data.error) {
+            showBadge('roles-status-pill', data.error, 'error');
+            return;
+        }
+        let html = '';
+        let totalRoles = 0;
+        let totalCls = 0;
+        let totalInSync = 0;
+        let totalDrift = 0;
+        let totalNoRoles = 0;
+
+        // ── Sync Status Overview Table ──
+        html += `<table class="status-table" style="margin-bottom:24px;">`;
+        html += `<thead><tr>
+            <th>Lakehouse</th>
+            <th>Primary Roles</th>
+            <th>Secondary Roles</th>
+            <th>Sync Status</th>
+        </tr></thead><tbody>`;
+
+        (data.lakehouses || []).forEach(lh => {
+            const pRoles = (lh.primary_roles || []).filter(r => !r.security_disabled && !r.error);
+            const sRoles = (lh.secondary_roles || []).filter(r => !r.security_disabled && !r.error);
+            const pDisabled = lh.primary_roles && lh.primary_roles.length > 0 && lh.primary_roles[0].security_disabled;
+            const sDisabled = lh.secondary_roles && lh.secondary_roles.length > 0 && lh.secondary_roles[0].security_disabled;
+            const pNames = new Set(pRoles.map(r => r.name));
+            const sNames = new Set(sRoles.map(r => r.name));
+
+            let statusBadge, statusDetail = '';
+            if (pDisabled || pRoles.length === 0) {
+                statusBadge = `<span class="badge" style="background:#f5f5f5;color:#999;">No Roles</span>`;
+                totalNoRoles++;
+            } else {
+                const missing = [...pNames].filter(n => !sNames.has(n));
+                const extra = [...sNames].filter(n => !pNames.has(n));
+                if (missing.length === 0 && extra.length === 0 && pNames.size === sNames.size) {
+                    statusBadge = `<span class="badge ok"><i class="fas fa-check-circle"></i> In Sync</span>`;
+                    totalInSync++;
+                } else {
+                    let parts = [];
+                    if (missing.length > 0) parts.push(missing.length + ' missing');
+                    if (extra.length > 0) parts.push(extra.length + ' extra');
+                    statusBadge = `<span class="badge warn"><i class="fas fa-exclamation-triangle"></i> Drift</span>`;
+                    statusDetail = `<div style="font-size:11px;color:#888;margin-top:2px;">${parts.join(', ')}</div>`;
+                    totalDrift++;
+                }
+            }
+
+            // Primary column
+            let pCol;
+            if (pDisabled) {
+                pCol = `<span class="badge warn" style="font-size:11px;">Security not enabled</span>`;
+            } else if (pRoles.length === 0) {
+                pCol = `<span style="color:#999;">—</span>`;
+            } else {
+                pCol = pRoles.map(r => {
+                    const cls = (r.cls_columns || []).length;
+                    const tCount = (r.tables || []).length;
+                    return `<span style="font-weight:600;">${r.name}</span>` +
+                        `<span style="color:#888;font-size:11px;margin-left:4px;">(${tCount} tables${cls > 0 ? ', ' + cls + ' CLS' : ''})</span>`;
+                }).join('<br>');
+            }
+
+            // Secondary column
+            let sCol;
+            if (sDisabled) {
+                sCol = `<span class="badge warn" style="font-size:11px;">Security not enabled</span>` +
+                    `<button class="btn-action orange" style="padding:2px 8px;font-size:10px;margin-left:6px;" onclick="enableOneLakeSecurity('secondary','${lh.name}',this)"><i class="fas fa-lock-open"></i> Enable</button>`;
+            } else if (sRoles.length === 0 && pRoles.length > 0) {
+                sCol = `<span style="color:#c62828;">Not replicated</span>`;
+            } else if (sRoles.length === 0) {
+                sCol = `<span style="color:#999;">—</span>`;
+            } else {
+                sCol = sRoles.map(r => {
+                    const cls = (r.cls_columns || []).length;
+                    const tCount = (r.tables || []).length;
+                    return `<span style="font-weight:600;">${r.name}</span>` +
+                        `<span style="color:#888;font-size:11px;margin-left:4px;">(${tCount} tables${cls > 0 ? ', ' + cls + ' CLS' : ''})</span>`;
+                }).join('<br>');
+            }
+
+            html += `<tr>
+                <td><i class="fas fa-database" style="color:#5c6bc0;margin-right:6px;"></i><strong>${lh.name}</strong></td>
+                <td>${pCol}</td>
+                <td>${sCol}</td>
+                <td>${statusBadge}${statusDetail}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+
+        // ── Detailed Role Cards ──
+        (data.lakehouses || []).forEach(lh => {
+            [['Primary', lh.primary_roles, 'primary'],
+             ['Secondary', lh.secondary_roles, 'secondary']].forEach(([ws, roles, wsLabel]) => {
+                if (!roles || roles.length === 0) return;
+                if (roles[0] && roles[0].security_disabled) return;
+                if (roles[0] && roles[0].error) {
+                    html += `<div style="margin:8px 0;"><span class="badge error">${lh.name} (${ws}): ${roles[0].error}</span></div>`;
+                    return;
+                }
+                roles.forEach(role => {
+                    totalRoles++;
+                    const tables = (role.tables || []).map(t => t.split('/').pop()).join(', ') || '*';
+                    const clsCols = role.cls_columns || [];
+                    const memberCount = (role.members?.microsoftEntraMembers?.length || 0) +
+                                        (role.members?.fabricItemMembers?.length || 0);
+
+                    html += `<div style="background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;padding:14px 18px;margin:10px 0;">`;
+                    html += `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">`;
+                    html += `<div><strong>${role.name}</strong> <span class="badge info">${ws}</span> <span class="badge" style="background:#f5f5f5;color:#666;">${lh.name}</span></div>`;
+                    html += `<div style="font-size:12px;color:#666;">${memberCount} member(s) · ${(role.tables||[]).length} table path(s)</div>`;
+                    html += `</div>`;
+                    html += `<div style="margin-top:8px;font-size:12px;"><strong>Tables:</strong> ${tables}</div>`;
+                    if (clsCols.length > 0) {
+                        totalCls += clsCols.length;
+                        clsCols.forEach(cc => {
+                            const tbl = (cc.tablePath || '').split('/').pop();
+                            html += `<div style="margin-top:6px;font-size:12px;">`;
+                            html += `<span class="badge warn">CLS</span> <strong>${tbl}</strong>: `;
+                            html += `<span style="color:#555;">${cc.effect} ${(cc.action||[]).join(',')} on ${(cc.columns||[]).length} column(s)</span>`;
+                            html += `<div style="margin-left:16px;color:#888;font-size:11px;">${(cc.columns||[]).slice(0,10).join(', ')}${(cc.columns||[]).length > 10 ? '...' : ''}</div>`;
+                            html += `</div>`;
+                        });
+                    }
+                    html += `</div>`;
+                });
+            });
+        });
+
+        if (totalRoles === 0 && totalNoRoles === (data.lakehouses || []).length) {
+            html += '<div style="text-align:center;color:#888;padding:20px;">No Data Access Roles found on any lakehouse</div>';
+        }
+        document.getElementById('roles-status-table').innerHTML = html;
+
+        // Summary pill
+        let pillParts = [];
+        if (totalInSync > 0) pillParts.push(`${totalInSync} in sync`);
+        if (totalDrift > 0) pillParts.push(`${totalDrift} drifted`);
+        if (totalNoRoles > 0) pillParts.push(`${totalNoRoles} no roles`);
+        pillParts.push(`${totalRoles} role(s)`);
+        if (totalCls > 0) pillParts.push(`${totalCls} CLS`);
+        const pillClass = totalDrift > 0 ? 'warn' : (totalInSync > 0 ? 'ok' : 'info');
+        showBadge('roles-status-pill', pillParts.join(' · '), pillClass);
+    } catch (e) {
+        showBadge('roles-status-pill', 'Scan failed: ' + e.message, 'error');
+    }
+}
+
+// ───── Create/Update Role ─────
+// ───── Replicate All ─────
+async function replicateAll() {
+    clearLog('replicate-log');
+    document.getElementById('replicate-results').innerHTML = '';
+    const btn = document.getElementById('btn-replicate');
+    btn.disabled = true;
+    showBadge('replicate-status', 'Replicating...', 'info');
+    appendLog('replicate-log', '▶ Starting Data Access Roles replication to secondary...');
+
+    try {
+        const resp = await fetch('/api/security/replicate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: '{}'
+        });
+        const data = await resp.json();
+        if (data.error) {
+            showBadge('replicate-status', 'Failed', 'error');
+            appendLog('replicate-log', 'ERROR: ' + data.error);
+            btn.disabled = false;
+            return;
+        }
+
+        const res = data.results || {};
+
+        // Log Roles
+        (res.roles || []).forEach(r => {
+            const icon = r.status === 'ok' ? '✓' : r.status === 'skipped' ? '⊘' : '✗';
+            const detail = r.error || r.reason || r.message || '';
+            appendLog('replicate-log', `[ROLE] ${r.lakehouse || ''} → ${r.role || ''}: ${r.action || r.status} ${icon} ${detail}`);
+        });
+
+        const total = data.total_actions || 0;
+        const errors = data.errors || 0;
+        appendLog('replicate-log', `\n✓ Done. ${total} actions, ${errors} errors.`);
+        showBadge('replicate-status',
+            errors > 0 ? `${total} actions, ${errors} errors` : `${total} actions — success`,
+            errors > 0 ? 'warn' : 'ok');
+
+        // Summary
+        let sumHtml = `<div class="badge ok" style="padding:8px 16px;font-size:13px;">Roles: ${(res.roles||[]).length} actions</div>`;
+        document.getElementById('replicate-results').innerHTML = sumHtml;
+
+        // Refresh the sync status table
+        setTimeout(() => loadRolesStatus(), 1000);
+
+    } catch (e) {
+        showBadge('replicate-status', 'Network error', 'error');
+        appendLog('replicate-log', 'ERROR: ' + e.message);
+    }
+    btn.disabled = false;
+}
+
+// ───── Init ─────
+document.addEventListener('DOMContentLoaded', () => {
+    loadRolesStatus();
+});
+</script>
+{% endblock %}

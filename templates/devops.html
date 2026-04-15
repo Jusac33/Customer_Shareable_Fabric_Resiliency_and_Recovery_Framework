@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}DevOps Integration - Microsoft Fabric BCDR{% endblock %}
+
+{% block page_title %}DevOps Integration{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-code-branch"></i> AZURE DEVOPS INTEGRATION
+    </h2>
+    <p class="section-description">Git-based artifact sync with Azure DevOps pipelines — auto-trigger on new artifacts</p>
+
+    <!-- Git Status Cards -->
+    <div class="devops-grid">
+        <div class="devops-card" id="git-primary">
+            <div class="devops-card-header">
+                <i class="fas fa-code-branch" style="color:#2196F3;"></i>
+                <span class="devops-card-title">Primary Workspace Git</span>
+                <span class="devops-badge" id="p-git-badge">—</span>
+            </div>
+            <div class="devops-card-body">
+                <div class="devops-field"><span class="field-label">Repository</span><span class="field-value" id="p-git-repo">—</span></div>
+                <div class="devops-field"><span class="field-label">Branch</span><span class="field-value" id="p-git-branch">—</span></div>
+                <div class="devops-field"><span class="field-label">Head Commit</span><span class="field-value mono" id="p-git-commit">—</span></div>
+                <div class="devops-field"><span class="field-label">Sync State</span><span class="field-value" id="p-git-sync">—</span></div>
+            </div>
+        </div>
+
+        <div class="devops-card" id="git-secondary">
+            <div class="devops-card-header">
+                <i class="fas fa-code-branch" style="color:#78909c;"></i>
+                <span class="devops-card-title">Secondary Workspace Git</span>
+                <span class="devops-badge" id="s-git-badge">—</span>
+            </div>
+            <div class="devops-card-body">
+                <div class="devops-field"><span class="field-label">Repository</span><span class="field-value" id="s-git-repo">—</span></div>
+                <div class="devops-field"><span class="field-label">Branch</span><span class="field-value" id="s-git-branch">—</span></div>
+                <div class="devops-field"><span class="field-label">Head Commit</span><span class="field-value mono" id="s-git-commit">—</span></div>
+                <div class="devops-field"><span class="field-label">Sync State</span><span class="field-value" id="s-git-sync">—</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pipeline Status -->
+    <div class="section-divider"></div>
+    <h3 class="sub-title">PIPELINE STATUS</h3>
+    <div class="devops-pipeline-bar" id="pipeline-bar">
+        <div class="pipeline-info">
+            <span class="pipeline-name" id="pipeline-name">Not configured</span>
+            <span class="pipeline-status" id="pipeline-status">—</span>
+        </div>
+        <div class="pipeline-actions">
+            <button class="btn-trigger" onclick="triggerPipeline()" id="btn-trigger" disabled>
+                <i class="fas fa-play"></i> Trigger Pipeline
+            </button>
+        </div>
+    </div>
+
+    <!-- Pipeline Run History -->
+    <div id="pipeline-runs-section" style="display:none; margin-top: 16px;">
+        <table class="devops-table">
+            <thead>
+                <tr>
+                    <th>Run</th>
+                    <th>State</th>
+                    <th>Result</th>
+                    <th>Started</th>
+                    <th>Trigger</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="pipeline-runs-body"></tbody>
+        </table>
+    </div>
+
+    <!-- Configuration -->
+    <div class="section-divider"></div>
+    <h3 class="sub-title">CONFIGURATION</h3>
+    <div class="devops-config">
+        <div class="config-row">
+            <label class="config-label">
+                <input type="checkbox" id="cfg-enabled"> Enable DevOps Integration
+            </label>
+        </div>
+        <div class="config-grid">
+            <div class="config-field">
+                <label>Organization</label>
+                <input type="text" id="cfg-org" placeholder="e.g., FabricGuard">
+            </div>
+            <div class="config-field">
+                <label>Project</label>
+                <input type="text" id="cfg-project" placeholder="e.g., FabricBCDR">
+            </div>
+            <div class="config-field">
+                <label>Repository</label>
+                <input type="text" id="cfg-repo" placeholder="e.g., FabricBCDR">
+            </div>
+            <div class="config-field">
+                <label>Pipeline ID</label>
+                <input type="number" id="cfg-pipeline-id" placeholder="e.g., 1">
+            </div>
+            <div class="config-field">
+                <label>Primary Branch</label>
+                <input type="text" id="cfg-primary-branch" placeholder="FabricBCDRArtifacts">
+            </div>
+            <div class="config-field">
+                <label>Secondary Branch</label>
+                <input type="text" id="cfg-secondary-branch" placeholder="FabricBCDRSecondary">
+            </div>
+            <div class="config-field" style="grid-column: 1 / -1;">
+                <label>Personal Access Token (PAT)</label>
+                <input type="password" id="cfg-pat" placeholder="Enter PAT (leave blank to keep existing)">
+            </div>
+        </div>
+        <div class="config-row">
+            <label class="config-label">
+                <input type="checkbox" id="cfg-auto-trigger"> Auto-trigger pipeline when new artifacts detected
+            </label>
+        </div>
+        <div class="config-actions">
+            <button class="btn-save" onclick="saveConfig()"><i class="fas fa-save"></i> Save Configuration</button>
+            <span class="config-status" id="config-status"></span>
+        </div>
+    </div>
+</section>
+
+<style>
+    .devops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .devops-card { border: 1px solid #e0e0e0; border-radius: 10px; padding: 18px 20px; background: #fff; }
+    .devops-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .devops-card-title { font-size: 14px; font-weight: 700; color: #333; }
+    .devops-badge {
+        margin-left: auto; padding: 3px 12px; border-radius: 4px;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+        background: #eee; color: #666;
+    }
+    .devops-badge.connected { background: #e8f5e9; color: #2e7d32; }
+    .devops-badge.disconnected { background: #ffebee; color: #c62828; }
+    .devops-card-body { display: flex; flex-direction: column; gap: 8px; }
+    .devops-field { display: flex; justify-content: space-between; align-items: center; }
+    .field-label { font-size: 12px; color: #888; }
+    .field-value { font-size: 13px; font-weight: 600; color: #333; }
+    .field-value.mono { font-family: monospace; font-size: 12px; }
+
+    .section-divider { border-top: 1px solid #e0e0e0; margin: 28px 0 20px; }
+    .sub-title { font-size: 14px; font-weight: 700; color: #555; letter-spacing: 1px; margin: 0 0 14px; }
+
+    .devops-pipeline-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; background: #f8fafb; border-radius: 10px;
+        border: 1px solid #e0e0e0;
+    }
+    .pipeline-name { font-size: 15px; font-weight: 700; color: #333; }
+    .pipeline-status {
+        display: inline-block; margin-left: 12px; padding: 3px 12px;
+        border-radius: 4px; font-size: 11px; font-weight: 700;
+        background: #eee; color: #666;
+    }
+    .pipeline-status.succeeded { background: #e8f5e9; color: #2e7d32; }
+    .pipeline-status.failed { background: #ffebee; color: #c62828; }
+    .pipeline-status.inProgress { background: #fff3e0; color: #e65100; }
+
+    .btn-trigger {
+        padding: 8px 20px; border: none; border-radius: 6px;
+        background: #1565c0; color: #fff; font-weight: 600;
+        font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    }
+    .btn-trigger:hover:not(:disabled) { background: #0d47a1; }
+    .btn-trigger:disabled { background: #bbb; cursor: not-allowed; }
+
+    .devops-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .devops-table th {
+        padding: 10px 12px; text-align: left; font-weight: 700; color: #555;
+        background: #fafafa; border-bottom: 2px solid #e0e0e0;
+    }
+    .devops-table td { padding: 10px 12px; border-bottom: 1px solid #eee; }
+    .devops-table tr:hover { background: #f8f9fa; }
+    .run-badge {
+        padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
+    }
+    .run-badge.succeeded { background: #e8f5e9; color: #2e7d32; }
+    .run-badge.failed { background: #ffebee; color: #c62828; }
+    .run-badge.inProgress, .run-badge.running { background: #fff3e0; color: #e65100; }
+    .run-badge.canceled { background: #f5f5f5; color: #999; }
+
+    .devops-config { background: #fafafa; border-radius: 10px; padding: 20px; border: 1px solid #e0e0e0; }
+    .config-grid {
+        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0;
+    }
+    .config-field label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; font-weight: 600; }
+    .config-field input {
+        width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 5px;
+        font-size: 13px; box-sizing: border-box;
+    }
+    .config-row { margin: 8px 0; }
+    .config-label { font-size: 13px; color: #333; font-weight: 600; cursor: pointer; }
+    .config-label input { margin-right: 6px; }
+    .config-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+    .btn-save {
+        padding: 8px 20px; border: none; border-radius: 6px;
+        background: #2e7d32; color: #fff; font-weight: 600;
+        font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    }
+    .btn-save:hover { background: #1b5e20; }
+    .config-status { font-size: 12px; color: #2e7d32; }
+
+    @media (max-width: 768px) {
+        .devops-grid { grid-template-columns: 1fr; }
+        .config-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', loadDevOps);
+
+    async function loadDevOps() {
+        try {
+            const resp = await fetch('/api/devops/status');
+            const d = await resp.json();
+            if (d.error) { console.error(d.error); return; }
+
+            const cfg = d.config || {};
+            const pGit = d.primary_git || {};
+            const sGit = d.secondary_git || {};
+
+            // Primary Git
+            renderGitCard('p', pGit);
+            // Secondary Git
+            renderGitCard('s', sGit);
+
+            // Config form
+            document.getElementById('cfg-enabled').checked = cfg.enabled;
+            document.getElementById('cfg-org').value = cfg.org || '';
+            document.getElementById('cfg-project').value = cfg.project || '';
+            document.getElementById('cfg-repo').value = cfg.repo || '';
+            document.getElementById('cfg-pipeline-id').value = cfg.pipeline_id || '';
+            document.getElementById('cfg-primary-branch').value = cfg.primary_branch || '';
+            document.getElementById('cfg-secondary-branch').value = cfg.secondary_branch || '';
+            document.getElementById('cfg-auto-trigger').checked = cfg.auto_trigger;
+
+            // Pipeline status
+            if (cfg.enabled && cfg.pipeline_id) {
+                const pipeline = d.pipeline;
+                document.getElementById('pipeline-name').textContent = pipeline ? (pipeline.name || `Pipeline #${cfg.pipeline_id}`) : `Pipeline #${cfg.pipeline_id}`;
+                document.getElementById('btn-trigger').disabled = false;
+
+                // Runs
+                const runs = d.runs || [];
+                if (runs.length > 0) {
+                    document.getElementById('pipeline-runs-section').style.display = '';
+                    const lastRun = runs[0];
+                    const statusEl = document.getElementById('pipeline-status');
+                    const result = lastRun.result || lastRun.state || 'unknown';
+                    statusEl.textContent = result.toUpperCase();
+                    statusEl.className = 'pipeline-status ' + result.toLowerCase();
+
+                    const tbody = document.getElementById('pipeline-runs-body');
+                    tbody.innerHTML = runs.map(r => {
+                        const res = r.result || r.state || 'unknown';
+                        const trigger = (r.template_params && r.template_params.trigger_reason) || '';
+                        return `<tr>
+                            <td><strong>#${r.id}</strong></td>
+                            <td><span class="run-badge ${r.state}">${esc(r.state)}</span></td>
+                            <td><span class="run-badge ${res}">${esc(res)}</span></td>
+                            <td>${fmtTime(r.created)}</td>
+                            <td style="font-size:11px;color:#666;">${esc(trigger)}</td>
+                            <td>${r.url ? `<a href="${esc(r.url)}" target="_blank" style="color:#1565c0;font-size:12px;">View</a>` : ''}</td>
+                        </tr>`;
+                    }).join('');
+                } else {
+                    document.getElementById('pipeline-status').textContent = 'NO RUNS';
+                }
+            }
+
+        } catch (e) { console.error(e); }
+    }
+
+    function renderGitCard(prefix, git) {
+        const badge = document.getElementById(prefix + '-git-badge');
+        if (git.connected) {
+            badge.textContent = 'CONNECTED';
+            badge.className = 'devops-badge connected';
+            document.getElementById(prefix + '-git-repo').textContent = [git.org, git.project, git.repo].filter(Boolean).join('/') || '—';
+            document.getElementById(prefix + '-git-branch').textContent = git.branch || '—';
+            document.getElementById(prefix + '-git-commit').textContent = (git.head_commit || '—').substring(0, 12);
+            document.getElementById(prefix + '-git-sync').textContent = git.synced ? 'Synced' : (git.sync_state || 'Out of sync');
+            document.getElementById(prefix + '-git-sync').style.color = git.synced ? '#2e7d32' : '#e65100';
+            const changes = git.changes || [];
+            if (changes.length > 0) {
+                document.getElementById(prefix + '-git-sync').textContent += ` (${changes.length} pending changes)`;
+                document.getElementById(prefix + '-git-sync').style.color = '#e65100';
+            }
+        } else {
+            badge.textContent = 'NOT CONNECTED';
+            badge.className = 'devops-badge disconnected';
+            document.getElementById(prefix + '-git-repo').textContent = git.error || 'Not configured';
+            document.getElementById(prefix + '-git-branch').textContent = '—';
+            document.getElementById(prefix + '-git-commit').textContent = '—';
+            document.getElementById(prefix + '-git-sync').textContent = '—';
+        }
+    }
+
+    async function saveConfig() {
+        const body = {
+            enabled: document.getElementById('cfg-enabled').checked,
+            org: document.getElementById('cfg-org').value,
+            project: document.getElementById('cfg-project').value,
+            repo: document.getElementById('cfg-repo').value,
+            pipeline_id: document.getElementById('cfg-pipeline-id').value || null,
+            primary_branch: document.getElementById('cfg-primary-branch').value,
+            secondary_branch: document.getElementById('cfg-secondary-branch').value,
+            auto_trigger: document.getElementById('cfg-auto-trigger').checked,
+        };
+        const pat = document.getElementById('cfg-pat').value.trim();
+        if (pat) body.pat = pat;
+
+        try {
+            const resp = await fetch('/api/devops/configure', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body),
+            });
+            const d = await resp.json();
+            document.getElementById('config-status').textContent = d.message || 'Saved';
+            document.getElementById('cfg-pat').value = '';
+            setTimeout(() => loadDevOps(), 500);
+        } catch (e) {
+            document.getElementById('config-status').textContent = 'Error: ' + e;
+        }
+    }
+
+    async function triggerPipeline() {
+        const btn = document.getElementById('btn-trigger');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Triggering...';
+        try {
+            const resp = await fetch('/api/devops/trigger', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reason: 'Manual trigger from BCDR Dashboard'}),
+            });
+            const d = await resp.json();
+            if (d.ok) {
+                btn.innerHTML = '<i class="fas fa-check"></i> Triggered!';
+                setTimeout(() => loadDevOps(), 3000);
+            } else {
+                btn.innerHTML = '<i class="fas fa-times"></i> Failed';
+                alert(d.error || 'Trigger failed');
+            }
+        } catch (e) {
+            btn.innerHTML = '<i class="fas fa-times"></i> Error';
+            alert('Error: ' + e);
+        }
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play"></i> Trigger Pipeline';
+        }, 3000);
+    }
+
+    function fmtTime(iso) {
+        if (!iso) return '—';
+        try { return new Date(iso).toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true}); }
+        catch(e) { return iso; }
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,1256 @@
+{% extends "base.html" %}
+
+{% block title %}Real-Time Intelligence - Microsoft Fabric BCDR{% endblock %}
+
+{% block page_title %}Real-Time Intelligence{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-bolt"></i> REAL-TIME INTELLIGENCE (RTI)
+    </h2>
+    <p class="section-description">Monitor and sync Eventhouses, KQL Databases, KQL Querysets, and Eventstreams across workspace pairs</p>
+
+    <div class="rti-status-bar">
+        <span class="live-dot"></span> LIVE API
+        <span class="rti-total-badge" id="rti-total">—</span>
+        <button class="btn-refresh" onclick="loadRtiData()" title="Refresh">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+        <button class="btn-sync-all-rti" onclick="syncAllRti()" id="btn-sync-all-rti" title="Sync all RTI artifacts to secondary">
+            <i class="fas fa-cloud-upload-alt"></i> Sync All RTI
+        </button>
+        <button class="btn-validate-rti" onclick="validateRti()" id="btn-validate-rti" title="Validate RTI sync health">
+            <i class="fas fa-check-circle"></i> Validate
+        </button>
+        <button class="btn-create-dummy" onclick="createDummyRti()" id="btn-create-dummy" title="Create demo RTI artifacts in primary">
+            <i class="fas fa-flask"></i> Create Demo Data
+        </button>
+    </div>
+
+    <!-- Validation banner (hidden by default) -->
+    <div class="rti-validation-banner" id="rti-validation-banner" style="display:none;">
+        <div class="rti-validation-header" id="rti-validation-header"></div>
+        <div class="rti-validation-body" id="rti-validation-body"></div>
+        <button class="btn-close-banner" onclick="document.getElementById('rti-validation-banner').style.display='none'">✕</button>
+    </div>
+
+    <!-- RTI Summary Cards -->
+    <div class="rti-summary-grid" id="rti-summary">
+        <div class="rti-summary-card" id="summary-eventhouse">
+            <div class="rti-summary-icon eventhouse"><i class="fas fa-database"></i></div>
+            <div class="rti-summary-info">
+                <div class="rti-summary-count" id="count-eventhouse">—</div>
+                <div class="rti-summary-label">Eventhouses</div>
+            </div>
+            <div class="rti-summary-sync" id="sync-eventhouse">—</div>
+        </div>
+        <div class="rti-summary-card" id="summary-kqldb">
+            <div class="rti-summary-icon kqldb"><i class="fas fa-layer-group"></i></div>
+            <div class="rti-summary-info">
+                <div class="rti-summary-count" id="count-kqldb">—</div>
+                <div class="rti-summary-label">KQL Databases</div>
+            </div>
+            <div class="rti-summary-sync" id="sync-kqldb">—</div>
+        </div>
+        <div class="rti-summary-card" id="summary-kqlqueryset">
+            <div class="rti-summary-icon kqlqueryset"><i class="fas fa-terminal"></i></div>
+            <div class="rti-summary-info">
+                <div class="rti-summary-count" id="count-kqlqueryset">—</div>
+                <div class="rti-summary-label">KQL Querysets</div>
+            </div>
+            <div class="rti-summary-sync" id="sync-kqlqueryset">—</div>
+        </div>
+        <div class="rti-summary-card" id="summary-eventstream">
+            <div class="rti-summary-icon eventstream"><i class="fas fa-stream"></i></div>
+            <div class="rti-summary-info">
+                <div class="rti-summary-count" id="count-eventstream">—</div>
+                <div class="rti-summary-label">Eventstreams</div>
+            </div>
+            <div class="rti-summary-sync" id="sync-eventstream">—</div>
+        </div>
+    </div>
+</section>
+
+<!-- RTI Artifact Detail Tables -->
+<section class="card" id="rti-detail-section" style="display:none;">
+    <h2 class="section-title">
+        <i class="fas fa-list"></i> ARTIFACT DETAILS
+    </h2>
+
+    <!-- Eventhouse Table -->
+    <div class="rti-type-block" id="block-eventhouse" style="display:none;">
+        <div class="rti-type-header">
+            <span class="rti-type-badge eventhouse"><i class="fas fa-database"></i> Eventhouses</span>
+            <button class="btn-sync-type" onclick="syncRtiType('Eventhouse')" id="btn-sync-eventhouse">
+                <i class="fas fa-sync-alt"></i> Sync All
+            </button>
+        </div>
+        <table class="rti-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Primary</th>
+                    <th>Secondary</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="table-eventhouse"></tbody>
+        </table>
+    </div>
+
+    <!-- KQL Database Table -->
+    <div class="rti-type-block" id="block-kqldb" style="display:none;">
+        <div class="rti-type-header">
+            <span class="rti-type-badge kqldb"><i class="fas fa-layer-group"></i> KQL Databases</span>
+            <button class="btn-sync-type" onclick="syncRtiType('KQLDatabase')" id="btn-sync-kqldb">
+                <i class="fas fa-sync-alt"></i> Sync All
+            </button>
+        </div>
+        <table class="rti-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Primary</th>
+                    <th>Secondary</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="table-kqldb"></tbody>
+        </table>
+    </div>
+
+    <!-- KQL Queryset Table -->
+    <div class="rti-type-block" id="block-kqlqueryset" style="display:none;">
+        <div class="rti-type-header">
+            <span class="rti-type-badge kqlqueryset"><i class="fas fa-terminal"></i> KQL Querysets</span>
+            <button class="btn-sync-type" onclick="syncRtiType('KQLQueryset')" id="btn-sync-kqlqueryset">
+                <i class="fas fa-sync-alt"></i> Sync All
+            </button>
+        </div>
+        <table class="rti-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Primary</th>
+                    <th>Secondary</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="table-kqlqueryset"></tbody>
+        </table>
+    </div>
+
+    <!-- Eventstream Table -->
+    <div class="rti-type-block" id="block-eventstream" style="display:none;">
+        <div class="rti-type-header">
+            <span class="rti-type-badge eventstream"><i class="fas fa-stream"></i> Eventstreams</span>
+            <button class="btn-sync-type" onclick="syncRtiType('Eventstream')" id="btn-sync-eventstream">
+                <i class="fas fa-sync-alt"></i> Sync All
+            </button>
+        </div>
+        <table class="rti-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Primary</th>
+                    <th>Secondary</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="table-eventstream"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- KQL Data Status -->
+<section class="card" id="kql-data-section">
+    <h2 class="section-title">
+        <i class="fas fa-table"></i> KQL DATABASE DATA
+    </h2>
+    <p class="section-description">Compare table schemas and row counts between primary and secondary KQL Databases</p>
+
+    <div class="rti-status-bar">
+        <button class="btn-sync-all-rti" onclick="loadKqlData()" id="btn-refresh-kql">
+            <i class="fas fa-sync-alt"></i> Refresh Data View
+        </button>
+        <button class="btn-create-dummy" onclick="ingestSampleData()" id="btn-ingest-sample">
+            <i class="fas fa-flask"></i> Ingest Sample Data
+        </button>
+        <select id="replicate-db-select" class="rti-schedule-select" style="min-width:180px;">
+            <option value="ALL">All KQL Databases</option>
+        </select>
+        <select id="replicate-mode-select" class="rti-schedule-select" style="min-width:150px;">
+            <option value="incremental" selected>Incremental</option>
+            <option value="full">Full Reload</option>
+        </select>
+        <button class="btn-sync-all-rti" onclick="replicateKqlData()" id="btn-replicate-data">
+            <i class="fas fa-exchange-alt"></i> Replicate Data to Secondary
+        </button>
+    </div>
+
+    <!-- Watermark Status -->
+    <div class="rti-schedule-panel" id="watermark-panel" style="margin-bottom:12px;">
+        <div class="rti-schedule-header">
+            <i class="fas fa-bookmark"></i>
+            <span class="rti-schedule-title">Incremental Watermarks</span>
+            <button class="btn-create-dummy" onclick="resetWatermarks()" style="margin-left:auto;font-size:0.82em;padding:3px 10px;">
+                <i class="fas fa-undo"></i> Reset All
+            </button>
+        </div>
+        <div id="watermark-content" style="padding:6px 12px;font-size:0.88em;color:#b0bec5;">
+            <em>Loading...</em>
+        </div>
+    </div>
+
+    <!-- Scheduled Replication Controls -->
+    <div class="rti-schedule-panel" id="rti-schedule-panel">
+        <div class="rti-schedule-header">
+            <i class="fas fa-clock"></i>
+            <span class="rti-schedule-title">Scheduled Replication</span>
+            <span class="rti-schedule-badge" id="schedule-badge">OFF</span>
+        </div>
+        <div class="rti-schedule-controls">
+            <label for="schedule-interval" class="rti-schedule-label">Replicate every:</label>
+            <select id="schedule-interval" class="rti-schedule-select">
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60" selected>1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="240">4 hours</option>
+                <option value="360">6 hours</option>
+                <option value="480">8 hours</option>
+                <option value="720">12 hours</option>
+                <option value="1440">24 hours</option>
+            </select>
+            <button class="btn-schedule-toggle" id="btn-schedule-toggle" onclick="toggleRtiSchedule()">
+                <i class="fas fa-play"></i> Enable
+            </button>
+        </div>
+        <div class="rti-schedule-status" id="schedule-status-text" style="display:none;">
+            <span id="schedule-status-detail"></span>
+        </div>
+    </div>
+
+    <div id="kql-data-content">
+        <p style="color:#999; font-size:13px;">Click "Refresh Data View" to load KQL table data.</p>
+    </div>
+</section>
+
+<!-- Connection Strings Audit -->
+<section class="card" id="conn-strings-section">
+    <h2 class="section-title">
+        <i class="fas fa-link"></i> CONNECTION STRINGS
+    </h2>
+    <p class="section-description">Audit and fix connection references in secondary RTI artifacts (KQL Querysets, Eventstreams)</p>
+    <div class="rti-status-bar">
+        <button class="btn-sync-all-rti" onclick="auditConnections()" id="btn-audit-conn">
+            <i class="fas fa-search"></i> Audit Connections
+        </button>
+        <button class="btn-create-dummy" onclick="fixConnections()" id="btn-fix-conn" style="border-color:#e65100;color:#e65100;">
+            <i class="fas fa-wrench"></i> Fix Stale References
+        </button>
+    </div>
+    <div id="conn-audit-content">
+        <p style="color:#999; font-size:13px;">Click "Audit Connections" to scan secondary artifacts for stale primary references.</p>
+    </div>
+</section>
+
+<!-- RTI BCDR Guidance -->
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-info-circle"></i> RTI BCDR GUIDANCE
+    </h2>
+    <div class="rti-guidance-grid">
+        <div class="rti-guidance-card">
+            <div class="rti-guidance-icon"><i class="fas fa-database"></i></div>
+            <h3>Eventhouse / KQL Database</h3>
+            <p>Data replication requires <strong>continuous export</strong> configured on the primary KQL Database to Azure Storage, with the secondary KQL Database ingesting from the same storage.</p>
+            <ul>
+                <li>Schema sync via definition export/import</li>
+                <li>Data sync via continuous export + follower databases</li>
+                <li>RPO: Depends on continuous export lag</li>
+                <li>RTO: Minutes</li>
+            </ul>
+        </div>
+        <div class="rti-guidance-card">
+            <div class="rti-guidance-icon"><i class="fas fa-terminal"></i></div>
+            <h3>KQL Querysets</h3>
+            <p>Query definitions are synced via the Fabric Items API. Querysets reference KQL Databases which must be independently replicated.</p>
+            <ul>
+                <li>Definition sync via export/import</li>
+                <li>Database references remapped automatically</li>
+                <li>RPO: Near-zero (definition-based)</li>
+                <li>RTO: Seconds</li>
+            </ul>
+        </div>
+        <div class="rti-guidance-card">
+            <div class="rti-guidance-icon"><i class="fas fa-stream"></i></div>
+            <h3>Eventstreams</h3>
+            <p>Eventstream definitions are synced with <strong>destination artifact remapping</strong>. Source connections (Event Hub, Kafka) may require manual re-authentication.</p>
+            <ul>
+                <li>Definition sync with destination remapping</li>
+                <li>Source connections need credential update</li>
+                <li>RPO: Real-time (depends on source lag)</li>
+                <li>RTO: Seconds (with pre-configured sources)</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<style>
+    .rti-status-bar {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+        font-size: 12px; font-weight: 600; color: #2e7d32;
+    }
+    .live-dot {
+        width: 8px; height: 8px; border-radius: 50%; background: #4caf50;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .rti-total-badge {
+        padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
+        background: #e3f2fd; color: #1565c0; border: 1px solid #42a5f5;
+    }
+
+    /* Summary grid */
+    .rti-summary-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px; margin-bottom: 8px;
+    }
+    .rti-summary-card {
+        border: 1px solid #e0e0e0; border-radius: 10px; padding: 18px 20px;
+        background: #fff; display: flex; align-items: center; gap: 14px;
+        transition: box-shadow 0.2s;
+    }
+    .rti-summary-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .rti-summary-icon {
+        width: 44px; height: 44px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; flex-shrink: 0;
+    }
+    .rti-summary-icon.eventhouse { background: #e8eaf6; color: #283593; }
+    .rti-summary-icon.kqldb { background: #e0f2f1; color: #00695c; }
+    .rti-summary-icon.kqlqueryset { background: #fce4ec; color: #880e4f; }
+    .rti-summary-icon.eventstream { background: #fff3e0; color: #e65100; }
+    .rti-summary-info { flex: 1; }
+    .rti-summary-count { font-size: 24px; font-weight: 800; color: #1a1a2e; line-height: 1; }
+    .rti-summary-label { font-size: 12px; color: #888; margin-top: 2px; }
+    .rti-summary-sync {
+        padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;
+        white-space: nowrap;
+    }
+    .rti-summary-sync.synced { background: #e8f5e9; color: #2e7d32; }
+    .rti-summary-sync.partial { background: #fff3e0; color: #e65100; }
+    .rti-summary-sync.missing { background: #ffebee; color: #c62828; }
+    .rti-summary-sync.empty  { background: #f5f5f5; color: #999; }
+
+    /* Type blocks */
+    .rti-type-block { margin-bottom: 24px; }
+    .rti-type-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 10px;
+    }
+    .rti-type-badge {
+        font-size: 14px; font-weight: 700; padding: 6px 14px; border-radius: 8px;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .rti-type-badge.eventhouse { background: #e8eaf6; color: #283593; }
+    .rti-type-badge.kqldb { background: #e0f2f1; color: #00695c; }
+    .rti-type-badge.kqlqueryset { background: #fce4ec; color: #880e4f; }
+    .rti-type-badge.eventstream { background: #fff3e0; color: #e65100; }
+
+    .btn-sync-type {
+        padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        border: 1.5px solid #1565c0; color: #1565c0; background: transparent;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+        transition: all 0.2s;
+    }
+    .btn-sync-type:hover { background: #1565c0; color: #fff; }
+    .btn-sync-type:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .rti-table {
+        width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .rti-table th {
+        text-align: left; padding: 10px 12px; background: #f5f5f5;
+        color: #666; font-weight: 600; border-bottom: 2px solid #e0e0e0;
+    }
+    .rti-table td {
+        padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: #333;
+    }
+    .rti-table tr:last-child td { border-bottom: none; }
+    .rti-table tr:hover { background: #fafafa; }
+
+    .status-badge {
+        padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
+        display: inline-block;
+    }
+    .status-badge.mirrored { background: #e8f5e9; color: #2e7d32; }
+    .status-badge.missing  { background: #ffebee; color: #c62828; }
+
+    .btn-replicate-single {
+        padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600;
+        border: 1px solid #1976d2; color: #1976d2; background: transparent;
+        cursor: pointer; transition: all 0.15s;
+    }
+    .btn-replicate-single:hover { background: #1976d2; color: #fff; }
+    .btn-replicate-single:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .present-badge {
+        padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 600;
+        background: #e8f5e9; color: #2e7d32;
+    }
+    .absent-badge {
+        padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 600;
+        background: #ffebee; color: #c62828;
+    }
+
+    /* Guidance */
+    .rti-guidance-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+    }
+    .rti-guidance-card {
+        border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px;
+        background: #fafafa;
+    }
+    .rti-guidance-card h3 { font-size: 15px; font-weight: 700; color: #333; margin: 10px 0 8px; }
+    .rti-guidance-card p { font-size: 13px; color: #555; line-height: 1.5; margin-bottom: 8px; }
+    .rti-guidance-card ul { font-size: 12px; color: #666; padding-left: 18px; margin: 0; }
+    .rti-guidance-card li { margin-bottom: 4px; }
+    .rti-guidance-icon {
+        width: 36px; height: 36px; border-radius: 8px; background: #e3f2fd;
+        color: #1565c0; display: flex; align-items: center; justify-content: center;
+        font-size: 16px;
+    }
+
+    /* New action buttons in status bar */
+    .btn-sync-all-rti, .btn-validate-rti, .btn-create-dummy {
+        padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+        transition: all 0.2s; border: 1.5px solid;
+    }
+    .btn-sync-all-rti {
+        border-color: #1565c0; color: #1565c0; background: transparent; margin-left: auto;
+    }
+    .btn-sync-all-rti:hover { background: #1565c0; color: #fff; }
+    .btn-validate-rti {
+        border-color: #2e7d32; color: #2e7d32; background: transparent;
+    }
+    .btn-validate-rti:hover { background: #2e7d32; color: #fff; }
+    .btn-create-dummy {
+        border-color: #7b1fa2; color: #7b1fa2; background: transparent;
+    }
+    .btn-create-dummy:hover { background: #7b1fa2; color: #fff; }
+    .btn-sync-all-rti:disabled, .btn-validate-rti:disabled, .btn-create-dummy:disabled {
+        opacity: 0.5; cursor: not-allowed;
+    }
+
+    /* Scheduled Replication Panel */
+    .rti-schedule-panel {
+        border: 1.5px solid #e3e8ef; border-radius: 10px; padding: 14px 18px;
+        background: #f8fafd; margin: 12px 0;
+    }
+    .rti-schedule-header {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 14px; font-weight: 600; color: #333;
+    }
+    .rti-schedule-header i { color: #1565c0; }
+    .rti-schedule-badge {
+        font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+        background: #eee; color: #888; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .rti-schedule-badge.active { background: #e8f5e9; color: #2e7d32; }
+    .rti-schedule-controls {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .rti-schedule-label { font-size: 13px; color: #555; font-weight: 500; }
+    .rti-schedule-select {
+        padding: 5px 10px; border-radius: 6px; border: 1.5px solid #ccc; font-size: 13px;
+        background: #fff; color: #333; cursor: pointer; min-width: 140px;
+    }
+    .rti-schedule-select:focus { border-color: #1565c0; outline: none; }
+    .btn-schedule-toggle {
+        padding: 5px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+        transition: all 0.2s; border: 1.5px solid #2e7d32; color: #2e7d32; background: transparent;
+    }
+    .btn-schedule-toggle:hover { background: #2e7d32; color: #fff; }
+    .btn-schedule-toggle.active {
+        border-color: #c62828; color: #c62828;
+    }
+    .btn-schedule-toggle.active:hover { background: #c62828; color: #fff; }
+    .rti-schedule-status {
+        margin-top: 10px; font-size: 12px; color: #666; padding-top: 8px; border-top: 1px solid #e8e8e8;
+    }
+
+    /* Connection Audit Styles */
+    .conn-audit-banner {
+        border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;
+        font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px;
+    }
+    .conn-clean { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+    .conn-stale { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+    .conn-audit-list { display: flex; flex-direction: column; gap: 8px; }
+    .conn-audit-item {
+        border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 14px; font-size: 13px;
+    }
+    .conn-item-stale { border-color: #ffcc80; background: #fffaf0; }
+    .conn-item-clean { border-color: #a5d6a7; background: #f9fcf9; }
+    .conn-art-header { display: flex; align-items: center; gap: 8px; }
+    .conn-art-header i { font-size: 14px; }
+    .conn-item-stale .conn-art-header i { color: #e65100; }
+    .conn-item-clean .conn-art-header i { color: #2e7d32; }
+    .conn-issues-list { margin: 6px 0 0 24px; padding: 0; font-size: 12px; color: #555; }
+    .conn-issues-list li { margin-bottom: 3px; }
+    .conn-issues-list code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+    .conn-uri-map { margin-top: 12px; font-size: 12px; color: #666; }
+    .conn-uri-map summary { cursor: pointer; font-weight: 600; }
+    .conn-uri-map ul { margin: 6px 0 0 16px; padding: 0; }
+    .conn-uri-map li { margin-bottom: 4px; }
+    .conn-uri-map code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 11px; word-break: break-all; }
+
+    /* Validation banner */
+    .rti-validation-banner {
+        border: 1.5px solid #e0e0e0; border-radius: 10px; padding: 16px 20px;
+        background: #fafafa; margin-bottom: 16px; position: relative;
+    }
+    .rti-validation-header { margin-bottom: 8px; }
+    .rti-validation-body { font-size: 13px; color: #444; }
+    .rti-val-type { margin: 4px 0; }
+    .rti-val-conn, .rti-val-issues { margin-top: 10px; }
+    .rti-val-conn ul, .rti-val-issues ul { margin: 4px 0 0 18px; padding: 0; }
+    .rti-val-conn li, .rti-val-issues li { margin-bottom: 3px; font-size: 12px; }
+    .btn-close-banner {
+        position: absolute; top: 10px; right: 12px; border: none; background: transparent;
+        font-size: 16px; color: #999; cursor: pointer;
+    }
+    .btn-close-banner:hover { color: #333; }
+
+    /* KQL Data section */
+    .kql-db-block { margin-bottom: 20px; }
+    .kql-db-header {
+        font-size: 14px; font-weight: 700; color: #283593; margin-bottom: 10px;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .status-badge.partial { background: #fff3e0; color: #e65100; }
+</style>
+
+<script>
+const RTI_TYPES = ['Eventhouse', 'KQLDatabase', 'KQLQueryset', 'Eventstream'];
+const RTI_KEYS  = ['eventhouse', 'kqldb', 'kqlqueryset', 'eventstream'];
+const RTI_TYPE_TO_KEY = {
+    'Eventhouse': 'eventhouse',
+    'KQLDatabase': 'kqldb',
+    'KQLQueryset': 'kqlqueryset',
+    'Eventstream': 'eventstream',
+};
+
+let rtiData = null;
+
+async function loadRtiData() {
+    try {
+        const resp = await fetch('/api/rti/status');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        rtiData = await resp.json();
+        renderRtiSummary(rtiData);
+        renderRtiDetails(rtiData);
+    } catch (err) {
+        console.error('Failed to load RTI data:', err);
+        document.getElementById('rti-total').textContent = 'Error';
+    }
+}
+
+function renderRtiSummary(data) {
+    let totalPrimary = 0;
+    for (const t of RTI_TYPES) {
+        const key = RTI_TYPE_TO_KEY[t];
+        const info = data.types[t] || { primary: [], secondary: [], mirrored: 0 };
+        const pCount = info.primary.length;
+        const mirrored = info.mirrored;
+        totalPrimary += pCount;
+
+        document.getElementById(`count-${key}`).textContent = pCount;
+        const syncEl = document.getElementById(`sync-${key}`);
+        if (pCount === 0) {
+            syncEl.textContent = 'None';
+            syncEl.className = 'rti-summary-sync empty';
+        } else if (mirrored === pCount) {
+            syncEl.textContent = `${mirrored}/${pCount} Synced`;
+            syncEl.className = 'rti-summary-sync synced';
+        } else if (mirrored > 0) {
+            syncEl.textContent = `${mirrored}/${pCount} Synced`;
+            syncEl.className = 'rti-summary-sync partial';
+        } else {
+            syncEl.textContent = `0/${pCount} Synced`;
+            syncEl.className = 'rti-summary-sync missing';
+        }
+    }
+    document.getElementById('rti-total').textContent = `${totalPrimary} RTI artifacts`;
+}
+
+function renderRtiDetails(data) {
+    const section = document.getElementById('rti-detail-section');
+    let hasAny = false;
+
+    for (const t of RTI_TYPES) {
+        const key = RTI_TYPE_TO_KEY[t];
+        const info = data.types[t] || { primary: [], secondary: [], mirrored: 0 };
+        const block = document.getElementById(`block-${key}`);
+        const tbody = document.getElementById(`table-${key}`);
+        tbody.innerHTML = '';
+
+        if (info.primary.length === 0 && info.secondary.length === 0) {
+            block.style.display = 'none';
+            continue;
+        }
+        block.style.display = '';
+        hasAny = true;
+
+        const sNames = new Set(info.secondary.map(i => i.name));
+        for (const item of info.primary) {
+            const inSecondary = sNames.has(item.name);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${escapeHtml(item.name)}</strong></td>
+                <td><span class="present-badge">Present</span></td>
+                <td><span class="${inSecondary ? 'present-badge' : 'absent-badge'}">${inSecondary ? 'Present' : 'Missing'}</span></td>
+                <td><span class="status-badge ${inSecondary ? 'mirrored' : 'missing'}">${inSecondary ? 'Mirrored' : 'Not Synced'}</span></td>
+                <td>${inSecondary ? '—' : `<button class="btn-replicate-single" onclick="replicateSingle('${escapeAttr(item.id)}','${escapeAttr(item.name)}','${t}',this)"><i class="fas fa-copy"></i> Replicate</button>`}</td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        // Items only in secondary
+        const pNames = new Set(info.primary.map(i => i.name));
+        for (const item of info.secondary) {
+            if (pNames.has(item.name)) continue;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${escapeHtml(item.name)}</strong></td>
+                <td><span class="absent-badge">Missing</span></td>
+                <td><span class="present-badge">Present</span></td>
+                <td><span class="status-badge missing">Secondary Only</span></td>
+                <td>—</td>
+            `;
+            tbody.appendChild(tr);
+        }
+    }
+
+    section.style.display = hasAny ? '' : 'none';
+}
+
+async function syncRtiType(artifactType) {
+    const key = RTI_TYPE_TO_KEY[artifactType];
+    const btn = document.getElementById(`btn-sync-${key}`);
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+    try {
+        const resp = await fetch('/api/bcdr/replicate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: artifactType}),
+        });
+        const result = await resp.json();
+        if (resp.ok) {
+            pollSyncProgress(artifactType, btn);
+        } else {
+            alert(result.error || 'Sync failed');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync All';
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync All';
+    }
+}
+
+async function pollSyncProgress(artifactType, btn) {
+    const key = RTI_TYPE_TO_KEY[artifactType];
+    const check = async () => {
+        try {
+            const resp = await fetch(`/api/bcdr/replicate/progress/${artifactType}`);
+            const prog = await resp.json();
+            if (prog.status === 'running') {
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${prog.synced || 0}/${prog.total || '?'}`;
+                setTimeout(check, 2000);
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync All';
+                loadRtiData();
+            }
+        } catch {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync All';
+        }
+    };
+    setTimeout(check, 2000);
+}
+
+async function replicateSingle(itemId, itemName, artifactType, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    try {
+        const resp = await fetch('/api/bcdr/replicate-item', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({item_id: itemId, item_name: itemName, type: artifactType}),
+        });
+        const result = await resp.json();
+        if (resp.ok) {
+            btn.innerHTML = '<i class="fas fa-check"></i> Done';
+            btn.style.borderColor = '#4caf50';
+            btn.style.color = '#4caf50';
+            setTimeout(() => loadRtiData(), 1500);
+        } else {
+            alert(result.error || 'Replicate failed');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-copy"></i> Replicate';
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-copy"></i> Replicate';
+    }
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function escapeAttr(str) {
+    return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', loadRtiData);
+
+/* ---- Sync All RTI ---- */
+async function syncAllRti() {
+    const btn = document.getElementById('btn-sync-all-rti');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+    try {
+        const resp = await fetch('/api/rti/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({}),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            alert(data.error || 'Sync failed');
+        } else {
+            let msg = 'RTI Sync Complete:\n';
+            for (const [type, r] of Object.entries(data.results || {})) {
+                msg += `  ${type}: ${r.synced.length} synced, ${r.already_mirrored.length} already mirrored, ${r.failed.length} failed\n`;
+            }
+            alert(msg);
+            loadRtiData();
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Sync All RTI';
+}
+
+/* ---- Validate RTI ---- */
+async function validateRti() {
+    const btn = document.getElementById('btn-validate-rti');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validating...';
+    try {
+        const resp = await fetch('/api/rti/validate');
+        const report = await resp.json();
+        if (!resp.ok) {
+            alert(report.error || 'Validation failed');
+        } else {
+            showValidationBanner(report);
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-circle"></i> Validate';
+}
+
+function showValidationBanner(report) {
+    const banner = document.getElementById('rti-validation-banner');
+    const header = document.getElementById('rti-validation-header');
+    const body = document.getElementById('rti-validation-body');
+
+    const statusColors = { pass: '#4caf50', warn: '#ff9800', fail: '#f44336' };
+    const statusLabels = { pass: 'PASS', warn: 'WARNING', fail: 'FAIL' };
+    const color = statusColors[report.status] || '#999';
+    header.innerHTML = `<span style="color:${color};font-weight:800;font-size:16px;">${statusLabels[report.status] || report.status}</span>`;
+
+    let html = '<div class="rti-validation-types">';
+    for (const [type, tr] of Object.entries(report.types || {})) {
+        html += `<div class="rti-val-type"><strong>${type}</strong>: ${tr.primary} primary, ${tr.secondary} secondary, ${tr.mirrored} mirrored`;
+        if (tr.missing_in_secondary && tr.missing_in_secondary.length) {
+            html += ` — <span style="color:#c62828">Missing: ${tr.missing_in_secondary.join(', ')}</span>`;
+        }
+        html += '</div>';
+    }
+    html += '</div>';
+
+    if (report.connection_issues && report.connection_issues.length) {
+        html += '<div class="rti-val-conn"><strong>Connection Issues:</strong><ul>';
+        for (const ci of report.connection_issues) {
+            html += `<li>${ci.type} '${ci.name}' (${ci.part}): ${ci.message}</li>`;
+        }
+        html += '</ul></div>';
+    }
+
+    if (report.issues && report.issues.length) {
+        html += '<div class="rti-val-issues"><strong>Notes:</strong><ul>';
+        for (const issue of report.issues) {
+            html += `<li>[${issue.severity.toUpperCase()}] ${issue.type}: ${issue.message}</li>`;
+        }
+        html += '</ul></div>';
+    }
+
+    body.innerHTML = html;
+    banner.style.display = '';
+}
+
+/* ---- Create Demo Data ---- */
+async function createDummyRti() {
+    if (!confirm('Create demo RTI artifacts (RTI_Demo_Eventhouse, RTI_Demo_KQLDatabase, RTI_Demo_KQLQueryset, RTI_Demo_Eventstream) in the PRIMARY workspace?')) return;
+    const btn = document.getElementById('btn-create-dummy');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+    try {
+        const resp = await fetch('/api/rti/create-dummy', { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) {
+            alert(data.error || 'Failed to create demo data');
+        } else {
+            let msg = 'Demo RTI Artifacts:\n';
+            msg += `  Created: ${(data.created || []).join(', ') || 'none'}\n`;
+            msg += `  Skipped (exist): ${(data.skipped || []).join(', ') || 'none'}\n`;
+            msg += `  Failed: ${(data.failed || []).map(f=>f.name||f).join(', ') || 'none'}`;
+            alert(msg);
+            loadRtiData();
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-flask"></i> Create Demo Data';
+}
+
+/* ---- KQL Data Management ---- */
+async function loadKqlData() {
+    const btn = document.getElementById('btn-refresh-kql');
+    const content = document.getElementById('kql-data-content');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+
+    try {
+        const resp = await fetch('/api/rti/kql-tables');
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Failed'); }
+        const data = await resp.json();
+
+        if (!data.databases || data.databases.length === 0) {
+            content.innerHTML = '<p style="color:#999;">No paired KQL Databases found. Sync RTI artifacts first.</p>';
+            return;
+        }
+
+        let html = '';
+        for (const db of data.databases) {
+            html += `<div class="kql-db-block">`;
+            html += `<div class="kql-db-header"><i class="fas fa-database"></i> <strong>${escapeHtml(db.name)}</strong></div>`;
+
+            if (!db.tables || db.tables.length === 0) {
+                html += '<p style="color:#999;font-size:13px;margin:8px 0;">No tables found. Ingest sample data first.</p>';
+            } else {
+                html += '<table class="rti-table"><thead><tr>';
+                html += '<th>Table</th><th>Primary</th><th>Rows (Primary)</th><th>Secondary</th><th>Rows (Secondary)</th><th>Status</th>';
+                html += '</tr></thead><tbody>';
+                for (const t of db.tables) {
+                    const match = t.in_primary && t.in_secondary;
+                    const dataMatch = match && t.primary_rows > 0 && t.secondary_rows >= t.primary_rows;
+                    const statusClass = dataMatch ? 'mirrored' : (match && t.secondary_rows > 0 ? 'partial' : 'missing');
+                    const statusText = dataMatch ? 'Data Synced' : (match && t.secondary_rows > 0 ? 'Partial' : (match ? 'Schema Only' : 'Missing'));
+                    html += `<tr>`;
+                    html += `<td><strong>${escapeHtml(t.name)}</strong></td>`;
+                    html += `<td><span class="${t.in_primary ? 'present-badge' : 'absent-badge'}">${t.in_primary ? 'Yes' : 'No'}</span></td>`;
+                    html += `<td>${t.primary_rows}</td>`;
+                    html += `<td><span class="${t.in_secondary ? 'present-badge' : 'absent-badge'}">${t.in_secondary ? 'Yes' : 'No'}</span></td>`;
+                    html += `<td>${t.secondary_rows}</td>`;
+                    html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+                    html += `</tr>`;
+                }
+                html += '</tbody></table>';
+            }
+            html += '</div>';
+        }
+        content.innerHTML = html;
+    } catch (err) {
+        content.innerHTML = `<p style="color:#c62828;">Error: ${escapeHtml(err.message)}</p>`;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data View';
+}
+
+async function ingestSampleData() {
+    if (!confirm('Ingest 50 sensor readings + 30 system events into RTI_Demo_KQLDatabase in PRIMARY?')) return;
+    const btn = document.getElementById('btn-ingest-sample');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ingesting...';
+    try {
+        const resp = await fetch('/api/rti/ingest-sample-data', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({database: 'RTI_Demo_KQLDatabase'}),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            alert(data.error || 'Ingestion failed');
+        } else {
+            let msg = 'Sample Data Ingested:\n';
+            msg += `  Tables created: ${(data.tables_created || []).join(', ') || 'none'}\n`;
+            for (const d of (data.data_ingested || [])) {
+                msg += `  ${d.table}: ${d.rows} rows\n`;
+            }
+            if (data.errors && data.errors.length) {
+                msg += `  Errors: ${data.errors.join('; ')}`;
+            }
+            alert(msg);
+            loadKqlData();
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-flask"></i> Ingest Sample Data';
+}
+
+async function replicateKqlData() {
+    const dbSelect = document.getElementById('replicate-db-select');
+    const modeSelect = document.getElementById('replicate-mode-select');
+    const dbName = dbSelect.value;
+    const mode = modeSelect.value;
+    const label = dbName === 'ALL' ? 'ALL KQL Databases' : dbName;
+    const modeLabel = mode === 'incremental' ? 'INCREMENTAL (new rows only)' : 'FULL RELOAD (clear + copy all)';
+    if (!confirm(`Replicate KQL data from PRIMARY to SECONDARY (${label})?\nMode: ${modeLabel}`)) return;
+    const btn = document.getElementById('btn-replicate-data');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Replicating...';
+    try {
+        const resp = await fetch('/api/rti/replicate-kql-data', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({database: dbName, mode: mode}),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            alert(data.error || 'Replication failed');
+        } else if (data.databases_synced) {
+            // Multi-DB response
+            let msg = `KQL Data Replication Complete [${(data.mode||mode).toUpperCase()}] (${data.databases_synced.length} databases):\n`;
+            msg += `  Total rows copied: ${data.total_rows_copied}\n`;
+            for (const db of data.databases_synced) {
+                msg += `\n  ${db.database}:\n`;
+                for (const t of (db.tables_synced || [])) {
+                    const m = t.mode ? ` [${t.mode}]` : '';
+                    const w = t.watermark ? ` (watermark: ${t.watermark.substring(0,19)})` : '';
+                    msg += `    ${t.table}: ${t.rows} rows${m}${w}\n`;
+                }
+            }
+            if (data.databases_failed && data.databases_failed.length) {
+                msg += '\nFailed databases:\n';
+                for (const f of data.databases_failed) {
+                    msg += `  ${f.database}: ${f.error}\n`;
+                }
+            }
+            alert(msg);
+            loadKqlData();
+            loadWatermarks();
+        } else {
+            // Single-DB response (backward compat)
+            let msg = `KQL Data Replication Complete [${(data.mode||mode).toUpperCase()}] (${data.database || dbName}):\n`;
+            msg += `  Total rows copied: ${data.total_rows_copied}\n`;
+            for (const t of (data.tables_synced || [])) {
+                const m = t.mode ? ` [${t.mode}]` : '';
+                const w = t.watermark ? ` (watermark: ${t.watermark.substring(0,19)})` : '';
+                msg += `  ${t.table}: ${t.rows} rows${m}${w}\n`;
+            }
+            if (data.tables_failed && data.tables_failed.length) {
+                msg += 'Failed:\n';
+                for (const f of data.tables_failed) {
+                    msg += `  ${f.table}: ${f.error}\n`;
+                }
+            }
+            alert(msg);
+            loadKqlData();
+            loadWatermarks();
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-exchange-alt"></i> Replicate Data to Secondary';
+}
+
+// ── Watermarks ─────────────────────────────────────────────────────
+async function loadWatermarks() {
+    try {
+        const resp = await fetch('/api/rti/watermarks');
+        const data = await resp.json();
+        const container = document.getElementById('watermark-content');
+        const wm = data.watermarks || {};
+        const keys = Object.keys(wm);
+        if (keys.length === 0) {
+            container.innerHTML = '<em>No watermarks set — next incremental run will do a full initial load.</em>';
+            return;
+        }
+        let html = '<table style="width:100%;border-collapse:collapse;font-size:0.88em;">';
+        html += '<tr style="border-bottom:1px solid #37474f;"><th style="text-align:left;padding:3px 8px;color:#90caf9;">Table</th><th style="text-align:left;padding:3px 8px;color:#90caf9;">Last Synced Timestamp</th><th></th></tr>';
+        for (const key of keys.sort()) {
+            html += `<tr style="border-bottom:1px solid #263238;">`;
+            html += `<td style="padding:3px 8px;">${key}</td>`;
+            html += `<td style="padding:3px 8px;color:#a5d6a7;">${wm[key].substring(0,19)}</td>`;
+            html += `<td style="padding:3px 4px;"><button onclick="resetSingleWatermark('${key}')" style="background:none;border:1px solid #ef5350;color:#ef5350;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:0.85em;" title="Reset this watermark"><i class="fas fa-undo"></i></button></td>`;
+            html += '</tr>';
+        }
+        html += '</table>';
+        container.innerHTML = html;
+    } catch (err) {
+        document.getElementById('watermark-content').innerHTML = '<em>Could not load watermarks.</em>';
+    }
+}
+
+async function resetWatermarks() {
+    if (!confirm('Reset ALL watermarks? Next replication will do a full initial load for all tables.')) return;
+    try {
+        const resp = await fetch('/api/rti/watermarks', {method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})});
+        const data = await resp.json();
+        alert(data.message || 'Watermarks reset');
+        loadWatermarks();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function resetSingleWatermark(key) {
+    if (!confirm(`Reset watermark for ${key}? Next replication will do a full reload for this table.`)) return;
+    try {
+        const resp = await fetch('/api/rti/watermarks', {method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key: key})});
+        const data = await resp.json();
+        alert(data.message || 'Watermark reset');
+        loadWatermarks();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+// ── Scheduled Replication ──────────────────────────────────────────
+async function loadRtiSchedule() {
+    try {
+        const resp = await fetch('/api/rti/schedule');
+        const data = await resp.json();
+        const badge = document.getElementById('schedule-badge');
+        const btn = document.getElementById('btn-schedule-toggle');
+        const sel = document.getElementById('schedule-interval');
+        const statusDiv = document.getElementById('schedule-status-text');
+        const statusDetail = document.getElementById('schedule-status-detail');
+
+        sel.value = String(data.interval_minutes || 60);
+
+        if (data.enabled) {
+            badge.textContent = 'ACTIVE';
+            badge.classList.add('active');
+            btn.innerHTML = '<i class="fas fa-stop"></i> Disable';
+            btn.classList.add('active');
+        } else {
+            badge.textContent = 'OFF';
+            badge.classList.remove('active');
+            btn.innerHTML = '<i class="fas fa-play"></i> Enable';
+            btn.classList.remove('active');
+        }
+
+        if (data.last_run || data.last_status) {
+            statusDiv.style.display = 'block';
+            let info = '';
+            if (data.last_status) info += data.last_status;
+            if (data.last_run) info += ` &middot; Last run: ${new Date(data.last_run).toLocaleString()}`;
+            if (data.run_count) info += ` &middot; Total runs: ${data.run_count}`;
+            if (data.total_rows_copied) info += ` &middot; Total rows copied: ${data.total_rows_copied.toLocaleString()}`;
+            statusDetail.innerHTML = info;
+        } else {
+            statusDiv.style.display = 'none';
+        }
+    } catch (err) {
+        console.error('Failed to load RTI schedule:', err);
+    }
+}
+
+async function toggleRtiSchedule() {
+    const btn = document.getElementById('btn-schedule-toggle');
+    const badge = document.getElementById('schedule-badge');
+    const isActive = badge.classList.contains('active');
+    const interval = parseInt(document.getElementById('schedule-interval').value, 10);
+
+    const action = isActive ? 'disable' : 'enable';
+    const intervalLabel = formatInterval(interval);
+    if (!isActive && !confirm(`Enable scheduled KQL data replication every ${intervalLabel}?`)) return;
+
+    btn.disabled = true;
+    try {
+        const resp = await fetch('/api/rti/schedule', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled: !isActive, interval_minutes: interval}),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            loadRtiSchedule();
+        } else {
+            alert(data.error || 'Failed to update schedule');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+    btn.disabled = false;
+}
+
+function formatInterval(min) {
+    if (min < 60) return min + ' minutes';
+    if (min === 60) return '1 hour';
+    if (min < 1440) return (min / 60) + ' hours';
+    return '24 hours';
+}
+
+// Load schedule state on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadRtiSchedule();
+    populateDbDropdown();
+    loadWatermarks();
+    // Refresh schedule status every 30 seconds
+    setInterval(loadRtiSchedule, 30000);
+});
+
+// ── DB Dropdown ────────────────────────────────────────────────────
+async function populateDbDropdown() {
+    try {
+        // Use lightweight status endpoint instead of slow kql-databases
+        const resp = await fetch('/api/rti/status');
+        const data = await resp.json();
+        const sel = document.getElementById('replicate-db-select');
+        const kqlDbs = (data.types && data.types.KQLDatabase && data.types.KQLDatabase.primary) || [];
+        for (const db of kqlDbs) {
+            const name = db.displayName || db.name || '';
+            if (!name) continue;
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            sel.appendChild(opt);
+        }
+    } catch (err) {
+        console.error('Failed to populate DB dropdown:', err);
+    }
+}
+
+// ── Connection Strings Audit & Fix ─────────────────────────────────
+async function auditConnections() {
+    const btn = document.getElementById('btn-audit-conn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+    const container = document.getElementById('conn-audit-content');
+    try {
+        const resp = await fetch('/api/rti/connections');
+        const data = await resp.json();
+        if (!resp.ok) {
+            container.innerHTML = `<p style="color:#c62828;">Error: ${data.error}</p>`;
+        } else {
+            let html = '';
+            const staleCount = data.stale_references || 0;
+            const cleanCount = data.clean || 0;
+            if (staleCount === 0) {
+                html += `<div class="conn-audit-banner conn-clean">
+                    <i class="fas fa-check-circle"></i>
+                    All ${cleanCount} artifact(s) have correct connection references.
+                </div>`;
+            } else {
+                html += `<div class="conn-audit-banner conn-stale">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    ${staleCount} stale reference(s) found across ${data.artifacts.filter(a => a.stale_refs.length > 0).length} artifact(s).
+                    Use "Fix Stale References" to correct them.
+                </div>`;
+            }
+            html += '<div class="conn-audit-list">';
+            for (const art of (data.artifacts || [])) {
+                const icon = art.stale_refs.length > 0 ? 'exclamation-triangle' : 'check-circle';
+                const cls = art.stale_refs.length > 0 ? 'conn-item-stale' : 'conn-item-clean';
+                html += `<div class="conn-audit-item ${cls}">
+                    <span class="conn-art-header">
+                        <i class="fas fa-${icon}"></i>
+                        <strong>${art.name}</strong>
+                        <span class="type-badge type-${art.type.toLowerCase()}">${art.type}</span>
+                    </span>`;
+                if (art.stale_refs.length > 0) {
+                    html += '<ul class="conn-issues-list">';
+                    for (const ref of art.stale_refs) {
+                        html += `<li><code>${ref.part}</code>: ${ref.issue}</li>`;
+                    }
+                    html += '</ul>';
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+
+            // Show URI mapping info
+            if (data.uri_map && Object.keys(data.uri_map).length > 0) {
+                html += '<details class="conn-uri-map"><summary>URI Mapping (' + Object.keys(data.uri_map).length + ' entries)</summary><ul>';
+                for (const [k, v] of Object.entries(data.uri_map)) {
+                    html += `<li><code>${k}</code> → <code>${v}</code></li>`;
+                }
+                html += '</ul></details>';
+            }
+
+            container.innerHTML = html;
+        }
+    } catch (err) {
+        container.innerHTML = `<p style="color:#c62828;">Error: ${err.message}</p>`;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-search"></i> Audit Connections';
+}
+
+async function fixConnections() {
+    if (!confirm('Fix stale connection references in secondary KQL Querysets and Eventstreams?\\nThis will rewrite definitions to point to the secondary workspace.')) return;
+    const btn = document.getElementById('btn-fix-conn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fixing...';
+    try {
+        const resp = await fetch('/api/rti/fix-connections', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            alert(data.error || 'Fix failed');
+        } else {
+            let msg = 'Connection Fix Results:\n';
+            if (data.fixed.length) msg += `  Fixed: ${data.fixed.map(f => f.name).join(', ')}\n`;
+            if (data.skipped.length) msg += `  Skipped: ${data.skipped.map(s => s.name + ' (' + s.reason + ')').join(', ')}\n`;
+            if (data.failed.length) msg += `  Failed: ${data.failed.map(f => f.name + ': ' + f.error).join(', ')}\n`;
+            alert(msg);
+            auditConnections(); // Re-audit to show updated state
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-wrench"></i> Fix Stale References';
+}
+</script>
+{% endblock %}

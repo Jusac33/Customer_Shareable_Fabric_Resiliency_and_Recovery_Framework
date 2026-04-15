@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Error - Fabric BCDR Dashboard{% endblock %}
+
+{% block content %}
+<section class="card" style="text-align: center; padding: 60px 20px;">
+    <div class="error-container">
+        <div class="error-icon">
+            <i class="fas fa-exclamation-circle"></i>
+        </div>
+        
+        <h1 class="error-title">{{ error_code or '404' }}</h1>
+        <p class="error-message">{{ error_message or 'Page Not Found' }}</p>
+        
+        <div class="error-details">
+            <p>{{ error_details or 'The page you are looking for could not be found.' }}</p>
+        </div>
+
+        <div class="error-actions">
+            <a href="/" class="btn btn-primary">
+                <i class="fas fa-home"></i> Return to Dashboard
+            </a>
+            <a href="javascript:history.back()" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Go Back
+            </a>
+        </div>
+
+        {% if error_code == '500' %}
+        <div class="error-support">
+            <p><strong>Need Help?</strong></p>
+            <p>An unexpected error occurred. Please contact support with the following information:</p>
+            <div class="error-id">
+                <strong>Error ID:</strong> <code>ERR-{{ error_timestamp }}</code>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<style>
+.error-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+.error-icon {
+    font-size: 80px;
+    color: #f44336;
+    margin-bottom: 20px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.error-title {
+    margin: 0 0 10px 0;
+    font-size: 48px;
+    font-weight: 700;
+    color: #333;
+}
+
+.error-message {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    color: #666;
+}
+
+.error-details {
+    background: #f9f9f9;
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    margin: 20px 0;
+}
+
+.error-details p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+}
+
+.error-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 30px 0;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: #2196F3;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1976D2;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.btn-secondary {
+    background: #f0f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.btn-secondary:hover {
+    background: #e0e0e0;
+    transform: translateY(-2px);
+}
+
+.error-support {
+    background: #fff3cd;
+    padding: 20px;
+    border-radius: 6px;
+    border-left: 4px solid #ffc107;
+    margin-top: 30px;
+}
+
+.error-support p {
+    margin: 10px 0;
+    color: #856404;
+    font-size: 14px;
+}
+
+.error-support p:first-child {
+    margin-top: 0;
+    font-weight: 600;
+}
+
+.error-id {
+    background: white;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.error-id code {
+    background: #f0f0f0;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    color: #d32f2f;
+}
+</style>
+{% endblock %}

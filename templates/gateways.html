@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Data Gateways - Microsoft Fabric BCDR{% endblock %}
+
+{% block page_title %}Data Gateways{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2 class="section-title">
+        <i class="fas fa-server"></i> ON-PREMISES DATA GATEWAYS
+    </h2>
+    <p class="section-description">Discover gateways and data sources used for on-prem to Fabric data movement</p>
+
+    <div class="gw-status-bar">
+        <span class="live-dot"></span> LIVE API
+        <span class="gw-total-badge" id="gw-total">—</span>
+    </div>
+
+    <div class="gw-grid" id="gw-grid">
+        <p style="color:#999; text-align:center; padding:30px;">Loading gateways...</p>
+    </div>
+</section>
+
+<style>
+    .gw-status-bar {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+        font-size: 12px; font-weight: 600; color: #2e7d32;
+    }
+    .live-dot {
+        width: 8px; height: 8px; border-radius: 50%; background: #4caf50;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .gw-total-badge {
+        padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
+        background: #e3f2fd; color: #1565c0; border: 1px solid #42a5f5;
+    }
+
+    .gw-grid {
+        display: grid; grid-template-columns: 1fr; gap: 18px;
+    }
+    .gw-card {
+        border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px 24px;
+        background: #fff; transition: box-shadow 0.2s;
+    }
+    .gw-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+    .gw-card-header {
+        display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    .gw-icon {
+        width: 36px; height: 36px; border-radius: 8px; display: flex;
+        align-items: center; justify-content: center; font-size: 16px;
+        background: #e8eaf6; color: #3949ab;
+    }
+    .gw-name { font-size: 17px; font-weight: 700; color: #333; }
+    .gw-type-badge {
+        padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+        margin-left: auto;
+    }
+    .gw-type-onpremises { background: #fff3e0; color: #e65100; border: 1px solid #ff9800; }
+    .gw-type-personal { background: #e8f5e9; color: #2e7d32; border: 1px solid #4caf50; }
+    .gw-type-vnet { background: #e3f2fd; color: #1565c0; border: 1px solid #42a5f5; }
+    .gw-type-default { background: #f5f5f5; color: #616161; border: 1px solid #bdbdbd; }
+
+    .gw-meta {
+        display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 14px;
+        font-size: 12px; color: #666;
+    }
+    .gw-meta-item { display: flex; align-items: center; gap: 5px; }
+    .gw-meta-item i { color: #999; font-size: 11px; }
+    .gw-meta-label { color: #999; }
+    .gw-meta-value { color: #333; font-weight: 600; }
+
+    .gw-ds-header {
+        font-size: 13px; font-weight: 700; color: #555; margin-bottom: 8px;
+        display: flex; align-items: center; gap: 6px;
+    }
+    .gw-ds-count {
+        padding: 1px 7px; border-radius: 8px; font-size: 10px;
+        background: #e0e0e0; color: #333;
+    }
+
+    .gw-ds-table {
+        width: 100%; border-collapse: collapse; font-size: 12px;
+    }
+    .gw-ds-table th {
+        text-align: left; padding: 8px 10px; background: #f5f5f5;
+        color: #666; font-weight: 600; border-bottom: 1px solid #e0e0e0;
+    }
+    .gw-ds-table td {
+        padding: 8px 10px; border-bottom: 1px solid #f0f0f0; color: #333;
+    }
+    .gw-ds-table tr:last-child td { border-bottom: none; }
+    .gw-ds-type-badge {
+        padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;
+        background: #e8eaf6; color: #3949ab;
+    }
+    .gw-ds-cred {
+        padding: 2px 6px; border-radius: 4px; font-size: 10px;
+        background: #f3e5f5; color: #7b1fa2;
+    }
+    .gw-no-ds {
+        font-size: 12px; color: #999; font-style: italic; padding: 8px 0;
+    }
+    .gw-empty {
+        text-align: center; color: #999; padding: 40px 20px;
+    }
+    .gw-empty i { font-size: 40px; color: #ddd; margin-bottom: 12px; display: block; }
+
+    .gw-conn-detail { font-family: monospace; font-size: 11px; color: #555; }
+
+    .gw-bcdr-note {
+        margin-top: 20px; padding: 14px 18px; border-radius: 8px;
+        background: #fff8e1; border: 1px solid #ffcc02;
+        font-size: 12px; color: #6d4c00; line-height: 1.6;
+    }
+    .gw-bcdr-note i { color: #f9a825; margin-right: 4px; }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', loadGateways);
+
+    async function loadGateways() {
+        const grid = document.getElementById('gw-grid');
+        const totalBadge = document.getElementById('gw-total');
+        try {
+            const resp = await fetch('/api/gateways');
+            const d = await resp.json();
+            if (d.error) {
+                grid.innerHTML = `<p style="color:#c62828;">Error: ${d.error}</p>`;
+                totalBadge.textContent = 'ERROR';
+                return;
+            }
+
+            const gateways = d.gateways || [];
+            totalBadge.textContent = `${gateways.length} gateway${gateways.length !== 1 ? 's' : ''}`;
+
+            if (gateways.length === 0) {
+                grid.innerHTML = `
+                    <div class="gw-empty">
+                        <i class="fas fa-server"></i>
+                        <p>No on-premises data gateways found.</p>
+                        <p style="font-size:11px; margin-top:6px;">
+                            Gateways must be installed and registered to appear here.
+                        </p>
+                    </div>`;
+                return;
+            }
+
+            grid.innerHTML = gateways.map(gw => renderGatewayCard(gw)).join('') + `
+                <div class="gw-bcdr-note">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>BCDR Note:</strong> During failover, artifacts in the secondary workspace
+                    that depend on an on-prem gateway data source require the <strong>same gateway</strong>
+                    to be accessible from the DR region, or a <strong>secondary gateway</strong> configured
+                    with equivalent data sources. Gateway and data source IDs are embedded in Pipeline,
+                    Dataflow, and SemanticModel connection references.
+                </div>`;
+        } catch (err) {
+            grid.innerHTML = `<p style="color:#c62828;">Failed to load gateways: ${err.message}</p>`;
+            totalBadge.textContent = 'ERROR';
+        }
+    }
+
+    function renderGatewayCard(gw) {
+        const typeClass = gw.type === 'Resource'
+            ? 'gw-type-onpremises'
+            : gw.type === 'Personal'
+                ? 'gw-type-personal'
+                : gw.type === 'VirtualNetwork'
+                    ? 'gw-type-vnet'
+                    : 'gw-type-default';
+        const typeLabel = gw.type === 'Resource' ? 'On-Premises'
+            : gw.type === 'Personal' ? 'Personal'
+            : gw.type === 'VirtualNetwork' ? 'VNet'
+            : gw.type || 'Unknown';
+
+        let metaItems = '';
+        if (gw.machineName) metaItems += `<div class="gw-meta-item"><i class="fas fa-desktop"></i><span class="gw-meta-label">Machine:</span><span class="gw-meta-value">${esc(gw.machineName)}</span></div>`;
+        if (gw.version) metaItems += `<div class="gw-meta-item"><i class="fas fa-code-branch"></i><span class="gw-meta-label">Version:</span><span class="gw-meta-value">${esc(gw.version)}</span></div>`;
+        if (gw.clusterStatus) metaItems += `<div class="gw-meta-item"><i class="fas fa-circle ${gw.clusterStatus === 'Running' ? 'text-green' : 'text-orange'}"></i><span class="gw-meta-label">Status:</span><span class="gw-meta-value">${esc(gw.clusterStatus)}</span></div>`;
+        if (gw.contactInfo) metaItems += `<div class="gw-meta-item"><i class="fas fa-envelope"></i><span class="gw-meta-label">Contact:</span><span class="gw-meta-value">${esc(gw.contactInfo)}</span></div>`;
+        metaItems += `<div class="gw-meta-item"><i class="fas fa-key"></i><span class="gw-meta-label">ID:</span><span class="gw-meta-value gw-conn-detail">${esc(gw.id)}</span></div>`;
+
+        let dsHtml = '';
+        if (gw.datasources && gw.datasources.length > 0) {
+            const rows = gw.datasources.map(ds => {
+                let connStr = '';
+                if (ds.connectionDetails) {
+                    if (typeof ds.connectionDetails === 'object') {
+                        const parts = [];
+                        if (ds.connectionDetails.server) parts.push(ds.connectionDetails.server);
+                        if (ds.connectionDetails.database) parts.push(ds.connectionDetails.database);
+                        if (ds.connectionDetails.url) parts.push(ds.connectionDetails.url);
+                        if (ds.connectionDetails.path) parts.push(ds.connectionDetails.path);
+                        connStr = parts.join(' / ') || JSON.stringify(ds.connectionDetails);
+                    } else {
+                        connStr = String(ds.connectionDetails);
+                    }
+                }
+                return `<tr>
+                    <td>${ds.datasourceName ? esc(ds.datasourceName) : '<span style="color:#999">—</span>'}</td>
+                    <td><span class="gw-ds-type-badge">${esc(ds.datasourceType)}</span></td>
+                    <td class="gw-conn-detail">${connStr ? esc(connStr) : '—'}</td>
+                    <td><span class="gw-ds-cred">${esc(ds.credentialType || '—')}</span></td>
+                    <td class="gw-conn-detail" style="font-size:10px;">${esc(ds.id)}</td>
+                </tr>`;
+            }).join('');
+
+            dsHtml = `
+                <div class="gw-ds-header">
+                    <i class="fas fa-database"></i> Data Sources
+                    <span class="gw-ds-count">${gw.datasources.length}</span>
+                </div>
+                <table class="gw-ds-table">
+                    <thead>
+                        <tr><th>Name</th><th>Type</th><th>Connection</th><th>Credential</th><th>ID</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        } else {
+            dsHtml = '<p class="gw-no-ds">No data sources configured on this gateway.</p>';
+        }
+
+        return `
+            <div class="gw-card">
+                <div class="gw-card-header">
+                    <div class="gw-icon"><i class="fas fa-server"></i></div>
+                    <span class="gw-name">${esc(gw.name)}</span>
+                    <span class="gw-type-badge ${typeClass}">${typeLabel}</span>
+                </div>
+                <div class="gw-meta">${metaItems}</div>
+                ${dsHtml}
+            </div>`;
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        const el = document.createElement('span');
+        el.textContent = String(s);
+        return el.innerHTML;
+    }
+</script>
+{% endblock %}

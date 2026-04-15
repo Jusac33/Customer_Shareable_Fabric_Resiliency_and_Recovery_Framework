@@ -1,0 +1,659 @@
+{% extends "base.html" %}
+
+{% block title %}Business Continuity & Resilience Framework{% endblock %}
+
+{% block page_title %}Business Continuity & Resilience Framework{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bcdr-header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    .bcdr-header .ws-icon {
+        width: 44px; height: 44px;
+        background: #e8eaf6;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; color: #3f51b5;
+    }
+    .bcdr-header .ws-name {
+        font-size: 22px; font-weight: 700; color: #1a1a2e;
+    }
+    .bcdr-header .badges {
+        display: flex; gap: 10px; align-items: center; margin-left: auto;
+    }
+    .badge-bcdr {
+        padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 700;
+        border: 2px solid;
+    }
+    .badge-bcdr.enabled { border-color: #4caf50; color: #2e7d32; background: #e8f5e9; }
+    .badge-bcdr.partial { border-color: #ff9800; color: #e65100; background: #fff3e0; }
+    .badge-bcdr.disabled { border-color: #f44336; color: #c62828; background: #ffebee; }
+    .btn-setup {
+        padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
+        background: #f5f5f5; color: #333; border: 1px solid #ddd; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-setup:hover { background: #e0e0e0; }
+    .btn-refresh {
+        width: 36px; height: 36px; border-radius: 50%; border: 1px solid #ddd;
+        background: #fff; cursor: pointer; display: flex; align-items: center;
+        justify-content: center; font-size: 14px; color: #666;
+    }
+    .btn-refresh:hover { background: #f0f0f0; }
+    .btn-refresh.spinning i { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .secondary-info {
+        background: #fff3e0; border-left: 4px solid #ff9800; padding: 12px 18px;
+        border-radius: 4px; margin-bottom: 24px; display: flex; align-items: center;
+        gap: 10px; font-size: 13px; color: #e65100;
+    }
+    .secondary-info.configured { background: #e8f5e9; border-color: #4caf50; color: #2e7d32; }
+
+    .section-label {
+        font-size: 14px; font-weight: 700; color: #555; text-transform: uppercase;
+        letter-spacing: 1px; margin: 28px 0 16px; padding-bottom: 8px;
+        border-bottom: 2px solid #e0e0e0;
+    }
+    .section-label:first-of-type { margin-top: 0; }
+
+    .type-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+        margin-bottom: 8px;
+    }
+    .type-card {
+        background: #fff;
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+        padding: 20px;
+        position: relative;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    .type-card:hover { box-shadow: 0 4px 15px rgba(0,0,0,0.08); transform: translateY(-2px); }
+    .type-card.synced { border-color: #4caf50; }
+    .type-card.partial { border-color: #ff9800; }
+    .type-card.unsynced { border-color: #f44336; }
+    .type-card.unsupported { border-color: #90a4ae; opacity: 0.7; }
+
+    .type-card-header {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    .type-icon {
+        width: 42px; height: 42px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px;
+    }
+    .type-icon.lakehouse { background: #e3f2fd; color: #1565c0; }
+    .type-icon.warehouse { background: #e8eaf6; color: #283593; }
+    .type-icon.notebook { background: #fce4ec; color: #c62828; }
+    .type-icon.pipeline { background: #e8f5e9; color: #2e7d32; }
+    .type-icon.report { background: #fff8e1; color: #f57f17; }
+    .type-icon.semanticmodel { background: #f3e5f5; color: #6a1b9a; }
+    .type-icon.sqlendpoint { background: #e0f2f1; color: #00695c; }
+    .type-icon.default { background: #f5f5f5; color: #616161; }
+
+    .btn-sync {
+        padding: 5px 14px; border-radius: 14px; font-size: 11px; font-weight: 700;
+        border: 1.5px solid #c62828; color: #c62828; background: transparent;
+        cursor: pointer; transition: all 0.2s; white-space: nowrap;
+        position: relative;
+    }
+    .btn-sync:hover { background: #c62828; color: #fff; }
+    .btn-sync.synced { border-color: #4caf50; color: #4caf50; }
+    .btn-sync.synced:hover { background: #4caf50; color: #fff; }
+    .btn-sync:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sync.running { border-color: #1976d2; color: #1976d2; }
+
+    .sync-dropdown-wrap { position: relative; display: inline-block; }
+    .sync-dropdown {
+        display: none; position: absolute; top: 100%; right: 0; z-index: 100;
+        min-width: 180px; margin-top: 4px; background: #fff;
+        border: 1px solid #e0e0e0; border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.12); overflow: hidden;
+    }
+    .sync-dropdown.open { display: block; }
+    .sync-dropdown-item {
+        padding: 9px 14px; font-size: 12px; color: #333; cursor: pointer;
+        display: flex; align-items: center; gap: 8px; transition: background 0.15s;
+    }
+    .sync-dropdown-item:hover { background: #f5f5f5; }
+    .sync-dropdown-item i { width: 16px; text-align: center; color: #666; font-size: 11px; }
+    .sync-dropdown-item .dd-label { font-weight: 600; }
+    .sync-dropdown-item .dd-desc { font-size: 10px; color: #999; margin-top: 1px; }
+
+    .type-percentage {
+        font-size: 32px; font-weight: 800; color: #1a1a2e; line-height: 1;
+    }
+    .type-percentage.green { color: #2e7d32; }
+    .type-name {
+        font-size: 15px; font-weight: 600; color: #333; margin-top: 4px;
+    }
+    .type-count {
+        font-size: 12px; color: #999; margin-top: 2px;
+    }
+
+    /* Item detail modal */
+    .modal-overlay {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content {
+        background: #fff; border-radius: 12px; width: 600px; max-width: 90vw;
+        max-height: 80vh; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal-header {
+        padding: 20px 24px; border-bottom: 1px solid #e0e0e0;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .modal-header h3 { font-size: 18px; color: #1a1a2e; }
+    .modal-close {
+        width: 32px; height: 32px; border-radius: 50%; border: none;
+        background: #f5f5f5; cursor: pointer; font-size: 16px; color: #666;
+    }
+    .modal-close:hover { background: #e0e0e0; }
+    .modal-body {
+        padding: 20px 24px; overflow-y: auto; max-height: 60vh;
+    }
+    .item-row {
+        display: flex; align-items: center; padding: 10px 0;
+        border-bottom: 1px solid #f0f0f0; gap: 12px;
+    }
+    .item-row:last-child { border-bottom: none; }
+    .item-name { flex: 1; font-size: 14px; font-weight: 500; color: #333; }
+    .item-status {
+        font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;
+    }
+    .item-status.mirrored { background: #e8f5e9; color: #2e7d32; }
+    .item-status.missing { background: #ffebee; color: #c62828; }
+    .btn-replicate-item {
+        padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600;
+        border: 1px solid #1976d2; color: #1976d2; background: transparent;
+        cursor: pointer;
+    }
+    .btn-replicate-item:hover { background: #1976d2; color: #fff; }
+
+    .modal-footer {
+        padding: 14px 24px; border-top: 1px solid #e0e0e0;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .btn-replicate-all {
+        padding: 10px 24px; border-radius: 6px; font-size: 13px; font-weight: 700;
+        border: none; background: #c62828; color: #fff; cursor: pointer;
+    }
+    .btn-replicate-all:hover { background: #b71c1c; }
+    .btn-replicate-all:disabled { opacity: 0.5; cursor: not-allowed; }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- BCDR Header -->
+<div class="bcdr-header">
+    <div class="ws-icon"><i class="fas fa-sitemap"></i></div>
+    <div class="ws-name" id="ws-name">Loading...</div>
+    <span class="pair-label-tag" id="pair-label-tag" style="font-size:11px;background:#e3f2fd;color:#1565C0;padding:2px 10px;border-radius:10px;font-weight:600;display:none;"></span>
+    <div class="badges">
+        <span class="badge-bcdr disabled" id="bcdr-badge">BCDR · 0%</span>
+        <button class="btn-setup" onclick="window.location='/setup'">
+            <i class="fas fa-cog"></i> Configure
+        </button>
+        <button class="btn-refresh" onclick="refreshBCDR()" id="btn-refresh">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Secondary workspace info bar -->
+<div class="secondary-info" id="secondary-info">
+    <i class="fas fa-info-circle"></i>
+    <span id="secondary-info-text">Secondary workspace not configured. Select one in Configure to enable replication.</span>
+</div>
+
+<!-- Data Storage section -->
+<div class="section-label" id="section-data-storage" style="display:none;">Data Storage</div>
+<div class="type-cards-grid" id="grid-data-storage"></div>
+
+<!-- Components section -->
+<div class="section-label" id="section-components" style="display:none;">Components</div>
+<div class="type-cards-grid" id="grid-components"></div>
+
+<!-- Item Detail Modal -->
+<div class="modal-overlay" id="item-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modal-title">Items</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-footer">
+            <span id="modal-summary" style="font-size:13px;color:#666;"></span>
+            <button class="btn-replicate-all" id="btn-replicate-all" onclick="replicateAllInModal()">
+                <i class="fas fa-copy"></i> Replicate All Missing
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let bcdrData = null;
+    let currentModalType = null;
+
+    const TYPE_ICONS = {
+        'Lakehouse': { icon: 'fas fa-water', cls: 'lakehouse' },
+        'Warehouse': { icon: 'fas fa-building', cls: 'warehouse' },
+        'SQLEndpoint': { icon: 'fas fa-database', cls: 'sqlendpoint' },
+        'Notebook': { icon: 'fas fa-code', cls: 'notebook' },
+        'Pipeline': { icon: 'fas fa-random', cls: 'pipeline' },
+        'DataPipeline': { icon: 'fas fa-random', cls: 'pipeline' },
+        'Report': { icon: 'fas fa-chart-bar', cls: 'report' },
+        'SemanticModel': { icon: 'fas fa-project-diagram', cls: 'semanticmodel' },
+        'CopyJob': { icon: 'fas fa-clone', cls: 'default' },
+        'GraphQLApi': { icon: 'fas fa-cogs', cls: 'default' },
+        'VariableLibrary': { icon: 'fas fa-brackets-curly', cls: 'default' },
+        'KQLDatabase': { icon: 'fas fa-database', cls: 'sqlendpoint' },
+        'Eventhouse': { icon: 'fas fa-broadcast-tower', cls: 'default' },
+        'SparkJobDefinition': { icon: 'fas fa-bolt', cls: 'default' },
+        'Environment': { icon: 'fas fa-leaf', cls: 'default' },
+        'MLModel': { icon: 'fas fa-brain', cls: 'default' },
+        'MLExperiment': { icon: 'fas fa-flask', cls: 'default' },
+    };
+
+    function getTypeIcon(type) {
+        return TYPE_ICONS[type] || { icon: 'fas fa-cube', cls: 'default' };
+    }
+
+    document.addEventListener('DOMContentLoaded', loadBCDR);
+
+    async function loadBCDR() {
+        try {
+            const resp = await fetch('/api/bcdr/status');
+            bcdrData = await resp.json();
+            if (bcdrData.error) { console.error(bcdrData.error); return; }
+            renderBCDR();
+            // Show active pair label
+            try {
+                const pr = await fetch('/api/workspace-pairs');
+                const pd = await pr.json();
+                const active = (pd.pairs || []).find(p => p.id === pd.active_pair);
+                if (active && (pd.pairs || []).length > 1) {
+                    const tag = document.getElementById('pair-label-tag');
+                    tag.textContent = active.label || active.primary_name;
+                    tag.style.display = '';
+                }
+            } catch (_) {}
+        } catch (e) { console.error(e); }
+    }
+
+    function renderBCDR() {
+        const d = bcdrData;
+        // Header
+        document.getElementById('ws-name').textContent = d.workspace_name;
+        const badge = document.getElementById('bcdr-badge');
+        badge.textContent = `BCDR Enabled · ${d.overall_percentage}%`;
+        badge.className = 'badge-bcdr ' + (d.overall_percentage === 100 ? 'enabled' : d.overall_percentage > 0 ? 'partial' : 'disabled');
+
+        // Secondary info
+        const secInfo = document.getElementById('secondary-info');
+        if (d.has_secondary) {
+            secInfo.className = 'secondary-info configured';
+            document.getElementById('secondary-info-text').textContent =
+                `DR Target: ${d.secondary_name} — ${d.total_mirrored}/${d.total_primary} artifacts mirrored (${d.overall_percentage}%)`;
+        } else {
+            secInfo.className = 'secondary-info';
+            document.getElementById('secondary-info-text').textContent =
+                'Secondary workspace not configured. Click Configure to select a DR target workspace.';
+        }
+
+        // Separate cards into categories
+        const dataStorage = d.type_cards.filter(c => c.category === 'data_storage');
+        const components = d.type_cards.filter(c => c.category === 'components');
+
+        // Capacity health banner
+        let capBanner = document.getElementById('capacity-banner');
+        if (!capBanner) {
+            capBanner = document.createElement('div');
+            capBanner.id = 'capacity-banner';
+            const secInfo = document.getElementById('secondary-info');
+            secInfo.parentNode.insertBefore(capBanner, secInfo.nextSibling);
+        }
+        const cs = d.capacity_status || {};
+        const issues = [];
+        if (cs.primary === 'capacity_inactive') issues.push('Primary capacity is NOT ACTIVE');
+        if (cs.secondary === 'capacity_inactive') issues.push('Secondary capacity is NOT ACTIVE');
+        if (issues.length > 0) {
+            capBanner.innerHTML = `<div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:10px 16px;margin:8px 0;color:#e65100;">
+                <i class="fas fa-exclamation-triangle"></i> <strong>Capacity Health Issue:</strong> ${issues.join(' · ')}
+                — Replication, table sync, and SemanticModel export will fail until the capacity is resumed.
+            </div>`;
+            capBanner.style.display = '';
+        } else {
+            capBanner.style.display = 'none';
+        }
+
+        renderTypeGrid('grid-data-storage', 'section-data-storage', dataStorage);
+        renderTypeGrid('grid-components', 'section-components', components);
+        updateSyncBanner();
+    }
+
+    function renderTypeGrid(gridId, sectionId, cards) {
+        const grid = document.getElementById(gridId);
+        const section = document.getElementById(sectionId);
+        if (cards.length === 0) {
+            section.style.display = 'none';
+            grid.innerHTML = '';
+            return;
+        }
+        section.style.display = 'block';
+        grid.innerHTML = cards.map(card => {
+            const icon = getTypeIcon(card.type);
+            const stateClass = !card.supported ? 'unsupported' :
+                card.percentage === 100 ? 'synced' :
+                card.percentage > 0 ? 'partial' : 'unsynced';
+            const btnClass = card.percentage === 100 ? 'synced' : '';
+            const pctClass = card.percentage === 100 ? 'green' : '';
+            const countText = !card.supported ? 'Not supported' :
+                `${card.mirrored_count}/${card.primary_count} mirrored`;
+
+            return `
+                <div class="type-card ${stateClass}" onclick="openTypeDetail('${card.type}')">
+                    <div class="type-card-header">
+                        <div class="type-icon ${icon.cls}"><i class="${icon.icon}"></i></div>
+                        ${card.supported && bcdrData.has_secondary ? `
+                            <div class="sync-dropdown-wrap">
+                                <button class="btn-sync ${btnClass}" onclick="event.stopPropagation(); toggleSyncMenu(this)">
+                                    Sync <i class="fas fa-caret-down" style="margin-left:3px;font-size:10px;"></i>
+                                </button>
+                                <div class="sync-dropdown" data-type="${card.type}">
+                                    <div class="sync-dropdown-item" onclick="event.stopPropagation(); runSync('replicate', '${card.type}', this)">
+                                        <i class="fas fa-clone"></i>
+                                        <div><div class="dd-label">Replicate via API</div><div class="dd-desc">Export definition &amp; create in secondary</div></div>
+                                    </div>
+                                    ${card.type === 'Lakehouse' ? `
+                                    <div class="sync-dropdown-item" onclick="event.stopPropagation(); runSync('shortcuts', '${card.type}', this)">
+                                        <i class="fas fa-link"></i>
+                                        <div><div class="dd-label">OneLake Shortcuts</div><div class="dd-desc">Zero-copy live pointers to primary</div></div>
+                                    </div>
+                                    <div class="sync-dropdown-item" onclick="event.stopPropagation(); runSync('notebook', '${card.type}', this)">
+                                        <i class="fas fa-book"></i>
+                                        <div><div class="dd-label">Sync via Notebook</div><div class="dd-desc">Delta incremental replication</div></div>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="type-percentage ${pctClass}">${card.supported ? card.percentage + '%' : card.primary_count}</div>
+                    <div class="type-name">${card.type}</div>
+                    <div class="type-count">${countText}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function openTypeDetail(type) {
+        currentModalType = type;
+        const card = bcdrData.type_cards.find(c => c.type === type);
+        if (!card) return;
+
+        document.getElementById('modal-title').textContent = `${type} — ${card.primary_count} items`;
+
+        const pNames = new Set(card.primary_items.map(i => i.name));
+        const sNames = new Set(card.secondary_items.map(i => i.name));
+
+        let html = '';
+        card.primary_items.forEach(item => {
+            const isMirrored = sNames.has(item.name);
+            html += `
+                <div class="item-row">
+                    <i class="${getTypeIcon(type).icon}" style="color:#666;"></i>
+                    <span class="item-name">${escapeHtml(item.name)}</span>
+                    ${isMirrored ?
+                        '<span class="item-status mirrored">Mirrored</span>' :
+                        `<span class="item-status missing">Missing</span>
+                         ${bcdrData.has_secondary && card.supported ?
+                            `<button class="btn-replicate-item" onclick="replicateSingleItem('${item.id}', '${escapeHtml(item.name)}', '${type}', this)">
+                                Replicate
+                            </button>` : ''}`
+                    }
+                </div>
+            `;
+        });
+        document.getElementById('modal-body').innerHTML = html || '<p style="color:#999;text-align:center;">No items found.</p>';
+
+        const missing = card.primary_count - card.mirrored_count;
+        document.getElementById('modal-summary').textContent = `${card.mirrored_count} mirrored, ${missing} missing`;
+
+        const btnAll = document.getElementById('btn-replicate-all');
+        btnAll.style.display = (missing > 0 && bcdrData.has_secondary && card.supported) ? 'inline-flex' : 'none';
+
+        document.getElementById('item-modal').classList.add('active');
+    }
+
+    function closeModal() {
+        document.getElementById('item-modal').classList.remove('active');
+        currentModalType = null;
+    }
+
+    // --- Sync dropdown ---
+    function toggleSyncMenu(btn) {
+        const wrap = btn.closest('.sync-dropdown-wrap');
+        const dd = wrap.querySelector('.sync-dropdown');
+        const isOpen = dd.classList.contains('open');
+        // Close all open dropdowns first
+        document.querySelectorAll('.sync-dropdown.open').forEach(d => d.classList.remove('open'));
+        if (!isOpen) dd.classList.add('open');
+    }
+    // Close dropdowns on outside click
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.sync-dropdown.open').forEach(d => d.classList.remove('open'));
+    });
+
+    async function runSync(action, type, el) {
+        // Close the dropdown
+        document.querySelectorAll('.sync-dropdown.open').forEach(d => d.classList.remove('open'));
+        const wrap = el.closest('.sync-dropdown-wrap');
+        const btn = wrap.querySelector('.btn-sync');
+
+        if (!bcdrData.has_secondary) {
+            alert('Please configure a secondary workspace first.');
+            return;
+        }
+        btn.disabled = true;
+        btn.className = 'btn-sync running';
+
+        try {
+            let resp, data;
+            if (action === 'replicate') {
+                resp = await fetch('/api/bcdr/replicate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type }),
+                });
+                data = await resp.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    btn.disabled = false;
+                    btn.className = 'btn-sync';
+                    btn.innerHTML = 'Sync <i class="fas fa-caret-down" style="margin-left:3px;font-size:10px;"></i>';
+                    return;
+                }
+                // Poll for progress
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 0/? ...';
+                const pollId = setInterval(async () => {
+                    try {
+                        const pr = await fetch('/api/bcdr/replicate/progress/' + encodeURIComponent(type));
+                        const pg = await pr.json();
+                        const cur = pg.current || 0;
+                        const tot = pg.total || '?';
+                        const item = pg.current_item || '';
+                        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + cur + '/' + tot + ' ' + item;
+                        if (pg.status === 'completed' || pg.status === 'failed') {
+                            clearInterval(pollId);
+                            btn.disabled = false;
+                            btn.className = 'btn-sync';
+                            btn.innerHTML = 'Sync <i class="fas fa-caret-down" style="margin-left:3px;font-size:10px;"></i>';
+                            if (pg.status === 'failed') {
+                                alert('Sync failed: ' + (pg.error || 'Unknown error'));
+                            } else {
+                                // Build a detailed message showing successes and failures
+                                const results = pg.results || [];
+                                const failed = results.filter(r => r.status === 'failed');
+                                let msg = pg.message || ('Synced ' + cur + '/' + tot + ' ' + type + ' items');
+                                if (failed.length > 0) {
+                                    msg += '\n\nFailed items:';
+                                    failed.forEach(f => { msg += '\n• ' + f.name + ': ' + (f.error || 'unknown'); });
+                                }
+                                alert(msg);
+                            }
+                            refreshBCDR();
+                        }
+                    } catch (e) { /* keep polling */ }
+                }, 2000);
+                return;
+            } else if (action === 'shortcuts') {
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+                resp = await fetch('/api/bcdr/lakehouse-tables?action=shortcuts', {
+                    method: 'GET',
+                });
+                data = await resp.json();
+            } else if (action === 'notebook') {
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+                resp = await fetch('/api/bcdr/run-sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                data = await resp.json();
+            }
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                alert(data.message || 'Sync initiated successfully');
+                refreshBCDR();
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+        btn.disabled = false;
+        btn.className = 'btn-sync';
+        btn.innerHTML = 'Sync <i class="fas fa-caret-down" style="margin-left:3px;font-size:10px;"></i>';
+    }
+
+    async function replicateType(type, btn) {
+        if (!bcdrData.has_secondary) {
+            alert('Please configure a secondary workspace first.');
+            return;
+        }
+        btn.disabled = true;
+        btn.className = 'btn-sync running';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+        try {
+            const resp = await fetch('/api/bcdr/replicate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type }),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                alert(data.message);
+                refreshBCDR();
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+        btn.disabled = false;
+    }
+
+    async function replicateSingleItem(itemId, itemName, type, btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const resp = await fetch('/api/bcdr/replicate-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: itemId, item_name: itemName, type }),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                alert('Error: ' + data.error);
+                btn.disabled = false;
+                btn.innerHTML = 'Replicate';
+            } else {
+                btn.innerHTML = '<i class="fas fa-check"></i> Done';
+                btn.style.borderColor = '#4caf50';
+                btn.style.color = '#4caf50';
+                refreshBCDR();
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+            btn.disabled = false;
+            btn.innerHTML = 'Replicate';
+        }
+    }
+
+    async function replicateAllInModal() {
+        if (!currentModalType) return;
+        const btn = document.getElementById('btn-replicate-all');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Replicating...';
+        try {
+            const resp = await fetch('/api/bcdr/replicate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: currentModalType }),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                alert(data.message);
+                closeModal();
+                refreshBCDR();
+            }
+        } catch (e) { alert('Error: ' + e.message); }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-copy"></i> Replicate All Missing';
+    }
+
+    async function refreshBCDR() {
+        const btn = document.getElementById('btn-refresh');
+        btn.classList.add('spinning');
+        // Clear server cache by calling refresh
+        await fetch('/api/refresh', { method: 'POST' });
+        await loadBCDR();
+        btn.classList.remove('spinning');
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    // Close modal on overlay click
+    document.getElementById('item-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+
+    // ================================================================
+    // Data Sync — moved to /lakehouse page
+    // ================================================================
+
+    function updateSyncBanner() {
+        // Sync banners are now on the dedicated /lakehouse page
+    }
+</script>
+{% endblock %}

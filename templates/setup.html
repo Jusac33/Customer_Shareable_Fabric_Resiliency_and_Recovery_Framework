@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Workspaces - Fabric BCDR</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+        .top-bar {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .top-bar .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .top-bar .brand i { color: #64B5F6; }
+        .top-bar .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+        }
+        .top-bar .user-info .avatar {
+            width: 34px; height: 34px;
+            background: #64B5F6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .top-bar a { color: #90CAF9; text-decoration: none; font-size: 12px; }
+        .top-bar a:hover { color: white; }
+
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .step-indicator {
+            display: flex;
+            gap: 0;
+            margin-bottom: 30px;
+        }
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 12px;
+            background: #e0e0e0;
+            color: #999;
+            font-size: 13px;
+            font-weight: 600;
+            position: relative;
+        }
+        .step:first-child { border-radius: 6px 0 0 6px; }
+        .step:last-child { border-radius: 0 6px 6px 0; }
+        .step.active { background: #2196F3; color: white; }
+        .step.done { background: #4CAF50; color: white; }
+
+        .workspace-section {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+        }
+        .workspace-section h2 {
+            font-size: 18px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .workspace-section h2 .badge {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        .badge-primary { background: #e3f2fd; color: #1565C0; }
+        .badge-secondary { background: #fff3e0; color: #E65100; }
+        .workspace-section .hint {
+            color: #999;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 15px;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 10px 12px 10px 38px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.3s;
+        }
+        .search-box input:focus { border-color: #2196F3; box-shadow: 0 0 0 3px rgba(33,150,243,0.1); }
+        .search-box i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #aaa;
+        }
+
+        .ws-list {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        .ws-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.2s;
+        }
+        .ws-item:last-child { border-bottom: none; }
+        .ws-item:hover { background: #f5f9ff; }
+        .ws-item.selected {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+        }
+        .ws-item .ws-icon {
+            width: 36px; height: 36px;
+            background: #f0f0f0;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            flex-shrink: 0;
+        }
+        .ws-item.selected .ws-icon { background: #BBDEFB; color: #1565C0; }
+        .ws-item .ws-details { flex: 1; min-width: 0; }
+        .ws-item .ws-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ws-item .ws-id {
+            font-size: 11px;
+            color: #aaa;
+            font-family: 'Consolas', monospace;
+        }
+        .ws-item .ws-check {
+            color: #2196F3;
+            font-size: 18px;
+            display: none;
+        }
+        .ws-item.selected .ws-check { display: block; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .loading .spinner {
+            border: 3px solid #e0e0e0;
+            border-top: 3px solid #2196F3;
+            border-radius: 50%;
+            width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 30px;
+        }
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #2196F3; color: white; }
+        .btn-primary:hover:not(:disabled) { background: #1976D2; transform: translateY(-1px); }
+        .btn-outline { background: white; color: #666; border: 1px solid #ddd; }
+        .btn-outline:hover { background: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="brand">
+            <i class="fas fa-shield-halved"></i> Fabric BCDR
+        </div>
+        <div class="user-info">
+            <div class="avatar">{{ user_name[0] | upper if user_name else 'U' }}</div>
+            <div>
+                <div style="font-weight:600;">{{ user_name }}</div>
+                <div style="color:#90CAF9; font-size:11px;">{{ user_email }}</div>
+            </div>
+            <a href="/logout"><i class="fas fa-sign-out-alt"></i> Sign out</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>Workspace Pairs</h1>
+        <p class="subtitle">Configure primary/secondary workspace pairs for disaster recovery.</p>
+
+        <div class="step-indicator">
+            <div class="step done"><i class="fas fa-check"></i> Signed In</div>
+            <div class="step active">Select Workspaces</div>
+            <div class="step">Dashboard</div>
+        </div>
+
+        <!-- Existing Pairs -->
+        <div id="existing-pairs" class="workspace-section" style="display:none;">
+            <h2>
+                <i class="fas fa-layer-group" style="color:#4CAF50"></i>
+                Configured Pairs
+                <span class="badge" style="background:#e8f5e9;color:#2E7D32;" id="pair-count-badge">0</span>
+            </h2>
+            <div id="pairs-list" style="margin-top:12px;"></div>
+        </div>
+
+        <!-- Pair Label -->
+        <div class="workspace-section">
+            <h2>
+                <i class="fas fa-tag" style="color:#9C27B0"></i>
+                Pair Label
+                <span class="badge" style="background:#f3e5f5;color:#7B1FA2;">OPTIONAL</span>
+            </h2>
+            <p class="hint">A friendly name for this workspace pair (e.g. "Claims Processing").</p>
+            <input type="text" id="pair-label" placeholder="e.g. Claims Processing" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;outline:none;">
+        </div>
+
+        <!-- Primary Workspace -->
+        <div class="workspace-section">
+            <h2>
+                <i class="fas fa-cube" style="color:#2196F3"></i>
+                Primary Workspace
+                <span class="badge badge-primary">REQUIRED</span>
+            </h2>
+            <p class="hint">The production workspace to protect.</p>
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="search-primary" placeholder="Search workspaces..." oninput="filterWorkspaces('primary', this.value)">
+            </div>
+            <div id="primary-list" class="ws-list">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading your workspaces...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Secondary Workspace -->
+        <div class="workspace-section">
+            <h2>
+                <i class="fas fa-cube" style="color:#FF9800"></i>
+                Secondary Workspace
+                <span class="badge badge-secondary">OPTIONAL</span>
+            </h2>
+            <p class="hint">The DR workspace in a different region. You can set this up later.</p>
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="search-secondary" placeholder="Search workspaces..." oninput="filterWorkspaces('secondary', this.value)">
+            </div>
+            <div id="secondary-list" class="ws-list">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading your workspaces...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-outline" id="btn-back" onclick="window.location='/'" style="display:none;">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </button>
+            <button class="btn btn-outline" onclick="window.location='/logout'">
+                <i class="fas fa-sign-out-alt"></i> Sign out
+            </button>
+            <button class="btn btn-primary" id="btn-continue" disabled onclick="saveAndContinue()">
+                <i class="fas fa-plus"></i> Add Pair &amp; Continue
+            </button>
+        </div>
+    </div>
+
+    <script>
+    let allWorkspaces = [];
+    let selected = { primary: null, secondary: null };
+    let existingPairs = [];
+
+    // Load workspaces + existing pairs on page load
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadExistingPairs();
+        await loadWorkspaces();
+    });
+
+    async function loadExistingPairs() {
+        try {
+            const resp = await fetch('/api/workspace-pairs');
+            const data = await resp.json();
+            existingPairs = data.pairs || [];
+            if (existingPairs.length > 0) {
+                document.getElementById('existing-pairs').style.display = '';
+                document.getElementById('pair-count-badge').textContent = existingPairs.length;
+                document.getElementById('btn-back').style.display = '';
+                renderExistingPairs();
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    function renderExistingPairs() {
+        const container = document.getElementById('pairs-list');
+        container.innerHTML = existingPairs.map((p, i) => `
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;background:${p.active?'#e3f2fd':'#fafafa'};">
+                <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:${p.active?'#2196F3':'#ccc'};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;">${i+1}</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;font-size:14px;">${escapeHtml(p.label || 'Pair '+(i+1))}</div>
+                    <div style="font-size:12px;color:#666;">
+                        <i class="fas fa-cube" style="color:#2196F3"></i> ${escapeHtml(p.primary_name||'')}
+                        &nbsp;↔&nbsp;
+                        <i class="fas fa-cube" style="color:#FF9800"></i> ${escapeHtml(p.secondary_name||'(none)')}
+                    </div>
+                </div>
+                ${p.active ? '<span style="font-size:11px;background:#4CAF50;color:white;padding:2px 8px;border-radius:10px;">ACTIVE</span>' : `<button class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="switchPair('${p.id}')">Activate</button>`}
+                <button style="background:none;border:none;color:#c62828;cursor:pointer;font-size:14px;padding:4px 8px;" onclick="removePair('${p.id}')" title="Remove pair"><i class="fas fa-trash"></i></button>
+            </div>
+        `).join('');
+    }
+
+    async function switchPair(pairId) {
+        await fetch('/api/workspace-pairs/active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pair_id: pairId }),
+        });
+        await loadExistingPairs();
+    }
+
+    async function removePair(pairId) {
+        if (!confirm('Remove this workspace pair?')) return;
+        await fetch('/api/workspace-pairs/' + pairId, { method: 'DELETE' });
+        await loadExistingPairs();
+    }
+
+    async function loadWorkspaces() {
+        try {
+            const resp = await fetch('/api/workspaces');
+            const data = await resp.json();
+            if (data.error) {
+                renderError('primary-list', data.error);
+                renderError('secondary-list', data.error);
+                return;
+            }
+            allWorkspaces = data.workspaces || [];
+            renderList('primary-list', allWorkspaces, 'primary');
+            renderList('secondary-list', allWorkspaces, 'secondary');
+        } catch (e) {
+            renderError('primary-list', e.message);
+            renderError('secondary-list', e.message);
+        }
+    }
+
+    function renderList(containerId, workspaces, role) {
+        const container = document.getElementById(containerId);
+        if (workspaces.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open" style="font-size:24px;margin-bottom:10px;display:block;"></i>No workspaces found.</div>';
+            return;
+        }
+        container.innerHTML = workspaces.map(ws => `
+            <div class="ws-item ${selected[role]?.id === ws.id ? 'selected' : ''}"
+                 onclick="selectWorkspace('${role}', '${ws.id}', '${escapeHtml(ws.name)}')">
+                <div class="ws-icon"><i class="fas fa-cube"></i></div>
+                <div class="ws-details">
+                    <div class="ws-name">${escapeHtml(ws.name)}</div>
+                    <div class="ws-id">${ws.id}</div>
+                </div>
+                <div class="ws-check"><i class="fas fa-check-circle"></i></div>
+            </div>
+        `).join('');
+    }
+
+    function renderError(containerId, msg) {
+        document.getElementById(containerId).innerHTML =
+            `<div class="empty-state" style="color:#c62828;"><i class="fas fa-exclamation-triangle" style="font-size:24px;margin-bottom:10px;display:block;"></i>${escapeHtml(msg)}</div>`;
+    }
+
+    function selectWorkspace(role, id, name) {
+        // Don't allow same workspace for both roles
+        const otherRole = role === 'primary' ? 'secondary' : 'primary';
+        if (selected[otherRole]?.id === id) {
+            alert('This workspace is already selected as the ' + otherRole + ' workspace.');
+            return;
+        }
+
+        selected[role] = { id, name };
+        renderList(role + '-list', allWorkspaces.filter(ws => filterMatch(ws, document.getElementById('search-' + role).value)), role);
+        updateContinueButton();
+    }
+
+    function filterWorkspaces(role, query) {
+        const filtered = allWorkspaces.filter(ws => filterMatch(ws, query));
+        renderList(role + '-list', filtered, role);
+    }
+
+    function filterMatch(ws, query) {
+        if (!query) return true;
+        const q = query.toLowerCase();
+        return ws.name.toLowerCase().includes(q) || ws.id.toLowerCase().includes(q);
+    }
+
+    function updateContinueButton() {
+        const btn = document.getElementById('btn-continue');
+        btn.disabled = !selected.primary;
+    }
+
+    async function saveAndContinue() {
+        if (!selected.primary) return;
+        const btn = document.getElementById('btn-continue');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+        const label = document.getElementById('pair-label').value.trim();
+
+        try {
+            const resp = await fetch('/api/workspaces/select', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    primary_id: selected.primary.id,
+                    primary_name: selected.primary.name,
+                    secondary_id: selected.secondary?.id || null,
+                    secondary_name: selected.secondary?.name || null,
+                    label: label || selected.primary.name,
+                }),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                alert('Error: ' + data.error);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-arrow-right"></i> Continue to Dashboard';
+                return;
+            }
+            window.location.href = '/';
+        } catch (e) {
+            alert('Error: ' + e.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-arrow-right"></i> Continue to Dashboard';
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    </script>
+</body>
+</html>
