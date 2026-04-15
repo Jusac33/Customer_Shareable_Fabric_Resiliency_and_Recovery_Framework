@@ -287,8 +287,8 @@ REPORT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 ### Step 1 — Clone the Repository
 ```bash
-git clone https://github.com/Jusac33/FABRIC_BCDR.git
-cd FABRIC_BCDR
+git clone https://github.com/Jusac33/Customer_Shareable_Fabric_Resiliency_and_Recovery_Framework.git
+cd Customer_Shareable_Fabric_Resiliency_and_Recovery_Framework
 ```
 
 ### Step 2 — Install Dependencies
