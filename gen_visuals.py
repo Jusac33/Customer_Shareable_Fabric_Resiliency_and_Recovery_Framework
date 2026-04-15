@@ -2,7 +2,7 @@
 import json
 import os
 
-BASE = r"c:\Users\chsaraf\Downloads\Merchant\FABRIC_BCDR\CrestShield-Claim-report.Report\definition\pages\ba5f0c46009d795b2a74\visuals"
+BASE = os.path.join(os.path.dirname(__file__), "CrestShield-Claim-report.Report", "definition", "pages", "ba5f0c46009d795b2a74", "visuals")
 
 CARD_STYLE = {
     "background": [{"properties": {"show": {"expr": {"Literal": {"Value": "true"}}}, "color": {"solid": {"color": {"expr": {"Literal": {"Value": "'#FFFFFF'"}}}}}} }],

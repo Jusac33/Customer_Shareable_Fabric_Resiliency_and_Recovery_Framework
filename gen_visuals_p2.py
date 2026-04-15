@@ -9,7 +9,7 @@ Layout:
 import json
 import os
 
-BASE = r"c:\Users\chsaraf\Downloads\Merchant\FABRIC_BCDR\CrestShield-Claim-report.Report\definition\pages\claimsAnalytics\visuals"
+BASE = os.path.join(os.path.dirname(__file__), "CrestShield-Claim-report.Report", "definition", "pages", "claimsAnalytics", "visuals")
 
 CARD_STYLE = {
     "background": [{"properties": {"show": {"expr": {"Literal": {"Value": "true"}}}, "color": {"solid": {"color": {"expr": {"Literal": {"Value": "'#FFFFFF'"}}}}}}}],
