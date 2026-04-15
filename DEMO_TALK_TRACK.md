@@ -1,4 +1,4 @@
-# Fabric BCDR — Leadership Demo Recording Script
+# Fabric Resiliency & Recovery — Leadership Demo Recording Script
 **Duration: 8–10 minutes | Step-by-Step Talk Track**
 
 > **BEFORE YOU HIT RECORD:**
@@ -13,11 +13,11 @@
 ## STEP 1 — OPENING (0:00 – 0:30)
 **You are on: Dashboard (Command Center)**
 
-> **SAY:** "Hi everyone. I want to walk you through something we've built to address a critical gap in Microsoft Fabric — Business Continuity and Disaster Recovery.
+> **SAY:** "Hi everyone. I want to walk you through something we've built to address a critical gap in Microsoft Fabric — Resiliency and Recovery.
 >
-> Today, Fabric does not ship with a native cross-region DR solution. If a region goes down, all customer workloads — lakehouses, warehouses, notebooks, pipelines, reports, real-time intelligence — go dark with no automatic recovery path.
+> Today, Fabric does not ship with a native cross-region recovery solution. If a region goes down, all customer workloads — lakehouses, warehouses, notebooks, pipelines, reports, real-time intelligence — go dark with no automatic recovery path.
 >
-> We built a fully automated BCDR framework that replicates everything across two Fabric workspaces in different Azure regions, and lets you failover in minutes. Let me show you."
+> We built a fully automated Resiliency & Recovery framework that replicates everything across two Fabric workspaces in different Azure regions, and lets you failover in minutes. Let me show you."
 
 ---
 
@@ -26,7 +26,7 @@
 
 > **DO:** Slowly move your mouse across the dashboard — hover over the workspace pair names at the top, then move down to the artifact type cards.
 >
-> **SAY:** "This is the Command Center — the single pane of glass for your entire BCDR posture.
+> **SAY:** "This is the Command Center — the single pane of glass for your entire Resiliency & Recovery posture.
 >
 > At the top you see the workspace pair — our primary workspace, CrestShield SmartClaims, paired with the secondary in a different region. Both show as online.
 >
@@ -116,7 +116,7 @@
 ## STEP 7 — REAL-TIME INTELLIGENCE (5:15 – 6:45)
 **DO:** Click **"Real-Time Intelligence"** in the left sidebar.
 
-> **SAY:** "This is our newest addition — Real-Time Intelligence BCDR. Fabric RTI includes Eventhouses, KQL Databases, KQL Querysets, and Eventstreams. These are fundamentally different from lakehouse artifacts — KQL data lives in Kusto's column-store engine, not OneLake."
+> **SAY:** "This is our newest addition — Real-Time Intelligence Resiliency & Recovery. Fabric RTI includes Eventhouses, KQL Databases, KQL Querysets, and Eventstreams. These are fundamentally different from lakehouse artifacts — KQL data lives in Kusto's column-store engine, not OneLake."
 >
 > **DO:** Point at the 4 summary cards at the top.
 >
@@ -182,7 +182,7 @@
 ## STEP 10 — CLOSING (8:30 – 9:00)
 **DO:** Click back to the **Dashboard** (Command Center).
 
-> **SAY:** "To wrap up — this is an end-to-end BCDR solution for Microsoft Fabric. It covers:
+> **SAY:** "To wrap up — this is an end-to-end Resiliency & Recovery solution for Microsoft Fabric. It covers:
 >
 > Every artifact type — from Lakehouses to Real-Time Intelligence.
 > Actual data replication — not just definitions, but rows.
@@ -217,3 +217,5 @@
 - If a page is slow: "The system is querying the Fabric REST APIs in real time — this is live data, not cached."
 - If a number looks off: Skip it, move to the next section
 - If failover sim fails: "In production, this would connect to a fully provisioned secondary — for demo purposes, let me show the workflow."
+
+

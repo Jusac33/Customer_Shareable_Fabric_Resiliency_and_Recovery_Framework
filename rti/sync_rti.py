@@ -257,7 +257,7 @@ def sync_all_rti(
         types: Optional subset of RTI_ARTIFACT_TYPES to sync
     """
     target_types = types or RTI_ARTIFACT_TYPES
-    logger.info(f"=== RTI BCDR Sync: {', '.join(target_types)} ===")
+    logger.info(f"=== RTI Resiliency & Recovery Sync: {', '.join(target_types)} ===")
 
     # Build connection map once for all types
     logger.info("Building RTI connection map...")
@@ -295,7 +295,7 @@ def sync_all_rti(
 def print_summary(results: Dict[str, Dict], logger):
     """Print a human-readable summary."""
     logger.info("\n" + "=" * 70)
-    logger.info("RTI BCDR SYNC SUMMARY")
+    logger.info("RTI Resiliency & Recovery SYNC SUMMARY")
     logger.info("=" * 70)
     total_synced = total_failed = total_mirrored = total_skipped = 0
     for art_type, r in results.items():
@@ -313,7 +313,7 @@ def print_summary(results: Dict[str, Dict], logger):
     logger.info("=" * 70)
 
     # RTI-specific guidance
-    logger.info("\n⚠ RTI BCDR NOTES:")
+    logger.info("\n⚠ RTI Resiliency & Recovery NOTES:")
     logger.info("  • KQL Database DATA is NOT synced by definition export/import.")
     logger.info("    Configure continuous-export on primary → Azure Storage,")
     logger.info("    then ingest from storage into secondary KQL DB.")
@@ -358,3 +358,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+

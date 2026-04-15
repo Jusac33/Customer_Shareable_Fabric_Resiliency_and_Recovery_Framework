@@ -1,8 +1,8 @@
-# Microsoft Fabric BCDR - Python Repository
+# Microsoft Fabric Resiliency & Recovery Framework
 
-**Disaster Recovery and Business Continuity for Microsoft Fabric Artifacts**
+**Resiliency and Recovery for Microsoft Fabric Artifacts**
 
-A complete, production-ready Python repository for implementing Business Continuity and Disaster Recovery (BCDR) across Microsoft Fabric workspaces deployed in two Azure regions. 
+A complete, production-ready Python repository for implementing Resiliency & Recovery across Microsoft Fabric workspaces deployed in two Azure regions. 
 
 ## Overview
 
@@ -10,7 +10,7 @@ This repository provides Python scripts and orchestration tools to:
 
 - **Sync all Fabric artifact types** across primary and secondary workspaces (Lakehouses, Warehouses, Notebooks, Pipelines, Semantic Models, Reports, Dataflows, KQL Databases, Eventstreams, ML Models, etc.)
 - **Automate failover** from primary to secondary workspace with data validation
-- **Orchestrate failback** to restore primary workspace after disaster recovery
+- **Orchestrate failback** to restore primary workspace after recovery
 - **Support three data replication strategies**:
   - Active Replication (azcopy continuous sync)
   - OneLake Shortcuts (zero-copy, near-zero RPO)
@@ -28,7 +28,7 @@ This repository provides Python scripts and orchestration tools to:
 - Data Pipelines (with activity and connection remapping)
 - Semantic Models & Reports (with dataset rebinding)
 - Dataflows Gen2 (with connection remapping)
-- Eventhouses (full BCDR with KQL data replication)
+- Eventhouses (full Resiliency & Recovery with KQL data replication)
 - KQL Databases & Querysets (schema + data sync via Kusto REST API)
 - Eventstreams (with destination remapping)
 - ML Models, Experiments & Environments
@@ -631,11 +631,11 @@ Operation timeout after 300 seconds
 
 ## FabricGuard Dashboard (Real-Time Monitoring)
 
-A professional, real-time web dashboard for monitoring BCDR operations, replication status, and executing failover commands.
+A professional, real-time web dashboard for monitoring Resiliency & Recovery operations, replication status, and executing failover commands.
 
 ### Overview
 
-**FabricGuard** is a Flask-based web application that provides a command center interface for managing your Fabric BCDR infrastructure. It combines real-time data from sync scripts with interactive controls for failover simulation and workspace management.
+**FabricGuard** is a Flask-based web application that provides a command center interface for managing your Fabric Resiliency & Recovery infrastructure. It combines real-time data from sync scripts with interactive controls for failover simulation and workspace management.
 
 ### Features
 
@@ -882,21 +882,21 @@ The Flask app exposes 70+ JSON endpoints. Key categories:
 | Category | Endpoints | Description |
 |----------|-----------|-------------|
 | Auth | `/api/auth/status`, `/api/auth/start` | MSAL interactive + Service Principal login |
-| BCDR Status | `/api/bcdr/status`, `/api/topology` | Workspace health, replication lag, artifact drift |
+| Resiliency & Recovery Status | `/api/Resiliency & Recovery/status`, `/api/topology` | Workspace health, replication lag, artifact drift |
 | Inventory | `/api/inventory`, `/api/active-pair-info` | Artifact counts by type with mirroring percentage |
-| Replication | `/api/bcdr/replicate`, `/api/bcdr/replicate-item` | Background artifact replication with progress polling |
-| Lakehouse Data | `/api/bcdr/azcopy-replicate`, `/api/bcdr/azcopy-status` | azcopy full copy / incremental sync for lakehouse data |
-| ML Model/Experiment | `/api/bcdr/ml-status`, `/api/bcdr/ml-replicate` | ML item creation + OneLake data sync via azcopy |
-| Scheduling | `/api/bcdr/schedule`, `/api/bcdr/azcopy-schedule` | Notebook sync schedule + azcopy incremental schedule |
-| Auto-Sync | `/api/bcdr/autosync` | Auto-replicate new artifacts (30sΓÇô10min watcher) |
-| Drift & Integrity | `/api/sync-plan`, `/api/bcdr/lakehouse-tables` | Operational drift, table-level comparison |
+| Replication | `/api/Resiliency & Recovery/replicate`, `/api/Resiliency & Recovery/replicate-item` | Background artifact replication with progress polling |
+| Lakehouse Data | `/api/Resiliency & Recovery/azcopy-replicate`, `/api/Resiliency & Recovery/azcopy-status` | azcopy full copy / incremental sync for lakehouse data |
+| ML Model/Experiment | `/api/Resiliency & Recovery/ml-status`, `/api/Resiliency & Recovery/ml-replicate` | ML item creation + OneLake data sync via azcopy |
+| Scheduling | `/api/Resiliency & Recovery/schedule`, `/api/Resiliency & Recovery/azcopy-schedule` | Notebook sync schedule + azcopy incremental schedule |
+| Auto-Sync | `/api/Resiliency & Recovery/autosync` | Auto-replicate new artifacts (30sΓÇô10min watcher) |
+| Drift & Integrity | `/api/sync-plan`, `/api/Resiliency & Recovery/lakehouse-tables` | Operational drift, table-level comparison |
 | Failover | `/api/failover/simulate`, `/api/failover/execute`, `/api/failback/execute` | DR simulation and execution |
 | Lineage | `/api/lineage`, `/api/lineage/connections` | Dependency graph from artifact definitions |
-| RTI | `/api/rti/status`, `/api/rti/sync`, `/api/rti/replicate-kql-data` | Real-Time Intelligence BCDR |
+| RTI | `/api/rti/status`, `/api/rti/sync`, `/api/rti/replicate-kql-data` | Real-Time Intelligence Resiliency & Recovery |
 | DevOps | `/api/devops/status`, `/api/devops/trigger` | Azure DevOps pipeline integration |
 | Gateways | `/api/gateways` | On-premises data gateway discovery |
 | Workspace Pairs | `/api/workspace-pairs`, `/api/workspaces/select` | Multi-pair config, active pair switching |
-| Permissions | `/api/bcdr/sync-permission` | Role assignment sync to secondary |
+| Permissions | `/api/Resiliency & Recovery/sync-permission` | Role assignment sync to secondary |
 
 ---
 
@@ -979,8 +979,8 @@ Lakehouse page ΓåÆ Lakehouse Data Replication panel ΓåÆ "Scheduled azcopy 
 ### API
 
 ```
-GET  /api/bcdr/azcopy-schedule     ΓåÆ current state
-POST /api/bcdr/azcopy-schedule     ΓåÆ { "enabled": true, "interval_minutes": 15, "include_ml": true }
+GET  /api/Resiliency & Recovery/azcopy-schedule     ΓåÆ current state
+POST /api/Resiliency & Recovery/azcopy-schedule     ΓåÆ { "enabled": true, "interval_minutes": 15, "include_ml": true }
 ```
 
 ---
@@ -1298,8 +1298,8 @@ CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
 ```
 
 ```bash
-docker build -t fabric-bcdr .
-docker run -p 5000:5000 --env-file .env fabric-bcdr
+docker build -t fabric-Resiliency & Recovery .
+docker run -p 5000:5000 --env-file .env fabric-Resiliency & Recovery
 ```
 
 **Option 3: Azure App Service**
@@ -1490,3 +1490,4 @@ No Microsoft technology, nor any of its component technologies, including the de
 **Last Updated**: March 2026
 
 **Version**: 1.0.0
+

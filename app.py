@@ -1,5 +1,5 @@
 """
-Fabric BCDR Dashboard - Flask Web Application
+Fabric Resiliency & Recovery Dashboard - Flask Web Application
 
 Real-time monitoring and command center for Fabric DR operations.
 Provides status visualization, capacity monitoring, event logs, and controls.
@@ -808,7 +808,7 @@ def _generate_registration_notebook_ipynb(primary_ws_id: str, secondary_ws_id: s
             "cell_type": "markdown",
             "metadata": {},
             "source": [
-                f"# BCDR Table Registration: {lh_name}\n",
+                f"# Resiliency & Recovery Table Registration: {lh_name}\n",
                 "\n",
                 "Auto-generated. Registers Delta folders as catalog tables after data copy.\n",
             ],
@@ -947,7 +947,7 @@ def _generate_per_lh_sync_notebook_ipynb(primary_ws_id: str, secondary_ws_id: st
             "cell_type": "markdown",
             "metadata": {},
             "source": [
-                f"# BCDR Data Sync: {lh_name}\n",
+                f"# Resiliency & Recovery Data Sync: {lh_name}\n",
                 "\n",
                 "**Auto-generated** — Syncs tables + files for this lakehouse pair.\n",
                 f"Primary → Secondary via OneLake abfss paths.\n",
@@ -1690,9 +1690,9 @@ def _generate_sync_notebook_ipynb(primary_ws_id: str, secondary_ws_id: str,
             "cell_type": "markdown",
             "metadata": {},
             "source": [
-                "# BCDR Lakehouse Data Replication — Orchestrator\n",
+                "# Resiliency & Recovery Lakehouse Data Replication — Orchestrator\n",
                 "\n",
-                "**Auto-generated** by Fabric BCDR Dashboard.  \n",
+                "**Auto-generated** by Fabric Resiliency & Recovery Dashboard.  \n",
                 "Calls per-lakehouse sync notebooks, then registration notebooks.\n",
                 "Each sub-notebook has its own default_lakehouse to prevent cross-contamination.\n",
             ],
@@ -1724,7 +1724,7 @@ def _generate_sync_notebook_ipynb(primary_ws_id: str, secondary_ws_id: str,
                 "# so Spark writes only to the correct lakehouse.\n",
                 "# ================================================================\n",
                 "print('=' * 70)\n",
-                "print('BCDR LAKEHOUSE DATA REPLICATION')\n",
+                "print('Resiliency & Recovery LAKEHOUSE DATA REPLICATION')\n",
                 "print(f'Primary:    {PRIMARY_WORKSPACE_ID}')\n",
                 "print(f'Secondary:  {SECONDARY_WORKSPACE_ID}')\n",
                 "print(f'Lakehouses: {len(LAKEHOUSE_MAPPINGS)}')\n",
@@ -2141,18 +2141,18 @@ def get_workspace_items(workspace_id: str) -> List[Dict[str, Any]]:
 _BCDR_PREFIXES = ("BCDR_",)
 
 def _is_bcdr_system_item(item: Dict[str, Any]) -> bool:
-    """Check if an item is a BCDR system artifact (notebook/pipeline created by the dashboard)."""
+    """Check if an item is a Resiliency & Recovery system artifact (notebook/pipeline created by the dashboard)."""
     name = item.get("displayName", "")
     return any(name.startswith(p) for p in _BCDR_PREFIXES)
 
 
 def _filter_business_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Return only business items (exclude BCDR system artifacts)."""
+    """Return only business items (exclude Resiliency & Recovery system artifacts)."""
     return [i for i in items if not _is_bcdr_system_item(i)]
 
 
 def _get_bcdr_system_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Return only BCDR system artifacts from a workspace item list."""
+    """Return only Resiliency & Recovery system artifacts from a workspace item list."""
     return [i for i in items if _is_bcdr_system_item(i)]
 
 
@@ -2483,7 +2483,7 @@ def get_artifact_inventory() -> Dict[str, Any]:
 
 
 def get_bcdr_status() -> Dict[str, Any]:
-    """Get BCDR status grouped by artifact type with mirroring comparison."""
+    """Get Resiliency & Recovery status grouped by artifact type with mirroring comparison."""
     from concurrent.futures import ThreadPoolExecutor
 
     p_id = _ws_id("primary")
@@ -4196,13 +4196,13 @@ def api_refresh():
 
 @app.route('/api/bcdr/status', methods=['GET'])
 def api_bcdr_status():
-    """Get BCDR status with artifact type cards."""
+    """Get Resiliency & Recovery status with artifact type cards."""
     if not is_authenticated():
         return jsonify({"error": "Not authenticated"}), 401
     try:
         return jsonify(get_bcdr_status())
     except Exception as e:
-        logger.exception("Error getting BCDR status")
+        logger.exception("Error getting Resiliency & Recovery status")
         return jsonify({'error': str(e)}), 500
 
 
@@ -5984,7 +5984,7 @@ def _register_ml_model_via_notebook(model_name: str, p_id: str, s_id: str,
         "",
         "# Define a lightweight placeholder model",
         "class BCDRPlaceholderModel(mlflow.pyfunc.PythonModel):",
-        '    """Placeholder model for BCDR failover. Replace with actual model after failover."""',
+        '    """Placeholder model for Resiliency & Recovery failover. Replace with actual model after failover."""',
         "    def predict(self, context, model_input):",
         "        import pandas as pd",
         "        return pd.DataFrame({'prediction': [0] * len(model_input)})",
@@ -5999,7 +5999,7 @@ def _register_ml_model_via_notebook(model_name: str, p_id: str, s_id: str,
         '        registered_model_name=MODEL_NAME,',
         "    )",
         '    print(f"Registered {MODEL_NAME} from run {run.info.run_id}")',
-        '    print("BCDR model registration complete")',
+        '    print("Resiliency & Recovery model registration complete")',
     ]
 
     nb_ipynb = {
@@ -6366,7 +6366,7 @@ def api_azcopy_replicate():
 
 @app.route('/api/bcdr/deploy-sync', methods=['POST'])
 def api_deploy_sync():
-    """Deploy the BCDR replication notebook + pipeline to secondary workspace."""
+    """Deploy the Resiliency & Recovery replication notebook + pipeline to secondary workspace."""
     if not is_authenticated():
         return jsonify({"error": "Not authenticated"}), 401
     try:
@@ -8445,7 +8445,7 @@ def _get_git_status(workspace_id: str) -> Dict[str, Any]:
         return {"connected": False, "error": err_str}
 
 
-def _trigger_ado_pipeline(reason: str = "BCDR auto-trigger") -> Dict[str, Any]:
+def _trigger_ado_pipeline(reason: str = "Resiliency & Recovery auto-trigger") -> Dict[str, Any]:
     """Trigger the configured Azure DevOps pipeline."""
     project = _devops_config.get("project", "")
     pipeline_id = _devops_config.get("pipeline_id")
@@ -8606,7 +8606,7 @@ def api_devops_trigger():
         return jsonify({"error": "DevOps integration is not enabled"}), 400
 
     data = request.get_json() or {}
-    reason = data.get("reason", "Manual trigger from BCDR Dashboard")
+    reason = data.get("reason", "Manual trigger from Resiliency & Recovery Dashboard")
     result = _trigger_ado_pipeline(reason)
     if "error" in result:
         return jsonify(result), 400
@@ -9668,13 +9668,13 @@ def api_rti_create_dummy():
 
     DUMMY_ARTIFACTS = [
         {"displayName": "RTI_Demo_Eventhouse", "type": "Eventhouse",
-         "description": "Demo Eventhouse for BCDR testing"},
+         "description": "Demo Eventhouse for Resiliency & Recovery testing"},
         {"displayName": "RTI_Demo_KQLDatabase", "type": "KQLDatabase",
-         "description": "Demo KQL Database for BCDR testing"},
+         "description": "Demo KQL Database for Resiliency & Recovery testing"},
         {"displayName": "RTI_Demo_KQLQueryset", "type": "KQLQueryset",
-         "description": "Demo KQL Queryset for BCDR testing"},
+         "description": "Demo KQL Queryset for Resiliency & Recovery testing"},
         {"displayName": "RTI_Demo_Eventstream", "type": "Eventstream",
-         "description": "Demo Eventstream for BCDR testing"},
+         "description": "Demo Eventstream for Resiliency & Recovery testing"},
     ]
 
     try:
@@ -10128,10 +10128,11 @@ if __name__ == '__main__':
     if _sp_config.get("client_id") and _sp_config.get("client_secret") and _sp_config.get("tenant_id"):
         logger.info("Found saved Service Principal config — attempting auto-login...")
         _do_sp_login(_sp_config["tenant_id"], _sp_config["client_id"], _sp_config["client_secret"])
-    logger.info("Starting Fabric BCDR Dashboard...")
+    logger.info("Starting Fabric Resiliency & Recovery Dashboard...")
     logger.info("Access dashboard at: http://localhost:5000")
     if _auth_state.get("auth_mode") == "service_principal":
         logger.info("Authenticated via Service Principal.")
     else:
         logger.info("You will be prompted to sign in with your Microsoft account.")
     app.run(debug=True, host='0.0.0.0', port=5000)
+

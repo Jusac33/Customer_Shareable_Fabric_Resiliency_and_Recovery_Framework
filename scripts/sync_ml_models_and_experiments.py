@@ -4,7 +4,7 @@ Sync ML Models and Experiments
 Fabric-specific (AI/ML layer)
 
 Purpose:
-  BCDR for MLflow Models, Experiments, Spark Job Definitions, and Data Agents.
+  Resiliency & Recovery for MLflow Models, Experiments, Spark Job Definitions, and Data Agents.
   Environment sync is delegated to sync_environments.py (which includes the
   required publish step to activate Spark settings & libraries).
 
@@ -676,3 +676,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+

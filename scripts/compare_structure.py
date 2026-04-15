@@ -67,3 +67,4 @@ for pair in pairs:
             print("    ERROR " + str(r.status_code) + ": " + r.text[:300])
 
 print("\nDone!")
+

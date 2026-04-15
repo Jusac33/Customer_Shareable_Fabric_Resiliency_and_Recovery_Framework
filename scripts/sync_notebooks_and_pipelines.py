@@ -2,7 +2,7 @@
 Sync Notebooks and Pipelines
 
 Purpose:
-  BCDR for code artifacts (Notebooks, DataPipelines) with automatic
+  Resiliency & Recovery for code artifacts (Notebooks, DataPipelines) with automatic
   reference remapping for workspace IDs and connection names.
 
 Artifact Types Covered:
@@ -385,3 +385,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+

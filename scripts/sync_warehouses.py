@@ -2,7 +2,7 @@
 Sync Warehouses
 
 Purpose:
-  BCDR for Fabric Data Warehouse artifacts - both schema (table/view DDL)
+  Resiliency & Recovery for Fabric Data Warehouse artifacts - both schema (table/view DDL)
   and data replication via cross-workspace queries.
 
 Artifact Types Covered:
@@ -212,3 +212,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+

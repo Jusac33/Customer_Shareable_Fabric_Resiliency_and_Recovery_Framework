@@ -137,7 +137,7 @@ def main():
         update_environment_definition(PRIMARY_WS, primary_env["id"], definition)
     else:
         result = create_environment(PRIMARY_WS, ENV_NAME,
-                                    "BCDR dummy environment with Spark config variables and libraries.",
+                                    "Resiliency & Recovery dummy environment with Spark config variables and libraries.",
                                     definition)
         print(f"Created: {json.dumps(result, indent=2)}")
         primary_env = result
@@ -187,7 +187,7 @@ def main():
         secondary_env_id = secondary_env["id"]
     else:
         result = create_environment(SECONDARY_WS, ENV_NAME,
-                                    "BCDR dummy environment with Spark config variables and libraries.",
+                                    "Resiliency & Recovery dummy environment with Spark config variables and libraries.",
                                     replicate_def)
         print(f"Created in secondary: {json.dumps(result, indent=2)}")
         secondary_env_id = result.get("id", "unknown")
@@ -220,3 +220,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

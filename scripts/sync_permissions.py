@@ -2,7 +2,7 @@
 Sync Permissions
 
 Purpose:
-  BCDR for workspace-level and item-level permissions with role assignments
+  Resiliency & Recovery for workspace-level and item-level permissions with role assignments
   and data access controls.
 
 Artifact Types Covered:
@@ -615,3 +615,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+

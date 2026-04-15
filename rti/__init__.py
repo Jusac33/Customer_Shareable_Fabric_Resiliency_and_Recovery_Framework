@@ -1,1 +1,2 @@
-# RTI (Real-Time Intelligence) BCDR module
+# RTI (Real-Time Intelligence) Resiliency & Recovery module
+

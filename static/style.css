@@ -1,4 +1,4 @@
-/* Fabric BCDR Dashboard - Global Styles */
+/* Fabric Resiliency & Recovery Dashboard - Global Styles */
 
 :root {
     --primary-color: #2196F3;
@@ -835,3 +835,5 @@ label {
         max-width: 180px;
     }
 }
+
+

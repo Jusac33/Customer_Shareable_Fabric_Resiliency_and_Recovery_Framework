@@ -93,3 +93,4 @@ for pair in pairs:
             print("    Total: " + str(len(paths)))
         else:
             print("    ERROR " + str(r2.status_code) + ": " + r2.text[:200])
+

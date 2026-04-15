@@ -2,7 +2,7 @@
 Sync Semantic Models and Reports
 
 Purpose:
-  BCDR for BI artifacts (Semantic Models and Reports) with automatic
+  Resiliency & Recovery for BI artifacts (Semantic Models and Reports) with automatic
   connection string and dataset rebinding to secondary workspace.
 
 Artifact Types Covered:
@@ -312,3 +312,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+

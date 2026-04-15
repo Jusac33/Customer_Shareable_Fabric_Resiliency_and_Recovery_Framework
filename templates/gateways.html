@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Data Gateways - Microsoft Fabric BCDR{% endblock %}
+{% block title %}Data Gateways - Microsoft Fabric Resiliency & Recovery{% endblock %}
 
 {% block page_title %}Data Gateways{% endblock %}
 
@@ -110,12 +110,12 @@
 
     .gw-conn-detail { font-family: monospace; font-size: 11px; color: #555; }
 
-    .gw-bcdr-note {
+    .gw-Resiliency & Recovery-note {
         margin-top: 20px; padding: 14px 18px; border-radius: 8px;
         background: #fff8e1; border: 1px solid #ffcc02;
         font-size: 12px; color: #6d4c00; line-height: 1.6;
     }
-    .gw-bcdr-note i { color: #f9a825; margin-right: 4px; }
+    .gw-Resiliency & Recovery-note i { color: #f9a825; margin-right: 4px; }
 </style>
 
 {% endblock %}
@@ -152,9 +152,9 @@
             }
 
             grid.innerHTML = gateways.map(gw => renderGatewayCard(gw)).join('') + `
-                <div class="gw-bcdr-note">
+                <div class="gw-Resiliency & Recovery-note">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <strong>BCDR Note:</strong> During failover, artifacts in the secondary workspace
+                    <strong>Resiliency & Recovery Note:</strong> During failover, artifacts in the secondary workspace
                     that depend on an on-prem gateway data source require the <strong>same gateway</strong>
                     to be accessible from the DR region, or a <strong>secondary gateway</strong> configured
                     with equivalent data sources. Gateway and data source IDs are embedded in Pipeline,
@@ -246,3 +246,5 @@
     }
 </script>
 {% endblock %}
+
+

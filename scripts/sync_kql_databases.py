@@ -2,7 +2,7 @@
 Sync KQL Databases
 
 Purpose:
-  BCDR for KQL Databases (Eventhouse) and KQL Querysets with schema
+  Resiliency & Recovery for KQL Databases (Eventhouse) and KQL Querysets with schema
   and query definition sync. Delegates to rti/sync_rti.py for the
   actual sync logic to avoid duplication.
 
@@ -88,3 +88,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+

@@ -1,4 +1,4 @@
-// Fabric BCDR Dashboard - Global JavaScript Functions
+// Fabric Resiliency & Recovery Dashboard - Global JavaScript Functions
 
 // API Base URL
 const API_BASE = '/api';
@@ -560,3 +560,5 @@ window.dashboardUtils = {
     formatTime,
     formatTimeAgo
 };
+
+

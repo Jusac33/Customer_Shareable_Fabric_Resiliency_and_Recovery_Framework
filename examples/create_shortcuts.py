@@ -6,7 +6,7 @@ Minimal, self-contained OneLake Shortcuts example demonstrating zero-copy DR pat
 This example shows:
   - Authenticating to Fabric API using MSAL
   - Creating OneLake Shortcuts in a secondary lakehouse pointing to primary
-  - Zero-copy, near-zero RPO disaster recovery pattern
+  - Zero-copy, near-zero RPO Recovery pattern
 
 Prerequisites:
   - Azure AD Service Principal credentials
@@ -234,3 +234,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}", exc_info=True)
         exit(1)
+

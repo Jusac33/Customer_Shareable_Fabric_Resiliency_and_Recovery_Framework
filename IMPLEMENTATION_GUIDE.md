@@ -1,4 +1,4 @@
-# Fabric BCDR — End-to-End Implementation Guide
+# Fabric Resiliency & Recovery — End-to-End Implementation Guide
 
 ## Table of Contents
 
@@ -25,10 +25,10 @@
 21. [Dashboard Pages](#21-dashboard-pages)
 22. [Security Considerations](#22-security-considerations)
 23. [OneLake Security — Data Access Roles (RLS/CLS)](#23-onelake-security--data-access-roles-rlscls)
-24. [ML Model & Experiment BCDR](#24-ml-model--experiment-bcdr)
-25. [Real-Time Intelligence (RTI) BCDR](#25-real-time-intelligence-rti-bcdr)
-26. [Roadmap — Data Warehouse BCDR](#26-roadmap--data-warehouse-bcdr)
-27. [Environment BCDR](#27-environment-bcdr)
+24. [ML Model & Experiment Resiliency & Recovery](#24-ml-model--experiment-Resiliency & Recovery)
+25. [Real-Time Intelligence (RTI) Resiliency & Recovery](#25-real-time-intelligence-rti-Resiliency & Recovery)
+26. [Roadmap — Data Warehouse Resiliency & Recovery](#26-roadmap--data-warehouse-Resiliency & Recovery)
+27. [Environment Resiliency & Recovery](#27-environment-Resiliency & Recovery)
 28. [Delta-Only Sync (Permissions, RTI, Definitions)](#28-delta-only-sync-permissions-rti-definitions)
 29. [Bulk Item Definition APIs (Beta)](#29-bulk-item-definition-apis-beta)
 30. [Out-of-Definition Settings — Gap Analysis](#30-out-of-definition-settings--gap-analysis)
@@ -39,16 +39,16 @@
 
 ## 1. What This Project Does
 
-This project implements **Business Continuity and Disaster Recovery (BCDR)** for Microsoft Fabric workspaces. It provides two modes of operation:
+This project implements **Resiliency & Recovery** for Microsoft Fabric workspaces. It provides two modes of operation:
 
 | Mode | Entry Point | Purpose |
 |------|------------|---------|
 | **Web Dashboard** | `app.py` (Flask) | Interactive browser-based control center with real-time monitoring, one-click replication, auto-sync, drift analysis, and failover simulation |
 | **CLI Scripts** | `scripts/*.py` | Standalone Python scripts for automated/scheduled sync of specific artifact types using a Service Principal |
 
-### What Does BCDR Mean Here?
+### What Does This Framework Do?
 
-You have a **Primary** Fabric workspace (production, e.g. East US 2) and a **Secondary** workspace (DR target, e.g. Central US). This project:
+You have a **Primary** Fabric workspace (production, e.g. East US 2) and a **Secondary** workspace (recovery target, e.g. Central US). This project:
 
 1. **Replicates artifacts** — Copies Lakehouses, Notebooks, SemanticModels, Reports, DataPipelines, Environments, DataAgents, Ontologies from primary → secondary
 2. **Rewrites connections** — Automatically updates workspace IDs, item IDs, and connection strings inside SemanticModel/Report definitions so they point to the secondary workspace's lakehouses
@@ -58,7 +58,7 @@ You have a **Primary** Fabric workspace (production, e.g. East US 2) and a **Sec
 6. **Enables failover** — Provides pre-flight checklist and dry-run simulation for managed failover from primary → secondary
 7. **Syncs permissions (delta-only)** — Detects added, changed, removed, and unchanged workspace role assignments; only applies the delta (POST new, PATCH changed, skip unchanged)
 8. **Replicates OneLake security (delta-only)** — Scans Data Access Roles (RLS/CLS) on primary lakehouses, normalizes and compares with secondary, and only PUTs when roles differ
-9. **Environment BCDR** — Exports environment definitions (Spark runtime, libraries, compute config), replicates to secondary, and triggers publish to install libraries
+9. **Environment Resiliency & Recovery** — Exports environment definitions (Spark runtime, libraries, compute config), replicates to secondary, and triggers publish to install libraries
 10. **Bulk definition sync** — Uses Fabric's new Bulk Export/Import Item Definition APIs (beta) to sync all workspace definitions in 2 API calls instead of 2×N, with automatic per-item fallback
 
 ---
@@ -67,7 +67,7 @@ You have a **Primary** Fabric workspace (production, e.g. East US 2) and a **Sec
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Fabric BCDR Dashboard                            │
+│                     Fabric Resiliency & Recovery Dashboard                            │
 │                     (Flask on localhost:5000)                         │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
@@ -88,7 +88,7 @@ You have a **Primary** Fabric workspace (production, e.g. East US 2) and a **Sec
 │   ┌────▼─────┐                               ┌──────▼──────┐      │
 │   │ PRIMARY  │  ◄── artifact replication ──►  │ SECONDARY   │      │
 │   │ Workspace│  ◄── data sync (notebook) ──►  │ Workspace   │      │
-│   │ (Prod)   │  ◄── connection rewriting ──►  │ (DR Target) │      │
+│   │ (Prod)   │  ◄── connection rewriting ──►  │ (recovery target) │      │
 │   └────┬─────┘                               └──────┬──────┘      │
 │        │                                             │              │
 │   ┌────▼─────┐                               ┌──────▼──────┐      │
@@ -151,12 +151,12 @@ FABRIC_BCDR/
 │   ├── sync_eventstreams.py        #   Thin wrapper → delegates to rti/sync_rti.py
 │   ├── sync_kql_databases.py       #   Thin wrapper → delegates to rti/sync_rti.py
 │   ├── sync_ml_models_and_experiments.py  # Delegates env sync to sync_environments.py
-│   ├── sync_environments.py        #   Environment BCDR with getDefinition + publish
+│   ├── sync_environments.py        #   Environment Resiliency & Recovery with getDefinition + publish
 │   ├── bulk_sync.py                #   Bulk Export/Import Definition APIs (beta) with per-item fallback
 │   ├── failover.py                 #   Orchestrated failover (pause → sync → validate → activate)
 │   └── failback.py                 #   Reverse sync: secondary → primary
 │
-├── rti/                            # Real-Time Intelligence BCDR modules
+├── rti/                            # Real-Time Intelligence Resiliency & Recovery modules
 │   ├── __init__.py                 #   Package init
 │   ├── sync_rti.py                 #   Standalone RTI artifact sync script
 │   ├── validate_rti.py             #   Standalone RTI validation script
@@ -190,7 +190,7 @@ FABRIC_BCDR/
 | **Python 3.12+** | Runtime for Flask dashboard and CLI scripts |
 | **uv** (recommended) or pip | Dependency management — `uv run python app.py` handles everything |
 | **Microsoft Fabric account** | Access to at least one Fabric workspace |
-| **Two Fabric workspaces** | Primary (production) and Secondary (DR target) in different regions |
+| **Two Fabric workspaces** | Primary (production) and Secondary (recovery target) in different regions |
 | **Browser** | MSAL interactive login opens a browser tab for Microsoft sign-in |
 | **Fabric capacity** | Both workspaces need active F2+ or Trial capacity |
 
@@ -224,7 +224,7 @@ Then open `.env` and set:
 # Your primary Fabric workspace GUID (find in Fabric portal URL)
 PRIMARY_WORKSPACE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
-# Your secondary (DR target) Fabric workspace GUID
+# Your secondary (recovery target) Fabric workspace GUID
 SECONDARY_WORKSPACE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 # Capacity IDs for both workspaces
@@ -321,7 +321,7 @@ The dashboard starts on **http://localhost:5000**.
 ### Step 5 — Configure Workspace Pairs
 1. On the **Setup** page, you see all Fabric workspaces you have access to
 2. Select a **Primary Workspace** (your production workspace)
-3. Select a **Secondary Workspace** (your DR target)
+3. Select a **Secondary Workspace** (your recovery target)
 4. Optionally give the pair a **label** (e.g., "Claims Processing")
 5. Click **"Add Pair & Continue"**
 6. You can add multiple pairs later from the setup page
@@ -455,9 +455,9 @@ The system supports **multiple workspace pairs** — e.g., "Claims Processing" (
 ```
 
 ### One-Click Replication
-On the dashboard, each artifact type card has a **"CICD"** button that calls `POST /api/bcdr/replicate` with the type. This replicates all missing items of that type.
+On the dashboard, each artifact type card has a **"CICD"** button that calls `POST /api/Resiliency & Recovery/replicate` with the type. This replicates all missing items of that type.
 
-Individual items can also be replicated via `POST /api/bcdr/replicate-item`.
+Individual items can also be replicated via `POST /api/Resiliency & Recovery/replicate-item`.
 
 ### Folder Structure Mirroring
 When replicating artifacts, the engine discovers the folder hierarchy in the primary workspace and mirrors it in the secondary. Items are placed in the same folder path they occupy in the primary workspace. This uses:
@@ -476,9 +476,9 @@ The rebind function (`_rebind_report_to_secondary()`) looks up the primary repor
 ### Background Replication with Live Progress Tracking
 Replication runs asynchronously in a background thread to avoid blocking the dashboard:
 
-1. `POST /api/bcdr/replicate` starts a `threading.Thread` running `_run_replicate_background()`
+1. `POST /api/Resiliency & Recovery/replicate` starts a `threading.Thread` running `_run_replicate_background()`
 2. Progress is tracked in `_sync_progress` dict (protected by `_sync_lock`)
-3. Frontend polls `GET /api/bcdr/replicate/progress` or `GET /api/bcdr/replicate/progress/<type>` to display real-time progress
+3. Frontend polls `GET /api/Resiliency & Recovery/replicate/progress` or `GET /api/Resiliency & Recovery/replicate/progress/<type>` to display real-time progress
 4. Progress state includes: `status` (idle/running/completed/failed), `current`, `total`, `current_item`, `created`, `skipped`, `failed`, `error`
 
 This allows the user to start replication and navigate away — the dashboard header badge shows the running status.
@@ -732,8 +732,8 @@ Compares primary and secondary workspaces to detect:
 
 | Status | Artifact Type | Action | What It Does |
 |--------|--------------|--------|--------------|
-| **Missing** | WorkspacePermission | **Fix** (user-plus icon) | Calls `/api/bcdr/sync-permission` to add the missing role assignment to secondary |
-| **Mismatch** | WorkspacePermission | **Fix** (user-shield icon) | Calls `/api/bcdr/sync-permission` to PATCH the role in secondary to match primary |
+| **Missing** | WorkspacePermission | **Fix** (user-plus icon) | Calls `/api/Resiliency & Recovery/sync-permission` to add the missing role assignment to secondary |
+| **Mismatch** | WorkspacePermission | **Fix** (user-shield icon) | Calls `/api/Resiliency & Recovery/sync-permission` to PATCH the role in secondary to match primary |
 | **Def Changed** | Hashable types (Notebook, Pipeline, SemanticModel, Report, SparkJobDefinition, Dataflow, Eventstream) | **Sync** | Syncs the individual item definition to secondary |
 | **In Sync** | Hashable types | **Check** (search icon) | Re-checks definition hash to detect drift |
 
@@ -1032,7 +1032,7 @@ The page calls:
 2. `GET /gateways/{id}/members` — Lists gateway members
 3. `GET /gateways/{id}/datasources` — Lists data sources for each gateway
 
-This is useful for BCDR planning to identify which on-prem data sources would need re-pointing during failover.
+This is useful for Resiliency & Recovery planning to identify which on-prem data sources would need re-pointing during failover.
 
 ---
 
@@ -1187,39 +1187,39 @@ The CLI scripts and the web dashboard support slightly different artifact types:
 | GET | `/api/health` | Primary/secondary health metrics |
 | GET | `/api/topology` | Regional topology + all-pairs summary |
 | GET | `/api/inventory` | Artifact inventory with per-pair breakdown |
-| GET | `/api/bcdr/status` | BCDR status with artifact type cards |
+| GET | `/api/Resiliency & Recovery/status` | Resiliency & Recovery status with artifact type cards |
 | GET | `/api/sync-plan` | Operational drift analysis |
 | GET | `/api/logs` | Sync event logs |
 
 ### Replication
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/bcdr/replicate` | Replicate all items of a type |
-| POST | `/api/bcdr/replicate-item` | Replicate a single item by ID |
-| GET | `/api/bcdr/replicate/progress` | Get replication progress for all types |
-| GET | `/api/bcdr/replicate/progress/<type>` | Get replication progress for a specific type |
-| POST | `/api/bcdr/bulk-sync` | Bulk sync all definitions via Fabric Bulk Export/Import APIs (beta) with per-item fallback |
-| POST | `/api/bcdr/deploy-sync` | Deploy notebook + pipeline to secondary |
-| POST | `/api/bcdr/run-sync` | Trigger the data replication notebook |
-| GET | `/api/bcdr/lakehouse-tables` | Compare lakehouse table schemas |
+| POST | `/api/Resiliency & Recovery/replicate` | Replicate all items of a type |
+| POST | `/api/Resiliency & Recovery/replicate-item` | Replicate a single item by ID |
+| GET | `/api/Resiliency & Recovery/replicate/progress` | Get replication progress for all types |
+| GET | `/api/Resiliency & Recovery/replicate/progress/<type>` | Get replication progress for a specific type |
+| POST | `/api/Resiliency & Recovery/bulk-sync` | Bulk sync all definitions via Fabric Bulk Export/Import APIs (beta) with per-item fallback |
+| POST | `/api/Resiliency & Recovery/deploy-sync` | Deploy notebook + pipeline to secondary |
+| POST | `/api/Resiliency & Recovery/run-sync` | Trigger the data replication notebook |
+| GET | `/api/Resiliency & Recovery/lakehouse-tables` | Compare lakehouse table schemas |
 
 ### Delta Detection & Permissions
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/bcdr/delta-check` | SHA-256 hash check of all hashable artifact definitions |
-| POST | `/api/bcdr/delta-check-item` | Targeted single-item definition hash check by name |
-| POST | `/api/bcdr/sync-item` | Sync a single artifact by name to secondary |
-| POST | `/api/bcdr/sync-permission` | Add or update a workspace role assignment in secondary |
-| GET | `/api/bcdr/defcheck` | Get auto definition check schedule state |
-| POST | `/api/bcdr/defcheck` | Enable/disable/configure auto definition check |
+| POST | `/api/Resiliency & Recovery/delta-check` | SHA-256 hash check of all hashable artifact definitions |
+| POST | `/api/Resiliency & Recovery/delta-check-item` | Targeted single-item definition hash check by name |
+| POST | `/api/Resiliency & Recovery/sync-item` | Sync a single artifact by name to secondary |
+| POST | `/api/Resiliency & Recovery/sync-permission` | Add or update a workspace role assignment in secondary |
+| GET | `/api/Resiliency & Recovery/defcheck` | Get auto definition check schedule state |
+| POST | `/api/Resiliency & Recovery/defcheck` | Enable/disable/configure auto definition check |
 
 ### Automation
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/bcdr/schedule` | Get scheduled sync state |
-| POST | `/api/bcdr/schedule` | Start/stop scheduled sync |
-| GET | `/api/bcdr/autosync` | Get auto-sync watcher state |
-| POST | `/api/bcdr/autosync` | Enable/disable auto-sync |
+| GET | `/api/Resiliency & Recovery/schedule` | Get scheduled sync state |
+| POST | `/api/Resiliency & Recovery/schedule` | Start/stop scheduled sync |
+| GET | `/api/Resiliency & Recovery/autosync` | Get auto-sync watcher state |
+| POST | `/api/Resiliency & Recovery/autosync` | Enable/disable auto-sync |
 
 ### Failover & Failback
 | Method | Path | Description |
@@ -1255,7 +1255,7 @@ The CLI scripts and the web dashboard support slightly different artifact types:
 
 ### Key Response Schemas
 
-**`GET /api/bcdr/status`** — includes capacity health detection:
+**`GET /api/Resiliency & Recovery/status`** — includes capacity health detection:
 ```json
 {
   "types": { "Lakehouse": { "primary": 3, "secondary": 2, "pct": 67 }, ... },
@@ -1319,12 +1319,12 @@ Capacity status is determined by making a lightweight API call per workspace and
 | **Command Center** | `/` | Artifact type cards, sync controls, schedule, auto-sync |
 | **Operational Drift** | `/drift` | Live comparison of primary vs secondary artifacts |
 | **Data Assurance** | `/integrity` | Table count validation, type count validation |
-| **Architecture** | `/architecture` | Static BCDR architecture diagram |
+| **Architecture** | `/architecture` | Static Resiliency & Recovery architecture diagram |
 | **Regional Topology** | `/topology` | Health, lag, all-pairs overview |
 | **Workspace Inventory** | `/inventory` | Per-pair artifact breakdown with type counts |
 | **Managed Failover** | `/failover` | Failover/failback execution, checklist, RPO/RTO gauges, event history |
 | **Data Gateways** | `/gateways` | On-premises gateway discovery, members, data sources |
-| **Real-Time Intelligence** | `/rti` | RTI BCDR — Eventhouse/KQL sync, data replication, scheduling, connection audit |
+| **Real-Time Intelligence** | `/rti` | RTI Resiliency & Recovery — Eventhouse/KQL sync, data replication, scheduling, connection audit |
 | **OneLake Security** | `/security` | Data Access Roles (RLS/CLS) scan, sync status, replication to secondary |
 | **Login** | `/login` | Microsoft interactive sign-in |
 | **Setup** | `/setup` | Workspace pair configuration (add/remove/switch) |
@@ -1361,7 +1361,7 @@ Capacity status is determined by making a lightweight API call per workspace and
 
 **Page: `/security`** | **API: `/api/security/*`**
 
-Full BCDR support for OneLake Data Access Roles, which enforce Row-Level Security (RLS) and Column-Level Security (CLS) on Lakehouse tables. The system scans roles on primary lakehouses, compares them with secondary, and replicates them with automatic ID remapping.
+Full Resiliency & Recovery support for OneLake Data Access Roles, which enforce Row-Level Security (RLS) and Column-Level Security (CLS) on Lakehouse tables. The system scans roles on primary lakehouses, compares them with secondary, and replicates them with automatic ID remapping.
 
 ### How OneLake Data Access Roles Work
 
@@ -1503,7 +1503,7 @@ PERMISSIONS SYNC SUMMARY (DELTA)
 
 ---
 
-## 24. ML Model & Experiment BCDR
+## 24. ML Model & Experiment Resiliency & Recovery
 
 ### MLExperiment — Full Replication Support
 
@@ -1571,7 +1571,7 @@ The sync script (`scripts/sync_ml_models_and_experiments.py`) handles this grace
 
 The dashboard shows MLModel at **0% mirrored (0/1)** because the empty shell gets garbage-collected.
 
-### Correct Approach for MLModel BCDR
+### Correct Approach for MLModel Resiliency & Recovery
 
 True MLModel replication requires **MLflow-level operations** from within a Fabric Spark session:
 
@@ -1598,11 +1598,11 @@ True MLModel replication requires **MLflow-level operations** from within a Fabr
 
 ---
 
-## 25. Real-Time Intelligence (RTI) BCDR
+## 25. Real-Time Intelligence (RTI) Resiliency & Recovery
 
 **Page: `/rti`** | **Module: `rti/`** | **API: `/api/rti/*`**
 
-Full BCDR support for Microsoft Fabric Real-Time Intelligence artifacts: **Eventhouses, KQL Databases, KQL Querysets, and Eventstreams**. Includes artifact replication, KQL data sync, scheduled replication, and connection string management.
+Full Resiliency & Recovery support for Microsoft Fabric Real-Time Intelligence artifacts: **Eventhouses, KQL Databases, KQL Querysets, and Eventstreams**. Includes artifact replication, KQL data sync, scheduled replication, and connection string management.
 
 ### RTI Architecture
 
@@ -1737,7 +1737,7 @@ The RTI page provides a complete management interface:
 
 **Create:** `POST /api/rti/create-dummy`
 - Creates: RTI_Demo_Eventhouse, RTI_Demo_KQLDatabase (parented to the Eventhouse), RTI_Demo_KQLQueryset, RTI_Demo_Eventstream
-- Useful for testing the full RTI BCDR workflow without real artifacts
+- Useful for testing the full RTI Resiliency & Recovery workflow without real artifacts
 
 **Cleanup:** `POST /api/rti/cleanup-dummy`
 - Removes all dummy artifacts by name from both primary and secondary workspaces
@@ -1752,7 +1752,7 @@ The RTI page provides a complete management interface:
 
 ---
 
-## 26. Roadmap — Data Warehouse BCDR
+## 26. Roadmap — Data Warehouse Resiliency & Recovery
 
 The following capabilities are planned but not yet fully implemented.
 
@@ -1770,12 +1770,12 @@ The following capabilities are planned but not yet fully implemented.
 ### Known Limitations
 - Eventstream source OAuth credentials require manual re-authentication after failover
 - Sensitivity label sync is detection-only (applying labels requires Microsoft Information Protection SDK)
-- **MLModel** cannot be replicated via REST API — Fabric auto-deletes empty shells within ~60s. Requires `mlflow.register_model()` from a Fabric notebook in the secondary workspace (see [Section 24](#24-ml-model--experiment-bcdr))
+- **MLModel** cannot be replicated via REST API — Fabric auto-deletes empty shells within ~60s. Requires `mlflow.register_model()` from a Fabric notebook in the secondary workspace (see [Section 24](#24-ml-model--experiment-Resiliency & Recovery))
 - OneLake security (Data Access Roles) is a preview feature — must be enabled per-workspace in Fabric portal before API calls work (see [Section 23](#23-onelake-security--data-access-roles-rlscls))
 
 ---
 
-## 27. Environment BCDR
+## 27. Environment Resiliency & Recovery
 
 **Script: `scripts/sync_environments.py`** | **Dashboard: Replication engine supports `Environment` type**
 
@@ -1925,7 +1925,7 @@ Delta sync reduces API calls by **80–95%** in steady-state operations when mos
 
 ## 29. Bulk Item Definition APIs (Beta)
 
-**Script:** `scripts/bulk_sync.py` | **API:** `POST /api/bcdr/bulk-sync`
+**Script:** `scripts/bulk_sync.py` | **API:** `POST /api/Resiliency & Recovery/bulk-sync`
 
 Microsoft Fabric has announced two new **beta** APIs that export/import all workspace item definitions in a single call:
 
@@ -1989,10 +1989,10 @@ python scripts/bulk_sync.py --type Notebook --type Report
 ### Dashboard API
 
 ```
-POST /api/bcdr/bulk-sync
+POST /api/Resiliency & Recovery/bulk-sync
 Body: { "types": ["Notebook", "Report"], "dryRun": false }
 → Runs in background thread
-→ Poll progress via GET /api/bcdr/replicate/progress/BulkSync
+→ Poll progress via GET /api/Resiliency & Recovery/replicate/progress/BulkSync
 ```
 
 ### Result Summary
@@ -2018,7 +2018,7 @@ BULK SYNC SUMMARY
 | `common.py` → `bulk_export_definitions()` | Wrapper for `POST .../bulkExportItemDefinitions` |
 | `common.py` → `bulk_import_definitions()` | Wrapper for `POST .../bulkImportItemDefinitions` |
 | `scripts/bulk_sync.py` → `bulk_sync()` | Full orchestration: export → remap → delta compare → import |
-| `app.py` → `/api/bcdr/bulk-sync` | REST endpoint running bulk sync in background |
+| `app.py` → `/api/Resiliency & Recovery/bulk-sync` | REST endpoint running bulk sync in background |
 
 ---
 
@@ -2168,3 +2168,5 @@ Covers the forward sync notebook generation in `app.py` (`_generate_per_lh_sync_
 | `TestSparkCDFEngine` | 8 | `spark_cdf` engine generates CDF cells, `get_delta_version()`, `full_sync_table()`, `incremental_sync_table()`, `enable_cdf()`, `SYNC_ENGINE = "spark_cdf"` in config |
 | `TestBothEngines` | 4 | Both engines contain `sync_files_section()`, catalog registration cell present, `lh_name` in notebook, `SYNC_MODE` variable present |
 | `TestDeploySyncArtifactsUsesDefaultEngine` | 3 | `deploy_sync_artifacts()` calls notebook generator, defaults to `fast_copy`, all 3 lakehouses get notebooks |
+
+

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}DevOps Integration - Microsoft Fabric BCDR{% endblock %}
+{% block title %}DevOps Integration - Microsoft Fabric Resiliency & Recovery{% endblock %}
 
 {% block page_title %}DevOps Integration{% endblock %}
 
@@ -90,11 +90,11 @@
             </div>
             <div class="config-field">
                 <label>Project</label>
-                <input type="text" id="cfg-project" placeholder="e.g., FabricBCDR">
+                <input type="text" id="cfg-project" placeholder="e.g., FabricResiliency & Recovery">
             </div>
             <div class="config-field">
                 <label>Repository</label>
-                <input type="text" id="cfg-repo" placeholder="e.g., FabricBCDR">
+                <input type="text" id="cfg-repo" placeholder="e.g., FabricResiliency & Recovery">
             </div>
             <div class="config-field">
                 <label>Pipeline ID</label>
@@ -102,11 +102,11 @@
             </div>
             <div class="config-field">
                 <label>Primary Branch</label>
-                <input type="text" id="cfg-primary-branch" placeholder="FabricBCDRArtifacts">
+                <input type="text" id="cfg-primary-branch" placeholder="FabricResiliency & RecoveryArtifacts">
             </div>
             <div class="config-field">
                 <label>Secondary Branch</label>
-                <input type="text" id="cfg-secondary-branch" placeholder="FabricBCDRSecondary">
+                <input type="text" id="cfg-secondary-branch" placeholder="FabricResiliency & RecoverySecondary">
             </div>
             <div class="config-field" style="grid-column: 1 / -1;">
                 <label>Personal Access Token (PAT)</label>
@@ -339,7 +339,7 @@
         try {
             const resp = await fetch('/api/devops/trigger', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({reason: 'Manual trigger from BCDR Dashboard'}),
+                body: JSON.stringify({reason: 'Manual trigger from Resiliency & Recovery Dashboard'}),
             });
             const d = await resp.json();
             if (d.ok) {
@@ -373,3 +373,5 @@
     }
 </script>
 {% endblock %}
+
+

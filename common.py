@@ -1,5 +1,5 @@
 """
-Microsoft Fabric BCDR Shared Configuration & Utilities Module
+Microsoft Fabric Resiliency & Recovery Shared Configuration & Utilities Module
 
 Provides centralized authentication, configuration, and helper functions
 for all Fabric DR synchronization scripts.
@@ -841,7 +841,7 @@ def bulk_import_definitions(
 
 if __name__ == "__main__":
     # Quick validation
-    print("Validating Fabric BCDR configuration...")
+    print("Validating Fabric Resiliency & Recovery configuration...")
     print(f"Primary Workspace: {PRIMARY_WORKSPACE_ID}")
     print(f"Secondary Workspace: {SECONDARY_WORKSPACE_ID}")
     print(f"API Base: {FABRIC_API_BASE}")
@@ -860,3 +860,4 @@ if __name__ == "__main__":
         print(f"✓ Access to secondary workspace confirmed")
     else:
         print(f"✗ No access to secondary workspace")
+

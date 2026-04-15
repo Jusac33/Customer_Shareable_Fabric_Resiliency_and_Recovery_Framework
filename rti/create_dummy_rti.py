@@ -2,7 +2,7 @@
 RTI Dummy Data Generator
 
 Creates sample RTI artifacts (Eventhouse, KQL Database, KQL Queryset, Eventstream)
-in the PRIMARY workspace for testing BCDR sync flow.
+in the PRIMARY workspace for testing Resiliency & Recovery sync flow.
 
 Usage:
   python rti/create_dummy_rti.py
@@ -27,12 +27,12 @@ DUMMY_ARTIFACTS = [
     {
         "displayName": "RTI_Demo_Eventhouse",
         "type": "Eventhouse",
-        "description": "Demo Eventhouse for BCDR testing",
+        "description": "Demo Eventhouse for Resiliency & Recovery testing",
     },
     {
         "displayName": "RTI_Demo_KQLDatabase",
         "type": "KQLDatabase",
-        "description": "Demo KQL Database for BCDR testing",
+        "description": "Demo KQL Database for Resiliency & Recovery testing",
         # KQL Database creation requires a parent Eventhouse
         # The API auto-provisions one if creationPayload is supplied
         "creationPayload": {
@@ -43,12 +43,12 @@ DUMMY_ARTIFACTS = [
     {
         "displayName": "RTI_Demo_KQLQueryset",
         "type": "KQLQueryset",
-        "description": "Demo KQL Queryset for BCDR testing",
+        "description": "Demo KQL Queryset for Resiliency & Recovery testing",
     },
     {
         "displayName": "RTI_Demo_Eventstream",
         "type": "Eventstream",
-        "description": "Demo Eventstream for BCDR testing",
+        "description": "Demo Eventstream for Resiliency & Recovery testing",
     },
 ]
 
@@ -312,3 +312,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

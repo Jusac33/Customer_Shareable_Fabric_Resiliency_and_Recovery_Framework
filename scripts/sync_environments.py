@@ -2,7 +2,7 @@
 Sync Environments
 
 Purpose:
-  BCDR for Fabric Environments with Spark compute settings,
+  Resiliency & Recovery for Fabric Environments with Spark compute settings,
   environment variables, and library replication.
 
 Artifact Types Covered:
@@ -326,3 +326,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     exit(0 if success else 1)
+
