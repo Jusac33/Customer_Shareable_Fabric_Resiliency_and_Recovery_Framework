@@ -364,7 +364,7 @@
     </div>
 
     <div id="conn-placeholder" style="text-align:center;color:#aaa;padding:24px 0;font-size:13px;">
-        <span class="lin-spinner"></span> Loading dependency graph...
+        <span class="lin-spinner"></span> Scanning secondary definitions&hellip; this may take 30–60 seconds on first load.
     </div>
 
     <!-- Unmatched items -->
@@ -1141,7 +1141,15 @@
             const resp = await fetch(url, { signal: controller.signal });
             clearTimeout(timeoutId);
             const d = await resp.json();
-            if (d.error) { console.error(d.error); spinner.style.display = 'none'; return; }
+            if (d.error) {
+                console.error(d.error);
+                spinner.style.display = 'none';
+                if (placeholder) {
+                    placeholder.style.display = '';
+                    placeholder.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> ' + d.error + '</span>';
+                }
+                return;
+            }
 
             spinner.style.display = 'none';
             placeholder.style.display = 'none';
@@ -1184,7 +1192,10 @@
         } catch (e) {
             console.error('Connection scan error:', e);
             spinner.style.display = 'none';
-            if (placeholder) placeholder.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> Error loading graph: ' + (e.message || e) + '</span>';
+            if (placeholder) {
+                placeholder.style.display = '';
+                placeholder.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> Error loading graph: ' + (e.message || e) + '</span>';
+            }
         }
     }
 
@@ -1230,7 +1241,7 @@
         // Column 2: semantic (SemanticModel)
         // Column 3: consumers (Report, DataAgent, GraphQLApi)
         const colMap = {
-            Lakehouse: 0, SQLEndpoint: 0, Eventhouse: 0, KQLDatabase: 0,
+            Lakehouse: 0, SQLEndpoint: 0, Eventhouse: 0, KQLDatabase: 0, WorkspaceId: 0,
             Notebook: 1, DataPipeline: 1, SparkJobDefinition: 1, Environment: 1,
             Eventstream: 1, KQLQueryset: 1, MLExperiment: 1, MLModel: 1,
             Ontology: 1, GraphModel: 1,
@@ -1453,10 +1464,10 @@
                     const tk = t.target_id;
                     if (!uniqueTargets[tk]) {
                         uniqueTargets[tk] = { name: t.target_name, type: t.target_type, status: t.status, parts: [] };
-                }
-                uniqueTargets[tk].parts.push(t.part_path);
-                if (t.status === 'stale') uniqueTargets[tk].status = 'stale';
-            });
+                    }
+                    uniqueTargets[tk].parts.push(t.part_path);
+                    if (t.status === 'stale') uniqueTargets[tk].status = 'stale';
+                });
 
                 let targetsHtml = Object.values(uniqueTargets).map(t => {
                     const chipClass = t.status === 'stale' ? 'conn-chip conn-chip-stale' : 'conn-chip';

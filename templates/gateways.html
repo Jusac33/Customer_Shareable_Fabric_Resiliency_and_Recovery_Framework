@@ -110,12 +110,12 @@
 
     .gw-conn-detail { font-family: monospace; font-size: 11px; color: #555; }
 
-    .gw-Resiliency & Recovery-note {
+    .gw-bcdr-note {
         margin-top: 20px; padding: 14px 18px; border-radius: 8px;
         background: #fff8e1; border: 1px solid #ffcc02;
         font-size: 12px; color: #6d4c00; line-height: 1.6;
     }
-    .gw-Resiliency & Recovery-note i { color: #f9a825; margin-right: 4px; }
+    .gw-bcdr-note i { color: #f9a825; margin-right: 4px; }
 </style>
 
 {% endblock %}
@@ -152,7 +152,7 @@
             }
 
             grid.innerHTML = gateways.map(gw => renderGatewayCard(gw)).join('') + `
-                <div class="gw-Resiliency & Recovery-note">
+                <div class="gw-bcdr-note">
                     <i class="fas fa-exclamation-triangle"></i>
                     <strong>Resiliency & Recovery Note:</strong> During failover, artifacts in the secondary workspace
                     that depend on an on-prem gateway data source require the <strong>same gateway</strong>

@@ -6,33 +6,33 @@
 
 {% block extra_css %}
 <style>
-    .Resiliency & Recovery-header {
+    .bcdr-header {
         display: flex;
         align-items: center;
         gap: 16px;
         margin-bottom: 24px;
         flex-wrap: wrap;
     }
-    .Resiliency & Recovery-header .ws-icon {
+    .bcdr-header .ws-icon {
         width: 44px; height: 44px;
         background: #e8eaf6;
         border-radius: 10px;
         display: flex; align-items: center; justify-content: center;
         font-size: 20px; color: #3f51b5;
     }
-    .Resiliency & Recovery-header .ws-name {
+    .bcdr-header .ws-name {
         font-size: 22px; font-weight: 700; color: #1a1a2e;
     }
-    .Resiliency & Recovery-header .badges {
+    .bcdr-header .badges {
         display: flex; gap: 10px; align-items: center; margin-left: auto;
     }
-    .badge-Resiliency & Recovery {
+    .badge-bcdr {
         padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 700;
         border: 2px solid;
     }
-    .badge-Resiliency & Recovery.enabled { border-color: #4caf50; color: #2e7d32; background: #e8f5e9; }
-    .badge-Resiliency & Recovery.partial { border-color: #ff9800; color: #e65100; background: #fff3e0; }
-    .badge-Resiliency & Recovery.disabled { border-color: #f44336; color: #c62828; background: #ffebee; }
+    .badge-bcdr.enabled { border-color: #4caf50; color: #2e7d32; background: #e8f5e9; }
+    .badge-bcdr.partial { border-color: #ff9800; color: #e65100; background: #fff3e0; }
+    .badge-bcdr.disabled { border-color: #f44336; color: #c62828; background: #ffebee; }
     .btn-setup {
         padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
         background: #f5f5f5; color: #333; border: 1px solid #ddd; cursor: pointer;
@@ -198,16 +198,16 @@
 
 {% block content %}
 <!-- Resiliency & Recovery Header -->
-<div class="Resiliency & Recovery-header">
+<div class="bcdr-header">
     <div class="ws-icon"><i class="fas fa-sitemap"></i></div>
     <div class="ws-name" id="ws-name">Loading...</div>
     <span class="pair-label-tag" id="pair-label-tag" style="font-size:11px;background:#e3f2fd;color:#1565C0;padding:2px 10px;border-radius:10px;font-weight:600;display:none;"></span>
     <div class="badges">
-        <span class="badge-Resiliency & Recovery disabled" id="Resiliency & Recovery-badge">Resiliency & Recovery · 0%</span>
+        <span class="badge-bcdr disabled" id="bcdr-badge">Resiliency & Recovery · 0%</span>
         <button class="btn-setup" onclick="window.location='/setup'">
             <i class="fas fa-cog"></i> Configure
         </button>
-        <button class="btn-refresh" onclick="refreshResiliency & Recovery()" id="btn-refresh">
+        <button class="btn-refresh" onclick="refreshBcdr()" id="btn-refresh">
             <i class="fas fa-sync-alt"></i>
         </button>
     </div>
@@ -247,7 +247,7 @@
 
 {% block extra_scripts %}
 <script>
-    let Resiliency & RecoveryData = null;
+    let bcdrData = null;
     let currentModalType = null;
 
     const TYPE_ICONS = {
@@ -274,14 +274,14 @@
         return TYPE_ICONS[type] || { icon: 'fas fa-cube', cls: 'default' };
     }
 
-    document.addEventListener('DOMContentLoaded', loadResiliency & Recovery);
+    document.addEventListener('DOMContentLoaded', loadBcdr);
 
-    async function loadResiliency & Recovery() {
+    async function loadBcdr() {
         try {
             const resp = await fetch('/api/bcdr/status');
-            Resiliency & RecoveryData = await resp.json();
-            if (Resiliency & RecoveryData.error) { console.error(Resiliency & RecoveryData.error); return; }
-            renderResiliency & Recovery();
+            bcdrData = await resp.json();
+            if (bcdrData.error) { console.error(bcdrData.error); return; }
+            renderBcdr();
             // Show active pair label
             try {
                 const pr = await fetch('/api/workspace-pairs');
@@ -296,13 +296,13 @@
         } catch (e) { console.error(e); }
     }
 
-    function renderResiliency & Recovery() {
-        const d = Resiliency & RecoveryData;
+    function renderBcdr() {
+        const d = bcdrData;
         // Header
         document.getElementById('ws-name').textContent = d.workspace_name;
-        const badge = document.getElementById('Resiliency & Recovery-badge');
+        const badge = document.getElementById('bcdr-badge');
         badge.textContent = `Resiliency & Recovery Enabled · ${d.overall_percentage}%`;
-        badge.className = 'badge-Resiliency & Recovery ' + (d.overall_percentage === 100 ? 'enabled' : d.overall_percentage > 0 ? 'partial' : 'disabled');
+        badge.className = 'badge-bcdr ' + (d.overall_percentage === 100 ? 'enabled' : d.overall_percentage > 0 ? 'partial' : 'disabled');
 
         // Secondary info
         const secInfo = document.getElementById('secondary-info');
@@ -370,7 +370,7 @@
                 <div class="type-card ${stateClass}" onclick="openTypeDetail('${card.type}')">
                     <div class="type-card-header">
                         <div class="type-icon ${icon.cls}"><i class="${icon.icon}"></i></div>
-                        ${card.supported && Resiliency & RecoveryData.has_secondary ? `
+                        ${card.supported && bcdrData.has_secondary ? `
                             <div class="sync-dropdown-wrap">
                                 <button class="btn-sync ${btnClass}" onclick="event.stopPropagation(); toggleSyncMenu(this)">
                                     Sync <i class="fas fa-caret-down" style="margin-left:3px;font-size:10px;"></i>
@@ -404,7 +404,7 @@
 
     function openTypeDetail(type) {
         currentModalType = type;
-        const card = Resiliency & RecoveryData.type_cards.find(c => c.type === type);
+        const card = bcdrData.type_cards.find(c => c.type === type);
         if (!card) return;
 
         document.getElementById('modal-title').textContent = `${type} — ${card.primary_count} items`;
@@ -422,7 +422,7 @@
                     ${isMirrored ?
                         '<span class="item-status mirrored">Mirrored</span>' :
                         `<span class="item-status missing">Missing</span>
-                         ${Resiliency & RecoveryData.has_secondary && card.supported ?
+                         ${bcdrData.has_secondary && card.supported ?
                             `<button class="btn-replicate-item" onclick="replicateSingleItem('${item.id}', '${escapeHtml(item.name)}', '${type}', this)">
                                 Replicate
                             </button>` : ''}`
@@ -436,7 +436,7 @@
         document.getElementById('modal-summary').textContent = `${card.mirrored_count} mirrored, ${missing} missing`;
 
         const btnAll = document.getElementById('btn-replicate-all');
-        btnAll.style.display = (missing > 0 && Resiliency & RecoveryData.has_secondary && card.supported) ? 'inline-flex' : 'none';
+        btnAll.style.display = (missing > 0 && bcdrData.has_secondary && card.supported) ? 'inline-flex' : 'none';
 
         document.getElementById('item-modal').classList.add('active');
     }
@@ -466,7 +466,7 @@
         const wrap = el.closest('.sync-dropdown-wrap');
         const btn = wrap.querySelector('.btn-sync');
 
-        if (!Resiliency & RecoveryData.has_secondary) {
+        if (!bcdrData.has_secondary) {
             alert('Please configure a secondary workspace first.');
             return;
         }
@@ -517,7 +517,7 @@
                                 }
                                 alert(msg);
                             }
-                            refreshResiliency & Recovery();
+                            refreshBcdr();
                         }
                     } catch (e) { /* keep polling */ }
                 }, 2000);
@@ -540,7 +540,7 @@
                 alert('Error: ' + data.error);
             } else {
                 alert(data.message || 'Sync initiated successfully');
-                refreshResiliency & Recovery();
+                refreshBcdr();
             }
         } catch (e) {
             alert('Error: ' + e.message);
@@ -551,7 +551,7 @@
     }
 
     async function replicateType(type, btn) {
-        if (!Resiliency & RecoveryData.has_secondary) {
+        if (!bcdrData.has_secondary) {
             alert('Please configure a secondary workspace first.');
             return;
         }
@@ -569,7 +569,7 @@
                 alert('Error: ' + data.error);
             } else {
                 alert(data.message);
-                refreshResiliency & Recovery();
+                refreshBcdr();
             }
         } catch (e) {
             alert('Error: ' + e.message);
@@ -595,7 +595,7 @@
                 btn.innerHTML = '<i class="fas fa-check"></i> Done';
                 btn.style.borderColor = '#4caf50';
                 btn.style.color = '#4caf50';
-                refreshResiliency & Recovery();
+                refreshBcdr();
             }
         } catch (e) {
             alert('Error: ' + e.message);
@@ -621,19 +621,19 @@
             } else {
                 alert(data.message);
                 closeModal();
-                refreshResiliency & Recovery();
+                refreshBcdr();
             }
         } catch (e) { alert('Error: ' + e.message); }
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-copy"></i> Replicate All Missing';
     }
 
-    async function refreshResiliency & Recovery() {
+    async function refreshBcdr() {
         const btn = document.getElementById('btn-refresh');
         btn.classList.add('spinning');
         // Clear server cache by calling refresh
         await fetch('/api/refresh', { method: 'POST' });
-        await loadResiliency & Recovery();
+        await loadBcdr();
         btn.classList.remove('spinning');
     }
 
