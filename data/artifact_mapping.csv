@@ -1,9 +1,3 @@
 primary_artifact_id,secondary_artifact_id,artifact_type,primary_name,secondary_name
-your-primary-bronze-lakehouse-id,your-secondary-bronze-lakehouse-id,Lakehouse,bronze_lakehouse,bronze_lakehouse
-your-primary-silver-lakehouse-id,your-secondary-silver-lakehouse-id,Lakehouse,silver_lakehouse,silver_lakehouse
-your-primary-gold-lakehouse-id,your-secondary-gold-lakehouse-id,Lakehouse,gold_lakehouse,gold_lakehouse
-your-primary-semanticmodel-id,your-secondary-semanticmodel-id,SemanticModel,YourSemanticModelName,YourSemanticModelName
-your-primary-report-id,your-secondary-report-id,Report,YourReportName,YourReportName
-your-primary-mlmodel-id,your-secondary-mlmodel-id,MLModel,your_ml_model_name,your_ml_model_name
-your-primary-mlexperiment-id,your-secondary-mlexperiment-id,MLExperiment,your_experiment_name,your_experiment_name
-your-primary-dataagent-id,your-secondary-dataagent-id,DataAgent,Your Data Agent Name,Your Data Agent Name
+02183ec0-9faa-4ca5-9253-29943a4bb315,584114b7-aa21-49dd-ab1f-df1d2f8fafee,Report,CrestShield-Claim-report,CrestShield-Claim-report
+0db7b4aa-1edf-4f34-8b42-a40003859aeb,605c6999-6e51-4eb4-8445-27de609ce38d,Notebook,00_Setup_Environment,00_Setup_Environment

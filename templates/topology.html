@@ -795,7 +795,12 @@
             setDot('topo-secondary-dot', s.status);
 
             const lag = d.replication_lag;
-            const lagDisplay = lag != null ? (lag < 1 ? '< 1 min' : Math.round(lag) + ' min') : 'Never synced';
+            let lagDisplay;
+            if (lag == null) { lagDisplay = 'Never synced'; }
+            else if (lag < 1) { lagDisplay = '< 1 min'; }
+            else if (lag < 120) { lagDisplay = Math.round(lag) + ' min'; }
+            else if (lag < 2880) { lagDisplay = (lag / 60).toFixed(1) + ' hrs'; }
+            else { lagDisplay = (lag / 1440).toFixed(1) + ' days'; }
             const lagColor = lag == null ? '#c62828' : (lag <= 15 ? '#2e7d32' : (lag <= 60 ? '#e65100' : '#c62828'));
             document.getElementById('topo-lag').textContent = 'Lag: ' + lagDisplay;
             document.getElementById('topo-lag').style.borderColor = lagColor;

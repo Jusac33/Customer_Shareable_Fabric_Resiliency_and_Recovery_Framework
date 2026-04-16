@@ -634,6 +634,84 @@ def _get_sql_endpoints(workspace_id: str) -> Dict[str, Dict]:
     return endpoints
 
 
+def _build_dynamic_mappings(p_id: str, s_id: str) -> Dict[str, Any]:
+    """Build artifact pairs and reference mappings dynamically from live workspace items.
+
+    Matches primary ↔ secondary items by (displayName, type).
+    Returns {
+        "pairs": [...],          # artifact pairs with live existence status
+        "ref_pairs": [...],      # reference mapping entries
+        "primary_to_secondary": {...},  # id→id map
+        "secondary_to_primary": {...},  # id→id map
+        "unmatched": [...],      # primary items not in secondary
+        "p_items": [...],        # filtered primary items
+        "s_items": [...],        # filtered secondary items
+    }
+    """
+    p_items = _filter_business_items(get_workspace_items(p_id))
+    s_items = _filter_business_items(get_workspace_items(s_id))
+
+    p_by_name: Dict[tuple, Dict] = {}
+    for i in p_items:
+        p_by_name[(i.get("type", ""), i["displayName"])] = i
+
+    s_by_name: Dict[tuple, Dict] = {}
+    for i in s_items:
+        s_by_name[(i.get("type", ""), i["displayName"])] = i
+
+    # Build pairs and id maps from live matches
+    pairs = []
+    primary_to_secondary = {p_id: s_id}  # always map workspace IDs
+    secondary_to_primary = {s_id: p_id}
+
+    for key, pi in p_by_name.items():
+        si = s_by_name.get(key)
+        pid = pi["id"]
+        sid = si["id"] if si else ""
+        pairs.append({
+            "name": pi["displayName"],
+            "type": pi.get("type", "?"),
+            "primary_id": pid,
+            "secondary_id": sid,
+            "primary_exists": True,
+            "secondary_exists": si is not None,
+        })
+        if si:
+            primary_to_secondary[pid] = sid
+            secondary_to_primary[sid] = pid
+
+    # Reference mapping: workspace IDs + all matched pairs
+    ref_pairs = [{"reference_type": "WorkspaceId", "primary_ref": p_id, "secondary_ref": s_id}]
+    for p in pairs:
+        if p["secondary_exists"]:
+            ref_pairs.append({
+                "reference_type": p["type"],
+                "primary_ref": p["primary_id"],
+                "secondary_ref": p["secondary_id"],
+            })
+
+    # Unmatched: primary items not in secondary
+    unmatched = []
+    for pi in p_items:
+        key = (pi.get("type", ""), pi["displayName"])
+        if key not in s_by_name:
+            unmatched.append({
+                "name": pi["displayName"],
+                "type": pi.get("type", "?"),
+                "primary_id": pi["id"],
+            })
+
+    return {
+        "pairs": pairs,
+        "ref_pairs": ref_pairs,
+        "primary_to_secondary": primary_to_secondary,
+        "secondary_to_primary": secondary_to_primary,
+        "unmatched": unmatched,
+        "p_items": p_items,
+        "s_items": s_items,
+    }
+
+
 def _update_artifact_csv(item_name: str, item_type: str,
                          primary_id: str, secondary_id: str) -> None:
     """Update or add an entry in artifact_mapping.csv."""
@@ -2232,6 +2310,12 @@ def _compute_replication_lag(s_id: str) -> Dict[str, Any]:
       last_sync_ts — ISO timestamp of the last known sync event
       artifact_drift — number of primary items missing in secondary
     """
+    # Cache for 30 seconds to avoid repeated expensive API calls
+    cache_key = f"repl_lag:{s_id}"
+    now_t = time.time()
+    if cache_key in _cache and now_t < _cache_ttl.get(cache_key, 0):
+        return _cache[cache_key]
+
     now = datetime.now()
     best_ts: Optional[datetime] = None
     source = "never"
@@ -2280,36 +2364,43 @@ def _compute_replication_lag(s_id: str) -> Dict[str, Any]:
         except Exception:
             pass
 
-    # 3) Check notebook job history via Fabric API (last completed run)
+    # 3) Check notebook job history via Fabric API (all notebooks, both workspaces)
+    #    Time-budgeted: stop after 12s total to avoid blocking the topology API.
     try:
-        if s_id and is_authenticated():
-            s_items = get_workspace_items(s_id)
-            nb = next(
-                (i for i in s_items
-                 if i.get("displayName") == "BCDR_Data_Replication" and i.get("type") == "Notebook"),
-                None,
-            )
-            if nb:
-                nb_id = nb["id"]
-                token = _ensure_token()
-                headers = {"Authorization": f"Bearer {token}"}
-                # Get recent job instances
-                url = f"{FABRIC_API_BASE}/workspaces/{s_id}/items/{nb_id}/jobs/instances"
-                resp = requests.get(url, headers=headers, timeout=15)
-                if resp.status_code == 200:
-                    instances = resp.json().get("value", [])
-                    for inst in instances:
-                        status = inst.get("status", "")
-                        end_time = inst.get("endTimeUtc") or inst.get("endTime")
-                        if status.lower() in ("completed", "succeeded") and end_time:
-                            try:
-                                ts = datetime.fromisoformat(end_time.replace("Z", "+00:00")).replace(tzinfo=None)
-                                if best_ts is None or ts > best_ts:
-                                    best_ts = ts
-                                    source = "notebook_job"
-                            except Exception:
-                                pass
-                            break  # Most recent completed job is first
+        if is_authenticated():
+            token = _ensure_token()
+            headers = {"Authorization": f"Bearer {token}"}
+            nb_scan_start = time.time()
+            NB_TIME_BUDGET = 12  # seconds
+            ws_ids_to_check = [w for w in [_ws_id("primary"), s_id] if w]
+            for ws_id in ws_ids_to_check:
+                if time.time() - nb_scan_start > NB_TIME_BUDGET:
+                    break
+                ws_items = get_workspace_items(ws_id)
+                notebooks = [i for i in ws_items if i.get("type") == "Notebook"]
+                for nb in notebooks:
+                    if time.time() - nb_scan_start > NB_TIME_BUDGET:
+                        break
+                    try:
+                        nb_id = nb["id"]
+                        url = f"{FABRIC_API_BASE}/workspaces/{ws_id}/items/{nb_id}/jobs/instances"
+                        resp = requests.get(url, headers=headers, timeout=5)
+                        if resp.status_code == 200:
+                            for inst in resp.json().get("value", []):
+                                status = inst.get("status", "")
+                                end_time = inst.get("endTimeUtc") or inst.get("endTime")
+                                if status.lower() in ("completed", "succeeded") and end_time:
+                                    try:
+                                        ts = datetime.fromisoformat(end_time.replace("Z", "+00:00")).replace(tzinfo=None)
+                                        if best_ts is None or ts > best_ts:
+                                            best_ts = ts
+                                            source = "notebook_job"
+                                    except Exception:
+                                        pass
+                                    break  # Most recent completed per notebook
+                    except Exception:
+                        continue
+            logger.debug(f"Lag: notebook scan took {time.time() - nb_scan_start:.1f}s, checked {len(ws_ids_to_check)} workspaces")
     except Exception as ex:
         logger.debug(f"Lag: notebook job query failed: {ex}")
 
@@ -2333,12 +2424,15 @@ def _compute_replication_lag(s_id: str) -> Dict[str, Any]:
     else:
         lag_minutes = None  # Never synced
 
-    return {
+    result = {
         "lag_minutes": lag_minutes,
         "lag_source": source,
         "last_sync_ts": best_ts.isoformat() if best_ts else None,
         "artifact_drift": artifact_drift,
     }
+    _cache[cache_key] = result
+    _cache_ttl[cache_key] = time.time() + 30  # 30-second cache
+    return result
 
 
 def _get_workspace_region(workspace_id: str) -> Dict[str, str]:
@@ -3677,74 +3771,25 @@ def api_topology():
 def api_lineage():
     """Return lineage pairs with live health checks.
 
-    Reads reference_mapping.csv and artifact_mapping.csv, cross-references
-    live workspace items, and optionally deep-inspects definitions to detect
-    stale primary IDs that should have been remapped.
+    Dynamically matches primary ↔ secondary items by name+type,
+    and optionally deep-inspects definitions to detect stale primary IDs.
     """
     if not is_authenticated():
         return jsonify({"error": "Not authenticated"}), 401
     try:
-        import csv, base64 as b64
+        import base64 as b64
 
         p_id = _ws_id("primary")
         s_id = _ws_id("secondary")
         if not p_id or not s_id:
             return jsonify({"error": "No workspace pair configured"}), 400
 
-        # Load live items
-        p_items = _filter_business_items(get_workspace_items(p_id))
-        s_items = _filter_business_items(get_workspace_items(s_id))
-        p_by_id = {i["id"]: i for i in p_items}
-        s_by_id = {i["id"]: i for i in s_items}
-        p_by_name = {(i.get("type", ""), i["displayName"]): i for i in p_items}
-        s_by_name = {(i.get("type", ""), i["displayName"]): i for i in s_items}
-
-        # Load artifact mapping CSV
-        pairs = []
-        artifact_csv = os.path.join("data", "artifact_mapping.csv")
-        if os.path.exists(artifact_csv):
-            with open(artifact_csv, "r", newline="") as f:
-                for row in csv.DictReader(f):
-                    pid = row.get("primary_artifact_id", "").strip()
-                    sid = row.get("secondary_artifact_id", "").strip()
-                    atype = row.get("artifact_type", "").strip()
-                    pname = row.get("primary_name", "").strip()
-                    p_live = p_by_id.get(pid)
-                    s_live = s_by_id.get(sid)
-                    pairs.append({
-                        "name": pname or (p_live or {}).get("displayName", "?"),
-                        "type": atype or (p_live or {}).get("type", "?"),
-                        "primary_id": pid,
-                        "secondary_id": sid,
-                        "primary_exists": p_live is not None,
-                        "secondary_exists": s_live is not None,
-                    })
-
-        # Load reference mapping CSV (for workspace-level refs like WorkspaceId, SQLEndpoints)
-        ref_pairs = []
-        ref_csv = os.path.join("data", "reference_mapping.csv")
-        if os.path.exists(ref_csv):
-            with open(ref_csv, "r", newline="") as f:
-                for row in csv.DictReader(f):
-                    ref_type = row.get("reference_type", "").strip()
-                    pref = row.get("primary_reference", "").strip()
-                    sref = row.get("secondary_reference", "").strip()
-                    ref_pairs.append({
-                        "reference_type": ref_type,
-                        "primary_ref": pref,
-                        "secondary_ref": sref,
-                    })
-
-        # Detect unmatched items (in primary but not in secondary by name)
-        unmatched = []
-        for pi in p_items:
-            key = (pi.get("type", ""), pi["displayName"])
-            if key not in s_by_name:
-                unmatched.append({
-                    "name": pi["displayName"],
-                    "type": pi.get("type", "?"),
-                    "primary_id": pi["id"],
-                })
+        # Build mappings dynamically from live workspace items
+        m = _build_dynamic_mappings(p_id, s_id)
+        pairs = m["pairs"]
+        ref_pairs = m["ref_pairs"]
+        unmatched = m["unmatched"]
+        s_items = m["s_items"]
 
         # Deep inspection: check if secondary definitions still contain primary IDs
         deep_check = request.args.get("deep", "false").lower() == "true"
@@ -3869,29 +3914,10 @@ def api_lineage_connections():
         for i in s_items:
             id_lookup[i["id"]] = {"name": i["displayName"], "type": i.get("type", "?"), "workspace": "secondary"}
 
-        # Load reference mapping to know primary↔secondary pairs
-        ref_csv = os.path.join("data", "reference_mapping.csv")
-        primary_to_secondary = {}
-        secondary_to_primary = {}
-        if os.path.exists(ref_csv):
-            with open(ref_csv, "r", newline="") as f:
-                for row in csv.DictReader(f):
-                    pref = row.get("primary_reference", "").strip()
-                    sref = row.get("secondary_reference", "").strip()
-                    if pref and sref:
-                        primary_to_secondary[pref] = sref
-                        secondary_to_primary[sref] = pref
-
-        # Also load artifact mapping
-        art_csv = os.path.join("data", "artifact_mapping.csv")
-        if os.path.exists(art_csv):
-            with open(art_csv, "r", newline="") as f:
-                for row in csv.DictReader(f):
-                    pid = row.get("primary_artifact_id", "").strip()
-                    sid = row.get("secondary_artifact_id", "").strip()
-                    if pid and sid:
-                        primary_to_secondary[pid] = sid
-                        secondary_to_primary[sid] = pid
+        # Build primary↔secondary ID mappings dynamically from live items
+        m = _build_dynamic_mappings(p_id, s_id)
+        primary_to_secondary = m["primary_to_secondary"]
+        secondary_to_primary = m["secondary_to_primary"]
 
         # All known IDs (both primary and secondary) for scanning
         all_known_ids = set(id_lookup.keys())
@@ -7588,6 +7614,8 @@ def _load_autosync():
             with open(_AUTOSYNC_FILE, "r") as f:
                 saved = json.load(f)
             _autosync_state["interval_seconds"] = saved.get("interval_seconds", 60)
+            _autosync_state["last_check"] = saved.get("last_check")
+            _autosync_state["last_status"] = saved.get("last_status")
             if saved.get("enabled"):
                 _start_autosync(_autosync_state["interval_seconds"])
     except Exception:
@@ -7600,6 +7628,8 @@ def _save_autosync():
             json.dump({
                 "enabled": _autosync_state["enabled"],
                 "interval_seconds": _autosync_state["interval_seconds"],
+                "last_check": _autosync_state.get("last_check"),
+                "last_status": _autosync_state.get("last_status"),
             }, f)
     except Exception:
         pass
@@ -7762,6 +7792,7 @@ def _autosync_tick():
         _autosync_state["last_status"] = f"Error: {e}"
         logger.exception("Auto-sync error")
 
+    _save_autosync()
     _schedule_next_autosync()
 
 
@@ -7844,6 +7875,8 @@ def _load_schedule():
             with open(_SCHEDULE_FILE, "r") as f:
                 saved = json.load(f)
             _schedule_state["interval_minutes"] = saved.get("interval_minutes", 15)
+            _schedule_state["last_run"] = saved.get("last_run")
+            _schedule_state["last_status"] = saved.get("last_status")
             if saved.get("enabled"):
                 _start_schedule(saved["interval_minutes"])
     except Exception:
@@ -7855,6 +7888,8 @@ def _save_schedule():
             json.dump({
                 "enabled": _schedule_state["enabled"],
                 "interval_minutes": _schedule_state["interval_minutes"],
+                "last_run": _schedule_state.get("last_run"),
+                "last_status": _schedule_state.get("last_status"),
             }, f)
     except Exception:
         pass
@@ -7879,6 +7914,7 @@ def _scheduled_sync_tick():
     except Exception as e:
         _schedule_state["last_status"] = f"Exception: {e}"
         logger.exception("Scheduled sync exception")
+    _save_schedule()
     # Schedule next run
     if _schedule_state["enabled"]:
         interval = _schedule_state["interval_minutes"] * 60
