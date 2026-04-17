@@ -1,5 +1,1 @@
 primary_connection_name,secondary_connection_name,connection_type
-primary_sql_db,secondary_sql_db,SqlServer
-primary_adls_connection,secondary_adls_connection,AzureDataLakeStorage
-primary_eventhub,secondary_eventhub,EventHub
-primary_sharepoint,secondary_sharepoint,SharePoint

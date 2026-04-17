@@ -3583,7 +3583,29 @@ def api_workspaces_select():
 
     _workspace_state["active_pair"] = pair_id
     _save_workspace_state()
+    # New / updated pair — bust every cached view so topology, lineage,
+    # integrity etc. refetch against the newly attached workspaces.
+    _invalidate_all_caches()
     return jsonify({"status": "ok", "pair_id": pair_id})
+
+
+def _invalidate_all_caches() -> None:
+    """Clear every in-memory cache that is keyed off the active workspace pair.
+
+    Called whenever the active pair changes (switched, added, updated, deleted)
+    so the UI immediately reflects the new workspaces instead of serving stale
+    data from a previous pair.
+    """
+    global _lineage_conn_cache, _lineage_conn_ts, _integrity_cache, _integrity_cache_ts
+    try:
+        _cache.clear()
+        _cache_ttl.clear()
+    except Exception:
+        pass
+    _lineage_conn_cache = {}
+    _lineage_conn_ts = 0.0
+    _integrity_cache = {}
+    _integrity_cache_ts = 0.0
 
 
 @app.route('/api/workspace-pairs', methods=['GET'])
@@ -3644,9 +3666,8 @@ def api_workspace_pairs_set_active():
         return jsonify({"error": "Pair not found"}), 404
     _workspace_state["active_pair"] = pair_id
     _save_workspace_state()
-    # Clear cache so next request fetches fresh data for new pair
-    _cache.clear()
-    _cache_ttl.clear()
+    # Clear every cache so next request fetches fresh data for the new pair
+    _invalidate_all_caches()
     return jsonify({"status": "ok", "active_pair": pair_id})
 
 
@@ -3664,8 +3685,7 @@ def api_workspace_pairs_delete(pair_id):
     if _workspace_state.get("active_pair") == pair_id:
         _workspace_state["active_pair"] = new_pairs[0]["id"] if new_pairs else None
     _save_workspace_state()
-    _cache.clear()
-    _cache_ttl.clear()
+    _invalidate_all_caches()
     return jsonify({"status": "ok"})
 
 
@@ -4210,13 +4230,7 @@ def api_sync_plan():
 
 @app.route('/api/refresh', methods=['POST'])
 def api_refresh():
-    global _lineage_conn_cache, _lineage_conn_ts, _integrity_cache, _integrity_cache_ts
-    _cache.clear()
-    _cache_ttl.clear()
-    _lineage_conn_cache = {}
-    _lineage_conn_ts = 0.0
-    _integrity_cache = {}
-    _integrity_cache_ts = 0.0
+    _invalidate_all_caches()
     return jsonify({'status': 'ok'})
 
 

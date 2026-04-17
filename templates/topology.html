@@ -955,9 +955,28 @@
             const resp = await fetch(url);
             const d = await resp.json();
             if (d.error) {
-                badge.textContent = 'ERROR';
-                badge.className = 'topo-status-badge error';
-                console.error(d.error);
+                // No workspace pair configured is a setup state, not an error.
+                const msg = (d.error || '').toLowerCase();
+                if (msg.includes('no workspace pair')) {
+                    badge.textContent = 'NO WORKSPACE PAIR SELECTED';
+                    badge.className = 'topo-status-badge warning';
+                    const tbody = document.getElementById('lineage-body');
+                    if (tbody) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:20px;">'
+                            + 'No primary/secondary workspace pair is configured. '
+                            + '<a href="/setup" style="color:#1976d2;font-weight:600;">Go to Setup &raquo;</a> '
+                            + 'to attach a workspace pair — topology will update automatically.'
+                            + '</td></tr>';
+                    }
+                    const refBody = document.getElementById('ref-mapping-body');
+                    if (refBody) refBody.innerHTML = '';
+                    ['lin-total','lin-healthy','lin-unmatched','lin-stale']
+                        .forEach(id => { const el=document.getElementById(id); if(el) el.textContent='0'; });
+                } else {
+                    badge.textContent = 'ERROR';
+                    badge.className = 'topo-status-badge error';
+                    console.error(d.error);
+                }
                 return;
             }
             _lineageData = d;
