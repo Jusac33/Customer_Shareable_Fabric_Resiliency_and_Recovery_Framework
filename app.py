@@ -2114,15 +2114,21 @@ def deploy_sync_artifacts() -> Dict[str, Any]:
     return result
 
 
-def run_sync_notebook() -> Dict[str, Any]:
+def run_sync_notebook(pair_id: Optional[str] = None) -> Dict[str, Any]:
     """Trigger per-lakehouse sync notebooks as separate Spark jobs.
 
     Each BCDR_Sync_{name} notebook gets its own Spark cluster and session,
     ensuring the default_lakehouse is correctly scoped. This prevents
     cross-lakehouse contamination that occurs when a single notebook
     writes to multiple lakehouses in schema-enabled mode.
+
+    If ``pair_id`` is provided, the notebooks are triggered in that
+    specific pair's secondary workspace; otherwise the active pair is used.
     """
-    s_id = _ws_id("secondary")
+    if pair_id:
+        s_id = _ws_id_for_pair(pair_id, "secondary")
+    else:
+        s_id = _ws_id("secondary")
     if not s_id:
         return {"error": "Secondary workspace not configured"}
 
@@ -2320,16 +2326,22 @@ def _compute_replication_lag(s_id: str) -> Dict[str, Any]:
     best_ts: Optional[datetime] = None
     source = "never"
 
-    # 1) Check schedule state
-    last_run = _schedule_state.get("last_run")
-    if last_run and _schedule_state.get("last_status", "").startswith("Triggered"):
-        try:
-            ts = datetime.fromisoformat(last_run)
-            if best_ts is None or ts > best_ts:
-                best_ts = ts
-                source = "schedule"
-        except Exception:
-            pass
+    # 1) Check schedule state for the pair this secondary belongs to
+    pair_for_secondary = next(
+        (p for p in _workspace_state.get("pairs", []) if p.get("secondary_id") == s_id),
+        None,
+    )
+    sched_entry = _schedule_pairs.get(pair_for_secondary["id"]) if pair_for_secondary else None
+    if sched_entry:
+        last_run = sched_entry.get("last_run")
+        if last_run and (sched_entry.get("last_status") or "").startswith("Triggered"):
+            try:
+                ts = datetime.fromisoformat(last_run)
+                if best_ts is None or ts > best_ts:
+                    best_ts = ts
+                    source = "schedule"
+            except Exception:
+                pass
 
     # 2) Check auto-sync state
     last_check = _autosync_state.get("last_check")
@@ -3684,6 +3696,11 @@ def api_workspace_pairs_delete(pair_id):
     # If active pair was deleted, switch to first remaining
     if _workspace_state.get("active_pair") == pair_id:
         _workspace_state["active_pair"] = new_pairs[0]["id"] if new_pairs else None
+    # Stop any running scheduled-sync timer for the deleted pair
+    if pair_id in _schedule_pairs:
+        _stop_schedule(pair_id)
+        _schedule_pairs.pop(pair_id, None)
+        _save_schedule()
     _save_workspace_state()
     _invalidate_all_caches()
     return jsonify({"status": "ok"})
@@ -7870,130 +7887,220 @@ def api_autosync_set():
 # ============================================================================
 # SCHEDULED SYNC
 # ============================================================================
+#
+# Per-pair scheduled sync. Each workspace pair has its own independent
+# enabled flag, interval, timer, and run history. State is stored in
+# ``.sync_schedule.json`` as { "pairs": { pair_id: {...} } }.
 
-_schedule_state: Dict[str, Any] = {
-    "enabled": False,
-    "interval_minutes": 15,
-    "timer": None,
-    "last_run": None,
-    "last_status": None,
-    "next_run": None,
-    "run_count": 0,
-}
+_schedule_lock = threading.Lock()
+_schedule_pairs: Dict[str, Dict[str, Any]] = {}
 _SCHEDULE_FILE = os.path.join(os.path.dirname(__file__), ".sync_schedule.json")
+
+
+def _new_schedule_entry(interval_minutes: int = 15) -> Dict[str, Any]:
+    return {
+        "enabled": False,
+        "interval_minutes": interval_minutes,
+        "timer": None,
+        "last_run": None,
+        "last_status": None,
+        "next_run": None,
+        "run_count": 0,
+    }
+
+
+def _get_schedule_entry(pair_id: str) -> Dict[str, Any]:
+    """Return the schedule state dict for ``pair_id`` (creating it if missing)."""
+    with _schedule_lock:
+        entry = _schedule_pairs.get(pair_id)
+        if entry is None:
+            entry = _new_schedule_entry()
+            _schedule_pairs[pair_id] = entry
+        return entry
 
 
 def _load_schedule():
     try:
-        if os.path.exists(_SCHEDULE_FILE):
-            with open(_SCHEDULE_FILE, "r") as f:
-                saved = json.load(f)
-            _schedule_state["interval_minutes"] = saved.get("interval_minutes", 15)
-            _schedule_state["last_run"] = saved.get("last_run")
-            _schedule_state["last_status"] = saved.get("last_status")
-            if saved.get("enabled"):
-                _start_schedule(saved["interval_minutes"])
+        if not os.path.exists(_SCHEDULE_FILE):
+            return
+        with open(_SCHEDULE_FILE, "r") as f:
+            saved = json.load(f)
+
+        # New per-pair format: { "pairs": { pair_id: {...} } }
+        # Old (legacy) format: flat { enabled, interval_minutes, ... }
+        if isinstance(saved, dict) and "pairs" in saved and isinstance(saved["pairs"], dict):
+            pairs_saved = saved["pairs"]
+        else:
+            # Legacy migration — apply to the currently active pair only.
+            active = _active_pair()
+            if not active:
+                return
+            pairs_saved = {active["id"]: saved}
+
+        for pair_id, data in pairs_saved.items():
+            entry = _get_schedule_entry(pair_id)
+            entry["interval_minutes"] = int(data.get("interval_minutes", 15))
+            entry["last_run"] = data.get("last_run")
+            entry["last_status"] = data.get("last_status")
+            entry["run_count"] = int(data.get("run_count", 0))
+            if data.get("enabled"):
+                _start_schedule(pair_id, entry["interval_minutes"])
     except Exception:
-        pass
+        logger.exception("Failed to load scheduled-sync state")
+
 
 def _save_schedule():
     try:
+        with _schedule_lock:
+            payload = {
+                "pairs": {
+                    pid: {
+                        "enabled": e["enabled"],
+                        "interval_minutes": e["interval_minutes"],
+                        "last_run": e.get("last_run"),
+                        "last_status": e.get("last_status"),
+                        "run_count": e.get("run_count", 0),
+                    }
+                    for pid, e in _schedule_pairs.items()
+                }
+            }
         with open(_SCHEDULE_FILE, "w") as f:
-            json.dump({
-                "enabled": _schedule_state["enabled"],
-                "interval_minutes": _schedule_state["interval_minutes"],
-                "last_run": _schedule_state.get("last_run"),
-                "last_status": _schedule_state.get("last_status"),
-            }, f)
+            json.dump(payload, f)
     except Exception:
         pass
 
 
-def _scheduled_sync_tick():
-    """Background timer callback — triggers the sync notebook."""
-    if not _schedule_state["enabled"]:
+def _scheduled_sync_tick(pair_id: str):
+    """Background timer callback — triggers the sync notebook for a single pair."""
+    entry = _schedule_pairs.get(pair_id)
+    if not entry or not entry["enabled"]:
         return
     now = datetime.now()
-    _schedule_state["last_run"] = now.isoformat()
-    _schedule_state["run_count"] += 1
-    logger.info(f"Scheduled sync #{_schedule_state['run_count']} starting...")
+    entry["last_run"] = now.isoformat()
+    entry["run_count"] += 1
+    pair = _get_pair(pair_id)
+    label = (pair or {}).get("label", pair_id)
+    logger.info(f"Scheduled sync #{entry['run_count']} for pair '{label}' starting...")
     try:
-        result = run_sync_notebook()
+        result = run_sync_notebook(pair_id=pair_id)
         if "error" in result:
-            _schedule_state["last_status"] = f"Error: {result['error']}"
-            logger.warning(f"Scheduled sync failed: {result['error']}")
+            entry["last_status"] = f"Error: {result['error']}"
+            logger.warning(f"Scheduled sync failed for pair '{label}': {result['error']}")
         else:
-            _schedule_state["last_status"] = "Triggered OK"
-            logger.info(f"Scheduled sync triggered successfully")
+            entry["last_status"] = "Triggered OK"
+            logger.info(f"Scheduled sync triggered successfully for pair '{label}'")
     except Exception as e:
-        _schedule_state["last_status"] = f"Exception: {e}"
-        logger.exception("Scheduled sync exception")
+        entry["last_status"] = f"Exception: {e}"
+        logger.exception(f"Scheduled sync exception for pair '{label}'")
     _save_schedule()
     # Schedule next run
-    if _schedule_state["enabled"]:
-        interval = _schedule_state["interval_minutes"] * 60
-        _schedule_state["next_run"] = (datetime.now() + timedelta(seconds=interval)).isoformat()
-        t = threading.Timer(interval, _scheduled_sync_tick)
+    if entry["enabled"]:
+        interval = entry["interval_minutes"] * 60
+        entry["next_run"] = (datetime.now() + timedelta(seconds=interval)).isoformat()
+        t = threading.Timer(interval, _scheduled_sync_tick, args=(pair_id,))
         t.daemon = True
         t.start()
-        _schedule_state["timer"] = t
+        entry["timer"] = t
 
 
-def _start_schedule(interval_minutes: int):
-    """Start the scheduled sync with the given interval."""
-    _stop_schedule()
-    _schedule_state["enabled"] = True
-    _schedule_state["interval_minutes"] = interval_minutes
+def _start_schedule(pair_id: str, interval_minutes: int):
+    """Start the scheduled sync for a specific pair with the given interval."""
+    _stop_schedule(pair_id)
+    entry = _get_schedule_entry(pair_id)
+    entry["enabled"] = True
+    entry["interval_minutes"] = interval_minutes
     interval = interval_minutes * 60
-    _schedule_state["next_run"] = (datetime.now() + timedelta(seconds=interval)).isoformat()
-    t = threading.Timer(interval, _scheduled_sync_tick)
+    entry["next_run"] = (datetime.now() + timedelta(seconds=interval)).isoformat()
+    t = threading.Timer(interval, _scheduled_sync_tick, args=(pair_id,))
     t.daemon = True
     t.start()
-    _schedule_state["timer"] = t
+    entry["timer"] = t
     _save_schedule()
-    logger.info(f"Sync schedule started: every {interval_minutes} minutes")
+    pair = _get_pair(pair_id)
+    label = (pair or {}).get("label", pair_id)
+    logger.info(f"Sync schedule started for pair '{label}': every {interval_minutes} minutes")
 
 
-def _stop_schedule():
-    """Stop the scheduled sync."""
-    _schedule_state["enabled"] = False
-    _schedule_state["next_run"] = None
-    if _schedule_state["timer"]:
-        _schedule_state["timer"].cancel()
-        _schedule_state["timer"] = None
+def _stop_schedule(pair_id: str):
+    """Stop the scheduled sync for a specific pair."""
+    entry = _schedule_pairs.get(pair_id)
+    if not entry:
+        return
+    entry["enabled"] = False
+    entry["next_run"] = None
+    if entry.get("timer"):
+        entry["timer"].cancel()
+        entry["timer"] = None
     _save_schedule()
-    logger.info("Sync schedule stopped")
+    pair = _get_pair(pair_id)
+    label = (pair or {}).get("label", pair_id)
+    logger.info(f"Sync schedule stopped for pair '{label}'")
+
+
+def _resolve_schedule_pair_id(data: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Pick the pair_id for a schedule API request: explicit > active pair."""
+    if data and data.get("pair_id"):
+        return str(data["pair_id"])
+    active = _active_pair()
+    return active["id"] if active else None
 
 
 @app.route('/api/bcdr/schedule', methods=['GET'])
 def api_schedule_get():
-    """Get the current sync schedule state."""
+    """Get the current sync schedule state for the active (or requested) pair."""
+    pair_id = request.args.get("pair_id") or _resolve_schedule_pair_id()
+    if not pair_id:
+        return jsonify({
+            "enabled": False,
+            "interval_minutes": 15,
+            "last_run": None,
+            "last_status": None,
+            "next_run": None,
+            "run_count": 0,
+            "pair_id": None,
+        })
+    entry = _get_schedule_entry(pair_id)
     return jsonify({
-        "enabled": _schedule_state["enabled"],
-        "interval_minutes": _schedule_state["interval_minutes"],
-        "last_run": _schedule_state["last_run"],
-        "last_status": _schedule_state["last_status"],
-        "next_run": _schedule_state["next_run"],
-        "run_count": _schedule_state["run_count"],
+        "enabled": entry["enabled"],
+        "interval_minutes": entry["interval_minutes"],
+        "last_run": entry["last_run"],
+        "last_status": entry["last_status"],
+        "next_run": entry["next_run"],
+        "run_count": entry["run_count"],
+        "pair_id": pair_id,
     })
 
 
 @app.route('/api/bcdr/schedule', methods=['POST'])
 def api_schedule_set():
-    """Start or stop the sync schedule."""
+    """Start or stop the sync schedule for the active (or requested) pair."""
     if not is_authenticated():
         return jsonify({"error": "Not authenticated"}), 401
     data = request.get_json() or {}
+    pair_id = _resolve_schedule_pair_id(data)
+    if not pair_id:
+        return jsonify({"error": "No workspace pair selected"}), 400
+    if not _get_pair(pair_id):
+        return jsonify({"error": f"Unknown workspace pair: {pair_id}"}), 404
     enabled = data.get("enabled", False)
     interval = data.get("interval_minutes", 15)
     # Clamp interval to [5, 1440]
     interval = max(5, min(1440, int(interval)))
+    pair_label = (_get_pair(pair_id) or {}).get("label", pair_id)
     if enabled:
-        _start_schedule(interval)
-        return jsonify({"status": "ok", "message": f"Schedule started: every {interval} minutes"})
+        _start_schedule(pair_id, interval)
+        return jsonify({
+            "status": "ok",
+            "pair_id": pair_id,
+            "message": f"Schedule started for '{pair_label}': every {interval} minutes",
+        })
     else:
-        _stop_schedule()
-        return jsonify({"status": "ok", "message": "Schedule stopped"})
+        _stop_schedule(pair_id)
+        return jsonify({
+            "status": "ok",
+            "pair_id": pair_id,
+            "message": f"Schedule stopped for '{pair_label}'",
+        })
 
 
 # ============================================================================

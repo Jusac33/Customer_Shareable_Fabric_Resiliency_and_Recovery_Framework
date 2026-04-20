@@ -1043,7 +1043,7 @@ The topology page shows real-time replication lag based on the most recent data 
 
 | Priority | Source | Description |
 |----------|--------|-------------|
-| 1 | `_schedule_state` | Scheduled notebook sync runs |
+| 1 | `_schedule_pairs[pair_id]` | Per-pair scheduled notebook sync runs (one entry per workspace pair) |
 | 2 | `_autosync_state` | Auto-sync watcher checks |
 | 3 | `_azcopy_state` | Manual azcopy runs (lakehouse/ML) |
 | 4 | `_azcopy_schedule_state` | Scheduled azcopy incremental sync |
@@ -1099,7 +1099,7 @@ The most recent timestamp wins. Lag displayed as minutes since last sync. Status
 | File | Description |
 |------|-------------|
 | `.workspace_state.json` | Active workspace pair configuration |
-| `.sync_schedule.json` | Notebook sync schedule (enabled, interval) |
+| `.sync_schedule.json` | Per-pair notebook sync schedule. Shape: `{ "pairs": { pair_id: { enabled, interval_minutes, last_run, last_status, run_count } } }`. Legacy flat shape is auto-migrated onto the active pair on load. |
 | `.azcopy_schedule.json` | Azcopy sync schedule (enabled, interval, include_ml) |
 | `.autosync_state.json` | Auto-sync watcher state |
 | `.azcopy_state.json` | Last azcopy run timestamp (persisted for lag calc) |

@@ -700,16 +700,48 @@ The auto-sync watcher runs in the background and **automatically replicates new 
 
 ## 12. Scheduled Sync
 
-Separate from auto-sync, the **scheduled sync** triggers the `BCDR_Data_Replication` notebook on a configurable interval.
+Separate from auto-sync, the **scheduled sync** triggers the per-lakehouse `BCDR_Sync_*` notebooks (or the legacy `BCDR_Data_Replication` notebook) on a configurable interval.
 
 | Setting | Range | Purpose |
 |---------|-------|---------|
-| Interval | 5 min – 24 hours | How often the notebook runs |
+| Interval | 5 min – 24 hours | How often the notebooks run |
 | Toggle | On/Off | Enable/disable from dashboard |
 
 This handles **data** replication (Delta tables), while auto-sync handles **artifact** replication (metadata).
 
-State persisted to `.sync_schedule.json`.
+### Per-Pair Isolation
+
+The schedule is tracked **independently for every workspace pair**. Enabling the schedule for one pair does NOT affect any other pair — each pair has its own:
+
+- Enabled/disabled flag
+- Interval (minutes)
+- Background timer thread
+- Last-run timestamp, last status, and run counter
+- Next-run timestamp
+
+The UI's toggle and interval controls operate on the **currently active workspace pair**. Switching the active pair in the workspace selector reloads the schedule controls to show that pair's state. Each pair's timer fires independently and triggers `run_sync_notebook(pair_id=...)` against that pair's secondary workspace, so the right sync runs for the right pair.
+
+State is persisted to `.sync_schedule.json` in this shape:
+
+```json
+{
+  "pairs": {
+    "<pair_id_a>": { "enabled": true,  "interval_minutes": 15, "last_run": "...", "last_status": "Triggered OK", "run_count": 12 },
+    "<pair_id_b>": { "enabled": false, "interval_minutes": 60, "last_run": null,  "last_status": null,           "run_count": 0  }
+  }
+}
+```
+
+Legacy flat-format `.sync_schedule.json` files are auto-migrated onto the currently active pair on first load.
+
+### API
+
+| Method | Endpoint | Body / Query | Behaviour |
+|--------|----------|--------------|-----------|
+| GET    | `/api/bcdr/schedule` | `?pair_id=<id>` (optional) | Returns the schedule entry for the requested pair, or the active pair if omitted. Response includes `pair_id`. |
+| POST   | `/api/bcdr/schedule` | `{ "enabled": bool, "interval_minutes": int, "pair_id": "<id>" }` | Starts/stops the schedule for the requested pair (or the active pair if `pair_id` omitted). |
+
+Deleting a workspace pair automatically stops and removes its scheduled-sync timer.
 
 ---
 
