@@ -2063,10 +2063,90 @@ When replicating artifacts using `getDefinition` / `updateDefinition`, only the 
 | Setting | Priority | API | Status |
 |---------|----------|-----|--------|
 | **Job Schedules** | P0 | `GET/POST /items/{id}/jobs/{jobType}/schedules` | Failover script handles (pause/resume). Full sync not yet implemented. |
+| **Item Ownership** | P0 | `POST /groups/{ws}/datasets/{id}/Default.TakeOver` | ✅ **Closed for SemanticModel** — `failover.py` step 5 takes over every model in the secondary workspace. No GA takeover API exists for other item types. |
+| **Connection Role Assignments** | P0 | `GET /items/{id}/connections`, `GET/POST /connections/{id}/roleAssignments` | ✅ **Closed** — `sync_permissions.py` grants the DR principal a role on every connection actually in use. |
 | **Sensitivity Labels** | P1 | `GET /items/{id}` (read), Admin API (write) | Detection in drift page. Applying requires Admin API or MIP SDK. |
 | **Item Description** | P2 | `PATCH /items/{id}` with `{description}` | Not yet synced. |
 | **Tags** | P2 | Fabric Tags API | Not yet synced. |
 | **Endorsement** | P2 | Admin API — set endorsement status | Not yet synced. |
+
+### Closed Gap: Semantic Model Ownership Takeover
+
+Item definitions carry no ownership. A replicated semantic model stays owned by whichever identity created it in the secondary workspace, and **that owner's identity backs the scheduled-refresh OAuth credentials**. If the primary owner is a human account that is unavailable, disabled, or offboarded at failover time, DR refreshes fail even though the model itself replicated perfectly.
+
+`scripts/failover.py` now closes this as an explicit orchestration step:
+
+```python
+takeover_semantic_models(workspace_id, logger, dry_run=False) -> Dict[str, Any]
+```
+
+- Lists `SemanticModel` items in the secondary workspace via `common.get_items(...)`
+- Calls `POST /groups/{workspaceId}/datasets/{datasetId}/Default.TakeOver` on each
+- Ownership transfers to the **calling** principal, i.e. the automation service principal
+- Runs after the secondary workspace is activated and schedules are enabled, and before the smoke tests, so DR refreshes execute as the service principal
+- Honours `--dry-run`; per-model failures are counted and folded into the failover report rather than aborting the run
+
+Implementation notes:
+
+| Aspect | Detail |
+|---|---|
+| API surface | Power BI, not Fabric — `Default.TakeOver` is the **only GA takeover API** |
+| Audience | `https://analysis.windows.net/powerbi/api/.default` (different from the Fabric audience) |
+| Helper | `common.powerbi_api_call(method, endpoint, payload=None, retry=0, timeout=30)` |
+| Response | HTTP 200 with an empty body |
+| Prerequisites | Service principal needs workspace access **and** the tenant setting *Service principals can use Power BI APIs* enabled |
+
+`common.FabricAuthenticator.get_token()` now caches tokens **per scope**, so the Fabric token and the Power BI token coexist instead of evicting each other:
+
+```python
+get_token(force_refresh: bool = False, scope: Optional[str] = None) -> str
+```
+
+### Closed Gap: Connection Role Assignments for the DR Principal
+
+Fabric connections are **tenant-scoped**, so the connection GUIDs embedded in Data Pipeline and Dataflow definitions still resolve after the definition is copied to the secondary workspace. What does *not* carry over is authorization: the identity that executes those items in DR needs an explicit role on each connection, or the run fails at runtime.
+
+`scripts/sync_permissions.py` now closes this:
+
+```python
+sync_connection_role_assignments(
+    secondary_workspace_id, principal_id, logger, dry_run=False, role="User"
+) -> Dict[str, Any]
+```
+
+- Iterates secondary workspace items and calls `GET /v1/workspaces/{ws}/items/{id}/connections`
+- Builds the **deduplicated** set of connections actually in use (items commonly share connections, so each one is granted at most once)
+- Reads `GET /v1/connections/{id}/roleAssignments` first and logs `[DELTA SKIP]` when the principal already holds a role
+- Otherwise `POST /v1/connections/{id}/roleAssignments` with `{"principal": {"id": "<objectId>", "type": "ServicePrincipal"}, "role": "User"}`
+- Valid roles: `Owner` | `User` | `UserWithReshare`
+- Per-item and per-connection failures are tolerated; counters are returned and printed in the sync summary
+
+Most item types do not implement the connections endpoint and answer `404` / *unsupported item type* rather than an empty list. Those are counted as scanned with zero connections (`items_without_connections`), **not** as failures — `items_failed` is reserved for genuine errors (auth, 5xx, throttling exhaustion, network) so the summary an operator reads mid-failover stays trustworthy. To make that distinction possible without string-scraping, `common.api_call()` / `common.powerbi_api_call()` now raise:
+
+```python
+class FabricApiError(Exception):
+    status_code: int   # HTTP status
+    detail: Any        # parsed response body, or raw text
+```
+
+`FabricApiError` subclasses `Exception` and renders the identical `f"API error {status}: {detail}"` message as before, so existing `except Exception` handlers and substring checks (e.g. the `UniversalSecurityFeatureDisabled` probe in `sync_data_access_roles`) are unaffected.
+
+#### New setting: `SERVICE_PRINCIPAL_OBJECT_ID`
+
+The Fabric `roleAssignments` APIs identify principals by their **Entra object ID**, which is *not* the application (client) ID in `CLIENT_ID`.
+
+| | |
+|---|---|
+| Env var | `SERVICE_PRINCIPAL_OBJECT_ID` |
+| Config | `common.SERVICE_PRINCIPAL_OBJECT_ID` |
+| Where to find it | Entra portal → **Enterprise applications** → *your app* → **Overview** → **Object ID** |
+| If unset | Falls back to `CLIENT_ID` and logs a warning explaining the grant will most likely fail — the permissions sync is **not** hard-failed |
+
+Add it to `.env`:
+
+```bash
+SERVICE_PRINCIPAL_OBJECT_ID=your-service-principal-object-id
+```
 
 ### SemanticModel-Specific Gaps
 
@@ -2074,7 +2154,7 @@ When replicating artifacts using `getDefinition` / `updateDefinition`, only the 
 |---------|----------|-----|-------|
 | **Refresh Schedule** | P0 | `GET/PATCH /groups/{ws}/datasets/{id}/refreshSchedule` | Power BI Datasets API. Not carried in TMDL definition. |
 | **DirectQuery Refresh Schedule** | P0 | `GET/PATCH /groups/{ws}/datasets/{id}/directQueryRefreshSchedule` | For DQ models. |
-| **Data Source Credentials** | P0 | `POST /groups/{ws}/datasets/{id}/Default.TakeOver` + credential APIs | Credentials are never in definition. Require manual re-auth or SP takeover. |
+| **Data Source Credentials** | P0 | `POST /groups/{ws}/datasets/{id}/Default.TakeOver` + credential APIs | Takeover is ✅ automated in `failover.py`; explicit credential re-binding still manual. |
 | **Gateway Binding** | P1 | `POST /groups/{ws}/datasets/{id}/Default.BindToGateway` | Must rebind if using on-prem gateway. |
 | **Parameters** | P1 | `POST /groups/{ws}/datasets/{id}/Default.UpdateParameters` | Runtime parameters (server name, database name). |
 | **Query Scale-Out** | P2 | `PATCH /groups/{ws}/datasets/{id}` with `queryScaleOutSettings` | Read replica configuration. |
@@ -2120,11 +2200,13 @@ All Environment settings are part of the definition and replicated by `sync_envi
 
 ### Recommended Priority Order for Implementation
 
-1. **P0 — Job Schedules** across all schedulable item types (Notebook, DataPipeline, SparkJobDefinition, Dataflow) using the unified Fabric Job Scheduler API
-2. **P0 — SemanticModel Refresh Schedules** via Power BI Datasets API
-3. **P1 — Sensitivity Labels** (read + apply via Admin API)
-4. **P1 — Gateway Rebinding** for models using on-prem gateways
-5. **P2 — Item descriptions, tags, endorsement** (low risk, easy to implement)
+1. ~~**P0 — Item ownership takeover** for semantic models~~ ✅ done (`failover.py`)
+2. ~~**P0 — Connection role assignments** for the DR executing principal~~ ✅ done (`sync_permissions.py`)
+3. **P0 — Job Schedules** across all schedulable item types (Notebook, DataPipeline, SparkJobDefinition, Dataflow) using the unified Fabric Job Scheduler API
+4. **P0 — SemanticModel Refresh Schedules** via Power BI Datasets API
+5. **P1 — Sensitivity Labels** (read + apply via Admin API)
+6. **P1 — Gateway Rebinding** for models using on-prem gateways
+7. **P2 — Item descriptions, tags, endorsement** (low risk, easy to implement)
 
 ---
 
@@ -2165,13 +2247,13 @@ from rti.sync_rti import sync_all_rti
 
 ## 32. Test Coverage
 
-The project has two pytest test suites covering the lakehouse sync and failback implementations. Run with:
+The project has three pytest test suites covering the lakehouse sync, failback, and DR ownership/connection implementations. Run with:
 
 ```bash
-python -m pytest scripts/test_failback_sync.py scripts/test_forward_sync_notebook.py -v
+python -m pytest scripts/test_failback_sync.py scripts/test_forward_sync_notebook.py scripts/test_dr_ownership_and_connections.py -v
 ```
 
-**Latest result: 64/64 tests passing.**
+**Latest result: 120/120 tests passing.**
 
 ### `scripts/test_failback_sync.py` — 33 tests
 
@@ -2200,5 +2282,20 @@ Covers the forward sync notebook generation in `app.py` (`_generate_per_lh_sync_
 | `TestSparkCDFEngine` | 8 | `spark_cdf` engine generates CDF cells, `get_delta_version()`, `full_sync_table()`, `incremental_sync_table()`, `enable_cdf()`, `SYNC_ENGINE = "spark_cdf"` in config |
 | `TestBothEngines` | 4 | Both engines contain `sync_files_section()`, catalog registration cell present, `lh_name` in notebook, `SYNC_MODE` variable present |
 | `TestDeploySyncArtifactsUsesDefaultEngine` | 3 | `deploy_sync_artifacts()` calls notebook generator, defaults to `fast_copy`, all 3 lakehouses get notebooks |
+
+### `scripts/test_dr_ownership_and_connections.py` — 56 tests
+
+Covers the two out-of-definition gaps closed in section 30. All HTTP is mocked — the suite never calls a live API:
+
+| Test Class | Tests | What It Covers |
+|---|---|---|
+| `TestPerScopeTokenCache` | 8 | `FabricAuthenticator.get_token()` caches per scope, default scope is Fabric, Power BI token does not evict the Fabric token, cache key contains the scope (no more `"fabric_token"`), `force_refresh` is scope-local, 5-minute expiry buffer, expired tokens re-acquire |
+| `TestPowerBIApiCall` | 10 | `powerbi_api_call()` targets `POWERBI_API_BASE`, 200-with-empty-body → `{}`, 204 → `{}`, JSON passthrough, 429/503 exponential-backoff retry, error text includes response body, 202 long-running-operation polling, unsupported method raises, and `api_call()` still targets `FABRIC_API_BASE` (non-regression) |
+| `TestTakeoverSemanticModels` | 7 | `takeover_semantic_models()` calls `Default.TakeOver` per model, filters `get_items` to `SemanticModel`, dry-run issues zero calls but still counts, per-model failure does not abort, empty workspace and listing failure handled |
+| `TestResolveServicePrincipalObjectId` | 2 | Uses `SERVICE_PRINCIPAL_OBJECT_ID` when set; falls back to `CLIENT_ID` with an explanatory warning when unset |
+| `TestConnectionRoleAssignments` | 13 | Connection IDs deduplicated across items, shared connection granted only once, grant payload shape, `[DELTA SKIP]` when the principal already holds a role, grants when only other principals present, mixed skip/add, dry-run makes zero mutating calls, per-item and per-connection failures tolerated, missing principal short-circuits, custom role honoured |
+| `TestUnsupportedItemClassification` | 11 | `_is_no_connections_error()` treats 404 and *unsupported item type* as "no connections" but 401/403/5xx and retry exhaustion as genuine failures; end-to-end a 404 on one of three items leaves `items_failed == 0` while the remaining items' connections are still discovered and granted; expected vs genuine errors counted separately; empty connection list counts as `items_without_connections` |
+| `TestFabricApiError` | 4 | `FabricApiError` subclasses `Exception`, exposes `status_code`/`detail`, and renders the unchanged `API error {status}: {detail}` message so existing bare-`Exception` callers and substring checks still work |
+| `TestConnectionPagination` | 1 | `_paged_get()` follows `continuationToken` |
 
 

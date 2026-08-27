@@ -9,10 +9,15 @@ Steps:
   1. Validate secondary workspace is current
   2. Cancel running jobs & disable schedules in primary
   3. Perform final data sync pass (lakehouses, notebooks/pipelines, semantic models)
-  4. Validate secondary artifact counts & accessibility
-  5. Enable schedules & activate secondary workspace
+  4. Enable schedules & activate secondary workspace
+  5. Take over semantic model ownership as the executing service principal
   6. Smoke-test secondary resources
   7. Generate failover report
+
+Prerequisites:
+  - Service Principal must have workspace admin permissions in both workspaces
+  - Tenant setting 'Service principals can use Power BI APIs' must be enabled
+    for the semantic model ownership takeover step to succeed
 
 RPO/RTO Impact:
   - RPO: Data loss = time since last sync
@@ -373,6 +378,99 @@ def activate_secondary_workspace(
         return False
 
 
+def _takeover_semantic_model(workspace_id: str, dataset_id: str) -> None:
+    """
+    Transfer semantic model ownership to the calling principal.
+
+    Uses the Power BI Datasets API — this is the only generally available
+    takeover endpoint; the Fabric item API has no equivalent.
+    https://learn.microsoft.com/en-us/rest/api/power-bi/datasets/take-over-in-group
+    """
+    endpoint = f"/groups/{workspace_id}/datasets/{dataset_id}/Default.TakeOver"
+    common.powerbi_api_call("POST", endpoint)
+
+
+def takeover_semantic_models(
+    workspace_id: str,
+    logger,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """
+    Take ownership of every semantic model in a workspace.
+
+    Semantic model ownership is not carried by getDefinition/updateDefinition —
+    a replicated model stays owned by whichever identity created it in DR.  The
+    owner's identity backs the scheduled-refresh OAuth credentials, so if that
+    owner is unavailable at failover time the DR refreshes fail.  Taking over as
+    the automation service principal makes DR refreshes independent of any human
+    account.
+
+    Requires the calling principal to have workspace access and the tenant
+    setting 'Service principals can use Power BI APIs' to be enabled.
+
+    Args:
+        workspace_id: Workspace GUID to take models over in (the DR workspace)
+        logger: Logger instance
+        dry_run: When True, no takeover calls are issued
+
+    Returns:
+        Result dict with counters and per-model detail
+    """
+    logger.info("Transferring semantic model ownership to the executing principal...")
+
+    result = {
+        "models_found": 0,
+        "models_taken_over": 0,
+        "models_failed": 0,
+        "taken_over": [],
+        "failures": [],
+    }
+
+    try:
+        models = common.get_items(workspace_id, item_type="SemanticModel")
+    except Exception as e:
+        logger.error(f"Error listing semantic models: {str(e)[:200]}")
+        return result
+
+    result["models_found"] = len(models)
+
+    if not models:
+        logger.info("  No semantic models found — nothing to take over")
+        return result
+
+    for model in models:
+        model_id = model.get("id")
+        model_name = model.get("displayName", model_id)
+
+        if not model_id:
+            continue
+
+        if dry_run:
+            logger.info(f"[DRY RUN] Would take over semantic model '{model_name}'")
+            result["models_taken_over"] += 1
+            result["taken_over"].append(model_name)
+            continue
+
+        try:
+            _takeover_semantic_model(workspace_id, model_id)
+            logger.info(f"✓ Took over semantic model '{model_name}'")
+            result["models_taken_over"] += 1
+            result["taken_over"].append(model_name)
+        except Exception as e:
+            logger.error(f"Failed to take over '{model_name}': {str(e)[:200]}")
+            result["models_failed"] += 1
+            result["failures"].append({"model": model_name, "error": str(e)[:200]})
+
+    logger.info(
+        f"Semantic model takeover: "
+        f"{result['models_taken_over']} succeeded, "
+        f"{result['models_failed']} failed "
+        f"(of {result['models_found']} found)"
+    )
+
+    return result
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description="Orchestrate Fabric DR failover")
@@ -453,20 +551,32 @@ def main():
             "result": sync_result,
         })
         
-        # Step 4: Validate secondary
-        logger.info("\n=== STEP 4: VALIDATING SECONDARY RESOURCES ===")
+        # Step 4: Activate secondary (re-enable schedules from manifest)
+        logger.info("\n=== STEP 4: ACTIVATING SECONDARY WORKSPACE ===")
+        if activate_secondary_workspace(args.secondary_workspace, schedule_manifest, logger, dry_run=args.dry_run):
+            failover_log["status"] = "SUCCESS" if not args.dry_run else "DRY_RUN_SUCCESS"
+        else:
+            failover_log["status"] = "PARTIAL_FAILURE"
+        
+        # Step 5: Take over semantic model ownership so DR refreshes run as the SP
+        logger.info("\n=== STEP 5: SEMANTIC MODEL OWNERSHIP TAKEOVER ===")
+        takeover_result = takeover_semantic_models(
+            args.secondary_workspace,
+            logger,
+            dry_run=args.dry_run,
+        )
+        failover_log["steps"].append({
+            "step": "takeover_semantic_models",
+            "result": takeover_result,
+        })
+
+        # Step 6: Validate secondary (smoke tests)
+        logger.info("\n=== STEP 6: VALIDATING SECONDARY RESOURCES ===")
         validation_result = validate_secondary(args.secondary_workspace, logger)
         failover_log["steps"].append({
             "step": "validate_secondary",
             "result": validation_result,
         })
-        
-        # Step 5: Activate secondary (re-enable schedules from manifest)
-        logger.info("\n=== STEP 5: ACTIVATING SECONDARY WORKSPACE ===")
-        if activate_secondary_workspace(args.secondary_workspace, schedule_manifest, logger, dry_run=args.dry_run):
-            failover_log["status"] = "SUCCESS" if not args.dry_run else "DRY_RUN_SUCCESS"
-        else:
-            failover_log["status"] = "PARTIAL_FAILURE"
         
         # Save schedule manifest for failback use
         failover_log["schedule_manifest"] = schedule_manifest
@@ -484,6 +594,9 @@ def main():
         print(f"Pause Failures:             {len(pause_result['pipelines_failed'])}")
         print(f"Sync Modules Completed:     {len(sync_result['sources_synced'])}")
         print(f"Sync Modules Failed:        {len(sync_result.get('sources_failed', []))}")
+        print(f"Semantic Models Found:      {takeover_result['models_found']}")
+        print(f"Ownership Taken Over:       {takeover_result['models_taken_over']}")
+        print(f"Takeover Failures:          {takeover_result['models_failed']}")
         print(f"Secondary Resources:")
         for key, val in validation_result.items():
             if key.endswith("_accessible"):
@@ -497,6 +610,9 @@ def main():
         print("  2. Verify data consistency in secondary workspace")
         print("  3. Update DNS/load balancer to point to secondary")
         print("  4. Notify stakeholders of DR activation")
+        if takeover_result["models_failed"]:
+            print("  5. Investigate semantic model takeover failures — DR scheduled")
+            print("     refreshes for those models still depend on the original owner")
         print()
         
         logger.info(f"Failover completed with status: {failover_log['status']}")

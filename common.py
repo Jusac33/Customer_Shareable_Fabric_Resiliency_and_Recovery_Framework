@@ -37,6 +37,13 @@ TENANT_ID = os.getenv("TENANT_ID", "your-tenant-id")
 CLIENT_ID = os.getenv("CLIENT_ID", "your-service-principal-client-id")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET", "your-service-principal-secret")
 
+# Entra object (principal) ID of the service principal above.
+# This is the enterprise-application / service-principal objectId, NOT the
+# application (client) ID.  Fabric roleAssignment APIs identify principals by
+# object ID, so connection role grants require this value.
+# Entra portal: Enterprise applications -> <your app> -> Object ID
+SERVICE_PRINCIPAL_OBJECT_ID = os.getenv("SERVICE_PRINCIPAL_OBJECT_ID", "")
+
 # OneLake URLs
 PRIMARY_ONELAKE_URL = f"https://onelake.dfs.fabric.microsoft.com/{PRIMARY_WORKSPACE_ID}"
 SECONDARY_ONELAKE_URL = f"https://onelake.dfs.fabric.microsoft.com/{SECONDARY_WORKSPACE_ID}"
@@ -44,6 +51,12 @@ SECONDARY_ONELAKE_URL = f"https://onelake.dfs.fabric.microsoft.com/{SECONDARY_WO
 # Fabric API Configuration
 FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
 FABRIC_API_SCOPE = "https://api.fabric.microsoft.com/.default"
+
+# Power BI API Configuration
+# A small number of operations (notably semantic model ownership takeover) are
+# only available on the Power BI REST surface, which needs its own audience.
+POWERBI_API_BASE = "https://api.powerbi.com/v1.0/myorg"
+POWERBI_API_SCOPE = "https://analysis.windows.net/powerbi/api/.default"
 
 # Artifact Types to Support
 ARTIFACT_TYPES_TO_SYNC = [
@@ -126,7 +139,7 @@ logger = setup_logger("common")
 # ============================================================================
 
 class FabricAuthenticator:
-    """Handles MSAL authentication for Fabric API"""
+    """Handles MSAL authentication for Fabric and Power BI APIs"""
     
     def __init__(self, tenant_id: str, client_id: str, client_secret: str):
         self.tenant_id = tenant_id
@@ -135,12 +148,16 @@ class FabricAuthenticator:
         self.token_cache = {}
         self.token_expiry = {}
     
-    def get_token(self, force_refresh: bool = False) -> str:
+    def get_token(self, force_refresh: bool = False, scope: Optional[str] = None) -> str:
         """
         Acquire and cache access token using MSAL.
         
+        Tokens are cached per scope, so a Fabric token and a Power BI token can
+        be held at the same time without evicting each other.
+        
         Args:
             force_refresh: Force token refresh even if cached
+            scope: OAuth scope to request. Defaults to FABRIC_API_SCOPE.
             
         Returns:
             Bearer token string
@@ -148,7 +165,8 @@ class FabricAuthenticator:
         Raises:
             Exception: If token acquisition fails
         """
-        token_key = "fabric_token"
+        scope = scope or FABRIC_API_SCOPE
+        token_key = f"token::{scope}"
         
         # Return cached token if valid
         if not force_refresh and token_key in self.token_cache:
@@ -162,7 +180,7 @@ class FabricAuthenticator:
                 client_credential=self.client_secret,
             )
             
-            token_response = app.acquire_token_for_client(scopes=[FABRIC_API_SCOPE])
+            token_response = app.acquire_token_for_client(scopes=[scope])
             
             if "access_token" not in token_response:
                 error_msg = token_response.get("error_description", "Unknown error")
@@ -191,9 +209,14 @@ def get_authenticator() -> FabricAuthenticator:
     return _authenticator
 
 
-def get_token() -> str:
-    """Get valid Fabric API bearer token"""
-    return get_authenticator().get_token()
+def get_token(scope: Optional[str] = None) -> str:
+    """Get valid bearer token for the requested scope (defaults to Fabric API)"""
+    return get_authenticator().get_token(scope=scope)
+
+
+def get_powerbi_token() -> str:
+    """Get valid Power BI API bearer token"""
+    return get_authenticator().get_token(scope=POWERBI_API_SCOPE)
 
 
 def get_headers() -> Dict[str, str]:
@@ -205,8 +228,133 @@ def get_headers() -> Dict[str, str]:
 
 
 # ============================================================================
-# FABRIC API REST OPERATIONS
+# FABRIC & POWER BI API REST OPERATIONS
 # ============================================================================
+
+def get_powerbi_headers() -> Dict[str, str]:
+    """Get standard HTTP headers with a Power BI API auth token"""
+    return {
+        "Authorization": "Bearer " + get_powerbi_token(),
+        "Content-Type": "application/json",
+    }
+
+
+class FabricApiError(Exception):
+    """
+    HTTP error raised by api_call() / powerbi_api_call().
+
+    Subclasses Exception and renders the exact same message as before, so
+    callers that catch bare Exception or match on str(e) are unaffected.  The
+    status code is exposed separately so callers can tell an expected response
+    (e.g. 404 from an endpoint an item type does not implement) apart from a
+    genuine failure.
+    """
+
+    def __init__(self, status_code: int, detail: Any):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(f"API error {status_code}: {detail}")
+
+
+def _execute_rest_call(
+    method: str,
+    base_url: str,
+    endpoint: str,
+    payload: Optional[Dict],
+    retry: int,
+    timeout: int,
+    headers_provider,
+    retry_fn,
+) -> Dict[str, Any]:
+    """
+    Shared REST executor used by api_call() and powerbi_api_call().
+
+    Handles 202 long-running-operation polling, 429/503 retry with exponential
+    backoff, 204/empty bodies, and error surfacing.
+
+    Args:
+        method: HTTP method (GET, POST, PUT, PATCH, DELETE)
+        base_url: API base URL the endpoint is appended to
+        endpoint: API endpoint path (without base URL)
+        payload: JSON payload for POST/PUT/PATCH
+        retry: Internal retry counter
+        timeout: Request timeout in seconds
+        headers_provider: Callable returning auth headers for this API
+        retry_fn: Callable(method, endpoint, payload, retry, timeout) used to retry
+
+    Returns:
+        Response JSON payload or operation result
+
+    Raises:
+        Exception: If request fails after retries
+    """
+    url = f"{base_url}{endpoint}"
+
+    try:
+        headers = headers_provider()
+
+        if method.upper() == "GET":
+            response = requests.get(url, headers=headers, timeout=timeout)
+        elif method.upper() == "POST":
+            response = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        elif method.upper() == "PUT":
+            response = requests.put(url, json=payload, headers=headers, timeout=timeout)
+        elif method.upper() == "PATCH":
+            response = requests.patch(url, json=payload, headers=headers, timeout=timeout)
+        elif method.upper() == "DELETE":
+            response = requests.delete(url, headers=headers, timeout=timeout)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+
+        # Handle 202 Accepted - long-running operation
+        if response.status_code == 202:
+            operation_url = response.headers.get("Operation-Location")
+            return poll_long_running_operation(operation_url, headers)
+
+        # Handle 429 Too Many Requests
+        if response.status_code == 429:
+            if retry < MAX_RETRIES:
+                wait_time = RESPONSE_BACKOFF * (2 ** retry)  # Exponential backoff
+                logger.warning(f"Rate limited. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                return retry_fn(method, endpoint, payload, retry + 1, timeout)
+            else:
+                raise Exception("Max retries exceeded for rate limit")
+
+        # Handle 503 Service Unavailable
+        if response.status_code == 503:
+            if retry < MAX_RETRIES:
+                wait_time = RESPONSE_BACKOFF * (2 ** retry)
+                logger.warning(f"Service unavailable. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                return retry_fn(method, endpoint, payload, retry + 1, timeout)
+            else:
+                raise Exception("Service unavailable after retries")
+
+        # Handle errors
+        if response.status_code >= 400:
+            error_detail = response.text
+            try:
+                error_detail = response.json()
+            except:
+                pass
+            raise FabricApiError(response.status_code, error_detail)
+
+        # Handle 204 No Content
+        if response.status_code == 204:
+            return {}
+
+        # Some action endpoints (e.g. semantic model takeover) answer 200 with
+        # an empty body — treat that as success rather than a decode failure.
+        if not (response.content or b"").strip():
+            return {}
+
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error: {str(e)}")
+        raise
+
 
 def api_call(
     method: str,
@@ -231,69 +379,55 @@ def api_call(
     Raises:
         Exception: If request fails after retries
     """
-    url = f"{FABRIC_API_BASE}{endpoint}"
-    
-    try:
-        headers = get_headers()
-        
-        if method.upper() == "GET":
-            response = requests.get(url, headers=headers, timeout=timeout)
-        elif method.upper() == "POST":
-            response = requests.post(url, json=payload, headers=headers, timeout=timeout)
-        elif method.upper() == "PUT":
-            response = requests.put(url, json=payload, headers=headers, timeout=timeout)
-        elif method.upper() == "PATCH":
-            response = requests.patch(url, json=payload, headers=headers, timeout=timeout)
-        elif method.upper() == "DELETE":
-            response = requests.delete(url, headers=headers, timeout=timeout)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
-        
-        # Handle 202 Accepted - long-running operation
-        if response.status_code == 202:
-            operation_url = response.headers.get("Operation-Location")
-            return poll_long_running_operation(operation_url, headers)
-        
-        # Handle 429 Too Many Requests
-        if response.status_code == 429:
-            if retry < MAX_RETRIES:
-                wait_time = RESPONSE_BACKOFF * (2 ** retry)  # Exponential backoff
-                logger.warning(f"Rate limited. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
-                return api_call(method, endpoint, payload, retry + 1, timeout)
-            else:
-                raise Exception("Max retries exceeded for rate limit")
-        
-        # Handle 503 Service Unavailable
-        if response.status_code == 503:
-            if retry < MAX_RETRIES:
-                wait_time = RESPONSE_BACKOFF * (2 ** retry)
-                logger.warning(f"Service unavailable. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
-                return api_call(method, endpoint, payload, retry + 1, timeout)
-            else:
-                raise Exception("Service unavailable after retries")
-        
-        # Handle errors
-        if response.status_code >= 400:
-            error_detail = response.text
-            try:
-                error_detail = response.json()
-            except:
-                pass
-            raise Exception(
-                f"API error {response.status_code}: {error_detail}"
-            )
-        
-        # Handle 204 No Content
-        if response.status_code == 204:
-            return {}
-        
-        return response.json()
-    
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request error: {str(e)}")
-        raise
+    return _execute_rest_call(
+        method,
+        FABRIC_API_BASE,
+        endpoint,
+        payload,
+        retry,
+        timeout,
+        get_headers,
+        api_call,
+    )
+
+
+def powerbi_api_call(
+    method: str,
+    endpoint: str,
+    payload: Optional[Dict] = None,
+    retry: int = 0,
+    timeout: int = 30,
+) -> Dict[str, Any]:
+    """
+    Execute Power BI API REST call with exponential backoff and 202 polling.
+
+    Mirrors api_call() semantics but targets POWERBI_API_BASE with a Power BI
+    audience token.  Needed for operations that have no Fabric API equivalent,
+    such as semantic model ownership takeover.
+
+    Args:
+        method: HTTP method (GET, POST, PATCH, DELETE)
+        endpoint: API endpoint path relative to POWERBI_API_BASE
+        payload: JSON payload for POST/PATCH
+        retry: Internal retry counter
+        timeout: Request timeout in seconds
+
+    Returns:
+        Response JSON payload ({} when the response has no body)
+
+    Raises:
+        Exception: If request fails after retries
+    """
+    return _execute_rest_call(
+        method,
+        POWERBI_API_BASE,
+        endpoint,
+        payload,
+        retry,
+        timeout,
+        get_powerbi_headers,
+        powerbi_api_call,
+    )
 
 
 def poll_long_running_operation(
