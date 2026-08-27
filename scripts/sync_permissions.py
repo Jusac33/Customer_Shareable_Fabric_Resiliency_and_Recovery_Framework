@@ -2,8 +2,9 @@
 Sync Permissions
 
 Purpose:
-  Resiliency & Recovery for workspace-level and item-level permissions with role assignments
-  and data access controls.
+  Resiliency & Recovery sync for workspace-level and item-level permissions with
+  role assignments, OneLake data access controls, and connection role
+  assignments for the DR executing service principal.
 
 Artifact Types Covered:
   All (permissions apply to all artifact types)
@@ -15,6 +16,8 @@ RPO/RTO:
 Prerequisites:
   - Service Principal must have workspace admin permissions
   - artifact_mapping.csv with primary → secondary artifact IDs
+  - SERVICE_PRINCIPAL_OBJECT_ID must be set for connection role grants
+    (Entra object ID of the service principal, not the client/app ID)
 
 Usage:
   python sync_permissions.py
@@ -30,6 +33,297 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import common
+
+
+# Fabric connections are tenant-scoped, so connection GUIDs embedded in copied
+# Data Pipeline / Dataflow definitions still resolve in the secondary workspace.
+# The identity that executes them in DR, however, needs an explicit role on each
+# connection or the run fails at runtime.
+CONNECTION_ROLE = "User"  # Owner | User | UserWithReshare
+
+# Most item types do not implement the connections endpoint at all and answer
+# 404 / "unsupported item type" instead of an empty list.  That is expected and
+# must not be reported as a failure — a DR summary that cries wolf is worse than
+# no summary.
+_NO_CONNECTIONS_STATUS_CODES = (404,)
+_NO_CONNECTIONS_MARKERS = (
+    "not supported",
+    "notsupported",
+    "unsupported",
+)
+
+
+def _is_no_connections_error(error: Exception) -> bool:
+    """
+    True when an error means 'this item type exposes no connections', as opposed
+    to a genuine failure (auth, 5xx, throttling exhaustion, network).
+    """
+    status_code = getattr(error, "status_code", None)
+    if status_code is not None:
+        if status_code in _NO_CONNECTIONS_STATUS_CODES:
+            return True
+
+    text = str(error).lower()
+
+    # Fallback for errors raised without a status code attribute
+    if status_code is None:
+        for code in _NO_CONNECTIONS_STATUS_CODES:
+            if f"api error {code}" in text:
+                return True
+
+    return any(marker in text for marker in _NO_CONNECTIONS_MARKERS)
+
+
+def _paged_get(endpoint: str) -> List[Dict[str, Any]]:
+    """GET a Fabric collection endpoint, following continuation tokens."""
+    values: List[Dict[str, Any]] = []
+    continuation_token = None
+
+    while True:
+        url = endpoint
+        if continuation_token:
+            sep = "&" if "?" in endpoint else "?"
+            url = f"{endpoint}{sep}continuationToken={continuation_token}"
+
+        response = common.api_call("GET", url)
+        if not isinstance(response, dict):
+            break
+
+        values.extend(response.get("value", []))
+
+        continuation_token = response.get("continuationToken")
+        if not continuation_token:
+            break
+
+    return values
+
+
+def resolve_service_principal_object_id(logger) -> str:
+    """
+    Resolve the Entra object ID used for connection role grants.
+
+    Falls back to CLIENT_ID when SERVICE_PRINCIPAL_OBJECT_ID is unset, because a
+    misconfiguration here should not abort the whole permissions sync.
+
+    Returns:
+        Principal object ID string (possibly the fallback client ID, or "")
+    """
+    object_id = (getattr(common, "SERVICE_PRINCIPAL_OBJECT_ID", "") or "").strip()
+    if object_id:
+        return object_id
+
+    fallback = (getattr(common, "CLIENT_ID", "") or "").strip()
+    logger.warning(
+        "SERVICE_PRINCIPAL_OBJECT_ID is not set — falling back to CLIENT_ID. "
+        "Connection role grants will most likely fail: the Fabric roleAssignments "
+        "API identifies principals by their Entra object ID, which is different "
+        "from the application (client) ID. Copy the Object ID from Entra "
+        "(Enterprise applications -> your app -> Object ID) into "
+        "SERVICE_PRINCIPAL_OBJECT_ID."
+    )
+    return fallback
+
+
+def get_item_connections(
+    workspace_id: str,
+    item_id: str,
+    logger,
+) -> List[Dict[str, Any]]:
+    """
+    List the connections an item uses.
+
+    Args:
+        workspace_id: Workspace GUID
+        item_id: Item GUID
+        logger: Logger instance
+
+    Returns:
+        List of connection dicts (empty when the item uses none)
+
+    Raises:
+        Exception: propagated from the API. Callers should use
+            _is_no_connections_error() to tell an item type that has no
+            connections endpoint apart from a genuine failure.
+    """
+    connections = _paged_get(f"/workspaces/{workspace_id}/items/{item_id}/connections")
+    logger.debug(f"Item {item_id} uses {len(connections)} connection(s)")
+    return connections
+
+
+def get_connection_role_assignments(connection_id: str) -> List[Dict[str, Any]]:
+    """Get existing role assignments on a connection."""
+    return _paged_get(f"/connections/{connection_id}/roleAssignments")
+
+
+def sync_connection_role_assignments(
+    secondary_workspace_id: str,
+    principal_id: str,
+    logger,
+    dry_run: bool = False,
+    role: str = CONNECTION_ROLE,
+) -> Dict[str, Any]:
+    """
+    Delta-sync connection role assignments for the DR executing principal.
+
+    Walks every item in the secondary workspace, collects the deduplicated set of
+    connections those items actually use, and grants the principal a role on each
+    connection it does not already hold one on.
+
+    Item types that expose no connections endpoint are counted as scanned with
+    zero connections, not as failures — `items_failed` is reserved for genuine
+    errors (auth, 5xx, throttling exhaustion, network) so the summary stays
+    trustworthy during a real failover.  Per-item and per-connection failures are
+    tolerated so a single bad item cannot abort the run.
+
+    Args:
+        secondary_workspace_id: DR workspace GUID
+        principal_id: Entra object ID of the service principal to grant
+        logger: Logger instance
+        dry_run: When True, no grants are issued
+        role: Connection role to grant (Owner | User | UserWithReshare)
+
+    Returns:
+        Result dict with counters and delta detail
+    """
+    result = {
+        "items_scanned": 0,
+        "items_without_connections": 0,
+        "items_failed": 0,
+        "connections_discovered": 0,
+        "roles_added": 0,
+        "roles_unchanged": 0,
+        "roles_failed": 0,
+        "connection_ids": [],
+        "delta_details": [],
+    }
+
+    if not principal_id:
+        logger.error(
+            "No principal ID available — set SERVICE_PRINCIPAL_OBJECT_ID (or "
+            "CLIENT_ID) to grant connection roles. Skipping connection sync."
+        )
+        return result
+
+    try:
+        items = common.get_items(secondary_workspace_id)
+        logger.info(f"Scanning {len(items)} secondary items for connection usage...")
+
+        # ── Build the deduplicated connection set ─────────────────────────
+        connections: Dict[str, str] = {}
+
+        for item in items:
+            item_id = item.get("id")
+            item_name = item.get("displayName", item_id)
+            if not item_id:
+                continue
+
+            try:
+                item_connections = get_item_connections(
+                    secondary_workspace_id, item_id, logger
+                )
+            except Exception as e:
+                if _is_no_connections_error(e):
+                    # Expected: this item type has no connections endpoint.
+                    logger.debug(f"  '{item_name}' exposes no connections endpoint")
+                    result["items_scanned"] += 1
+                    result["items_without_connections"] += 1
+                else:
+                    logger.warning(
+                        f"Error listing connections for '{item_name}': {str(e)[:200]}"
+                    )
+                    result["items_failed"] += 1
+                continue
+
+            result["items_scanned"] += 1
+            if not item_connections:
+                result["items_without_connections"] += 1
+
+            for conn in item_connections:
+                conn_id = conn.get("id")
+                if not conn_id:
+                    continue
+                # Many items share the same connection — grant it only once.
+                connections.setdefault(
+                    conn_id, conn.get("displayName") or conn.get("name") or conn_id
+                )
+                logger.debug(f"  '{item_name}' uses connection {conn_id}")
+
+        result["connections_discovered"] = len(connections)
+        result["connection_ids"] = sorted(connections)
+        logger.info(
+            f"Found {len(connections)} distinct connection(s) in use across "
+            f"{result['items_scanned']} scanned item(s) "
+            f"({result['items_without_connections']} use none, "
+            f"{result['items_failed']} could not be read)"
+        )
+
+        # ── Delta: grant only where the principal has no role yet ─────────
+        for conn_id, conn_name in connections.items():
+            try:
+                existing = get_connection_role_assignments(conn_id)
+            except Exception as e:
+                logger.error(
+                    f"Failed to read role assignments on connection {conn_id}: {str(e)[:200]}"
+                )
+                result["roles_failed"] += 1
+                continue
+
+            existing_role = None
+            for assignment in existing:
+                if assignment.get("principal", {}).get("id") == principal_id:
+                    existing_role = assignment.get("role")
+                    break
+
+            if existing_role is not None:
+                logger.info(
+                    f"[DELTA SKIP] {conn_name} ({conn_id}): principal already has "
+                    f"role {existing_role}"
+                )
+                result["roles_unchanged"] += 1
+                result["delta_details"].append(
+                    {"action": "skip", "connection": conn_id, "role": existing_role}
+                )
+                continue
+
+            logger.info(f"[DELTA ADD] {conn_name} ({conn_id}) → {role}")
+            result["delta_details"].append(
+                {"action": "add", "connection": conn_id, "role": role}
+            )
+
+            if dry_run:
+                logger.info(f"[DRY RUN] Would POST role {role} on connection {conn_id}")
+                result["roles_added"] += 1
+                continue
+
+            try:
+                common.api_call(
+                    "POST",
+                    f"/connections/{conn_id}/roleAssignments",
+                    {
+                        "principal": {"id": principal_id, "type": "ServicePrincipal"},
+                        "role": role,
+                    },
+                )
+                logger.info(f"✓ Granted {role} on connection {conn_name}")
+                result["roles_added"] += 1
+            except Exception as e:
+                logger.error(
+                    f"Failed to grant {role} on connection {conn_id}: {str(e)[:200]}"
+                )
+                result["roles_failed"] += 1
+
+        logger.info(
+            f"Connection roles delta: "
+            f"+{result['roles_added']} granted, "
+            f"={result['roles_unchanged']} unchanged, "
+            f"x{result['roles_failed']} failed "
+            f"({result['connections_discovered']} connection(s) in use)"
+        )
+
+    except Exception as e:
+        logger.error(f"Error in connection role assignment sync: {str(e)}")
+
+    return result
 
 
 def get_workspace_permissions(workspace_id: str, logger) -> List[Dict[str, Any]]:
@@ -545,6 +839,7 @@ def main():
             "workspace_permissions": {},
             "item_permissions": {},
             "data_access_roles": {},
+            "connection_role_assignments": {},
         }
         
         # Sync OneLake Data Access Roles (RLS/CLS)
@@ -579,6 +874,17 @@ def main():
         )
         sync_summary["item_permissions"] = item_perm_result
         
+        # Grant the DR executing principal a role on every connection in use
+        logger.info("\n=== SYNCING CONNECTION ROLE ASSIGNMENTS ===")
+        principal_id = resolve_service_principal_object_id(logger)
+        conn_role_result = sync_connection_role_assignments(
+            args.secondary_workspace,
+            principal_id,
+            logger,
+            dry_run=args.dry_run,
+        )
+        sync_summary["connection_role_assignments"] = conn_role_result
+        
         common.save_json(sync_summary, "data/permissions_audit.json")
         
         print("\n" + "=" * 70)
@@ -602,6 +908,14 @@ def main():
         print(f"  Permissions Added:         {item_perm_result['item_permissions_added']}")
         print(f"  Permissions Unchanged:     {item_perm_result['item_permissions_unchanged']}")
         print(f"  Permissions Failed:        {item_perm_result['item_permissions_failed']}")
+        print(f"--- Connection Role Assignments ---")
+        print(f"  Items Scanned:             {conn_role_result['items_scanned']}")
+        print(f"  Items Using No Connection: {conn_role_result['items_without_connections']}")
+        print(f"  Items Unreadable:          {conn_role_result['items_failed']}")
+        print(f"  Connections In Use:        {conn_role_result['connections_discovered']}")
+        print(f"  Roles Granted:             {conn_role_result['roles_added']}")
+        print(f"  Roles Unchanged:           {conn_role_result['roles_unchanged']}")
+        print(f"  Roles Failed:              {conn_role_result['roles_failed']}")
         print("=" * 70 + "\n")
         
         logger.info("Permissions sync complete")
