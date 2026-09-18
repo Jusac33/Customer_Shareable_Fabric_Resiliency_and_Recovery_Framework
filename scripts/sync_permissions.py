@@ -2,9 +2,12 @@
 Sync Permissions
 
 Purpose:
-  Resiliency & Recovery sync for workspace-level and item-level permissions with
-  role assignments, OneLake data access controls, and connection role
+  Resiliency & Recovery sync for workspace-level permissions with role
+  assignments, OneLake data access controls, and connection role
   assignments for the DR executing service principal.
+
+  Item-level permissions are NOT synced: Fabric exposes no public REST API for
+  per-item permissions. See IMPLEMENTATION_GUIDE.md section 28.2.
 
 Artifact Types Covered:
   All (permissions apply to all artifact types)
@@ -15,7 +18,6 @@ RPO/RTO:
 
 Prerequisites:
   - Service Principal must have workspace admin permissions
-  - artifact_mapping.csv with primary → secondary artifact IDs
   - SERVICE_PRINCIPAL_OBJECT_ID must be set for connection role grants
     (Entra object ID of the service principal, not the client/app ID)
 
@@ -348,32 +350,6 @@ def get_workspace_permissions(workspace_id: str, logger) -> List[Dict[str, Any]]
         return []
 
 
-def get_item_permissions(
-    workspace_id: str,
-    item_id: str,
-    logger,
-) -> List[Dict[str, Any]]:
-    """
-    Get permissions for a specific item.
-    
-    Args:
-        workspace_id: Workspace GUID
-        item_id: Item GUID
-        logger: Logger instance
-        
-    Returns:
-        List of permission assignments
-    """
-    try:
-        endpoint = f"/workspaces/{workspace_id}/items/{item_id}/permissions"
-        response = common.api_call("GET", endpoint)
-        assignments = response.get("value", [])
-        return assignments
-    except Exception as e:
-        logger.debug(f"Error getting item permissions: {str(e)}")
-        return []
-
-
 def sync_workspace_permissions(
     primary_workspace_id: str,
     secondary_workspace_id: str,
@@ -499,98 +475,6 @@ def sync_workspace_permissions(
 
     except Exception as e:
         logger.error(f"Error syncing workspace permissions: {str(e)}")
-
-    return result
-
-
-def sync_item_permissions(
-    primary_workspace_id: str,
-    secondary_workspace_id: str,
-    artifact_mapping: Dict[str, str],
-    logger,
-    dry_run: bool = False,
-) -> Dict[str, Any]:
-    """
-    Delta-sync item-level permissions.
-
-    For each item in primary that has a secondary counterpart, compares existing
-    secondary permissions and only applies the difference.
-    """
-    result = {
-        "items_processed": 0,
-        "items_skipped": 0,
-        "item_permissions_added": 0,
-        "item_permissions_unchanged": 0,
-        "item_permissions_failed": 0,
-    }
-
-    try:
-        primary_items = common.get_items(primary_workspace_id)
-        logger.info(f"Delta-syncing permissions for {len(primary_items)} items...")
-
-        for primary_item in primary_items:
-            primary_item_id = primary_item["id"]
-            secondary_item_id = artifact_mapping.get(primary_item_id)
-
-            if not secondary_item_id:
-                result["items_skipped"] += 1
-                continue
-
-            try:
-                # Get both sides
-                p_perms = get_item_permissions(primary_workspace_id, primary_item_id, logger)
-                if not p_perms:
-                    continue
-
-                s_perms = get_item_permissions(secondary_workspace_id, secondary_item_id, logger)
-
-                # Build secondary key set: (principal_id, role)
-                s_keys = {
-                    (p.get("principal", {}).get("id"), p.get("role"))
-                    for p in s_perms
-                }
-
-                for perm in p_perms:
-                    principal_id = perm.get("principal", {}).get("id")
-                    principal_type = perm.get("principal", {}).get("type")
-                    role = perm.get("role")
-                    key = (principal_id, role)
-
-                    if key in s_keys:
-                        result["item_permissions_unchanged"] += 1
-                        continue
-
-                    # Missing in secondary → apply
-                    if dry_run:
-                        result["item_permissions_added"] += 1
-                    else:
-                        try:
-                            common.set_item_permissions(
-                                secondary_workspace_id,
-                                secondary_item_id,
-                                principal_id,
-                                principal_type,
-                                role,
-                            )
-                            result["item_permissions_added"] += 1
-                        except Exception as e:
-                            logger.debug(f"Failed to set item permission: {str(e)}")
-                            result["item_permissions_failed"] += 1
-
-                result["items_processed"] += 1
-
-            except Exception as e:
-                logger.error(f"Error syncing permissions for item {primary_item_id}: {str(e)}")
-
-        logger.info(
-            f"Item permissions delta: "
-            f"+{result['item_permissions_added']} added, "
-            f"={result['item_permissions_unchanged']} unchanged, "
-            f"x{result['item_permissions_failed']} failed"
-        )
-
-    except Exception as e:
-        logger.error(f"Error in item permission sync: {str(e)}")
 
     return result
 
@@ -837,7 +721,6 @@ def main():
     try:
         sync_summary = {
             "workspace_permissions": {},
-            "item_permissions": {},
             "data_access_roles": {},
             "connection_role_assignments": {},
         }
@@ -862,18 +745,11 @@ def main():
         )
         sync_summary["workspace_permissions"] = ws_perm_result
         
-        # Sync item permissions
-        logger.info("\n=== SYNCING ITEM PERMISSIONS ===")
-        artifact_mapping = common.load_artifact_mapping()
-        item_perm_result = sync_item_permissions(
-            args.primary_workspace,
-            args.secondary_workspace,
-            artifact_mapping,
-            logger,
-            dry_run=args.dry_run,
-        )
-        sync_summary["item_permissions"] = item_perm_result
-        
+        # NOTE: Item-level permissions are intentionally not synced. Fabric has no
+        # public REST API to read or write per-item permissions, so item-level shares
+        # must be re-applied manually in the secondary workspace after failover.
+        # See IMPLEMENTATION_GUIDE.md section 28.2.
+
         # Grant the DR executing principal a role on every connection in use
         logger.info("\n=== SYNCING CONNECTION ROLE ASSIGNMENTS ===")
         principal_id = resolve_service_principal_object_id(logger)
@@ -904,10 +780,7 @@ def main():
         print(f"  Removed (detected only):   {ws_perm_result['permissions_removed_detected']}")
         print(f"  Failed:                    {len(ws_perm_result['permissions_failed'])}")
         print(f"--- Item Permissions ---")
-        print(f"  Items Processed:           {item_perm_result['items_processed']}")
-        print(f"  Permissions Added:         {item_perm_result['item_permissions_added']}")
-        print(f"  Permissions Unchanged:     {item_perm_result['item_permissions_unchanged']}")
-        print(f"  Permissions Failed:        {item_perm_result['item_permissions_failed']}")
+        print(f"  Not synced (no Fabric API) - re-apply item shares manually")
         print(f"--- Connection Role Assignments ---")
         print(f"  Items Scanned:             {conn_role_result['items_scanned']}")
         print(f"  Items Using No Connection: {conn_role_result['items_without_connections']}")

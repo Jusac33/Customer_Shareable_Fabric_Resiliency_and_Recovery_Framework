@@ -1483,7 +1483,7 @@ python scripts/sync_permissions.py
 python scripts/sync_permissions.py --dry-run
 ```
 
-The script runs three delta-sync phases:
+The script runs two delta-sync phases:
 
 **Phase 1 — Workspace Permissions (delta):**
 - Builds lookup dicts keyed by `principal_id` on both primary and secondary
@@ -1493,13 +1493,10 @@ The script runs three delta-sync phases:
 - **REMOVED** — Principal only on secondary → logged but **not auto-deleted** (safety)
 - Returns counts: `permissions_added`, `permissions_updated`, `permissions_unchanged`, `permissions_removed_detected`
 
-**Phase 2 — Item Permissions (delta):**
-- For each primary item with a secondary counterpart (via `artifact_mapping.csv`)
-- Fetches existing secondary permissions first → builds `(principal_id, role)` key set
-- Only POSTs permissions missing from secondary; skips existing ones
-- Returns counts: `item_permissions_added`, `item_permissions_unchanged`, `item_permissions_failed`
+> **Not covered — item-level permissions.** Fabric has no public REST API for
+> per-item permissions, so item-level shares are **not** replicated. See section 28.2.
 
-**Phase 3 — OneLake Data Access Roles (delta):**
+**Phase 2 — OneLake Data Access Roles (delta):**
 - For each primary lakehouse with Data Access Roles
 - Remaps workspace/item IDs in `fabricItemMembers.sourcePath`
 - **Normalizes** both primary remapped roles and secondary existing roles (sorts lists, deterministic key ordering)
@@ -1526,10 +1523,7 @@ PERMISSIONS SYNC SUMMARY (DELTA)
   Removed (detected only):   0
   Failed:                    0
 --- Item Permissions ---
-  Items Processed:           12
-  Permissions Added:         2
-  Permissions Unchanged:     18
-  Permissions Failed:        0
+  Not synced (no Fabric API) - re-apply item shares manually
 ======================================================================
 ```
 
@@ -1904,15 +1898,44 @@ All sync operations now compare primary vs secondary state **before** making cha
 
 **Key design decision:** Removed principals are **detected but not auto-deleted** to prevent accidental permission loss. The delta report includes `permissions_removed_detected` count so operators can review and manually remove if intended.
 
-### 28.2 Item Permissions — Delta Sync
+### 28.2 Item Permissions — ⚠️ Known DR Limitation (Not Synced)
 
-**File:** `scripts/sync_permissions.py` → `sync_item_permissions()`
+**Item-level permissions are not replicated to the secondary workspace.**
 
-For each primary item with a mapping to a secondary item:
-1. Fetches existing secondary item permissions via `GET /items/{id}/permissions`
-2. Builds a `(principal_id, role)` key set from secondary
-3. Only POSTs permissions that are **missing** from secondary
-4. Reports `item_permissions_added` vs `item_permissions_unchanged`
+Microsoft Fabric exposes **no public REST API** to read or write per-item
+permissions. The `Core → Items` operation group contains only `Create`, `Delete`,
+`Get`, `Get Definition`, `Update`, `Update Definition`, `Move`, `List Items`,
+`List Item Connections`, the bulk export/import/move operations, and the relations
+operations. There is no `permissions` route — `GET`/`POST` against
+`/v1/workspaces/{ws}/items/{item}/permissions` returns **404**.
+
+Earlier revisions of this framework called that path from
+`common.get_item_permissions()` / `common.set_item_permissions()` and
+`sync_permissions.sync_item_permissions()`. Because the 404 was caught and logged
+at `debug` level, the phase reported `0 added / 0 unchanged / 0 failed` — which
+read as *"nothing needed syncing"* rather than *"this never worked."* That code has
+been removed so the gap is explicit rather than silent.
+
+**What is supported instead:**
+
+| Permission scope | API | Status in this framework |
+|------------------|-----|--------------------------|
+| Workspace roles | `GET/POST/PATCH/DELETE /workspaces/{id}/roleAssignments` | ✅ Synced — section 28.1 |
+| Connection roles | `GET/POST /connections/{id}/roleAssignments` | ✅ Synced — see "Closed Gap: Connection Role Assignments" |
+| OneLake data access roles (RLS/CLS) | `GET/PUT /items/{id}/dataAccessRoles` | ✅ Synced — section 28.3 |
+| Power BI report/dataset sharing | `/groups/{ws}/reports/{id}/users`, `/groups/{ws}/datasets/{id}/users` (Power BI base URL) | ⬜ Not implemented |
+| Generic item sharing | **None — portal UI only** | ❌ Not possible via API |
+| Item access audit | `GET /admin/workspaces/{ws}/items/{item}/users` (admin-only, read-only, `Tenant.Read.All`) | ⬜ Not implemented |
+
+**Operational impact:** in most deployments workspace-level roles carry the
+effective access, so this gap is usually benign. It matters when an item has been
+shared directly with a principal who has **no** workspace role — that principal will
+lose access after failover.
+
+**Recommended mitigation:** avoid direct item shares for DR-protected workspaces and
+grant access via workspace roles or Entra groups instead. Where direct shares are
+unavoidable, record them in the runbook and re-apply them manually in the secondary
+workspace via the Fabric portal (**Item → Share**) after failover.
 
 ### 28.3 OneLake Data Access Roles — Delta Sync
 
@@ -2065,6 +2088,7 @@ When replicating artifacts using `getDefinition` / `updateDefinition`, only the 
 | **Job Schedules** | P0 | `GET/POST /items/{id}/jobs/{jobType}/schedules` | Failover script handles (pause/resume). Full sync not yet implemented. |
 | **Item Ownership** | P0 | `POST /groups/{ws}/datasets/{id}/Default.TakeOver` | ✅ **Closed for SemanticModel** — `failover.py` step 5 takes over every model in the secondary workspace. No GA takeover API exists for other item types. |
 | **Connection Role Assignments** | P0 | `GET /items/{id}/connections`, `GET/POST /connections/{id}/roleAssignments` | ✅ **Closed** — `sync_permissions.py` grants the DR principal a role on every connection actually in use. |
+| **Item-Level Permissions** | P1 | *None — no public Fabric API* | ❌ **Open, not closable.** No REST route exists for per-item permissions (`/items/{id}/permissions` returns 404). Item shares must be re-applied in the portal after failover. See section 28.2. |
 | **Sensitivity Labels** | P1 | `GET /items/{id}` (read), Admin API (write) | Detection in drift page. Applying requires Admin API or MIP SDK. |
 | **Item Description** | P2 | `PATCH /items/{id}` with `{description}` | Not yet synced. |
 | **Tags** | P2 | Fabric Tags API | Not yet synced. |

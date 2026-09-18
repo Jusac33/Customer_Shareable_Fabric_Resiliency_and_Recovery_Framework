@@ -594,48 +594,13 @@ def update_item_definition(
     return api_call("POST", endpoint, payload)
 
 
-def get_item_permissions(workspace_id: str, item_id: str) -> List[Dict[str, Any]]:
-    """
-    Get permissions for an item.
-    
-    Args:
-        workspace_id: Workspace GUID
-        item_id: Item GUID
-        
-    Returns:
-        List of permission assignments
-    """
-    endpoint = f"/workspaces/{workspace_id}/items/{item_id}/permissions"
-    response = api_call("GET", endpoint)
-    return response.get("value", [])
-
-
-def set_item_permissions(
-    workspace_id: str,
-    item_id: str,
-    principal_id: str,
-    principal_type: str,
-    role: str,
-) -> Dict[str, Any]:
-    """
-    Set permission for an item.
-    
-    Args:
-        workspace_id: Workspace GUID
-        item_id: Item GUID
-        principal_id: AAD principal ID (user or group)
-        principal_type: "User" or "Group"
-        role: "Admin", "Member", "Contributor", or "Viewer"
-        
-    Returns:
-        Permission assignment result
-    """
-    endpoint = f"/workspaces/{workspace_id}/items/{item_id}/permissions"
-    payload = {
-        "principal": {"id": principal_id, "type": principal_type},
-        "role": role,
-    }
-    return api_call("POST", endpoint, payload)
+# NOTE: There is deliberately no item-level permission helper here.
+# Fabric exposes no public REST API to read or write per-item permissions:
+# `/workspaces/{id}/items/{id}/permissions` is not a real route and returns 404.
+# Item-level sharing must be done in the Fabric portal. See IMPLEMENTATION_GUIDE.md
+# section 28.2 for the DR implications. Supported permission surfaces used by this
+# framework are workspace roleAssignments, connection roleAssignments, and OneLake
+# dataAccessRoles.
 
 
 # ============================================================================
