@@ -7032,52 +7032,12 @@ def api_security_replicate():
     return jsonify({"status": "ok", "total_actions": total, "errors": errors, "results": results})
 
 
-@app.route('/api/security/item-permissions', methods=['GET'])
-def api_item_permissions():
-    """Get item-level permissions for all artifacts in both workspaces."""
-    if not is_authenticated():
-        return jsonify({"error": "Not authenticated"}), 401
-
-    p_id = _ws_id("primary")
-    s_id = _ws_id("secondary")
-    if not p_id or not s_id:
-        return jsonify({"error": "Workspaces not configured"}), 400
-
-    p_items = get_workspace_items(p_id)
-    s_items = get_workspace_items(s_id)
-    s_by_name_type = {(i.get("type"), i.get("displayName")): i for i in s_items}
-
-    items_perms = []
-    for p_item in p_items:
-        p_type = p_item.get("type")
-        p_name = p_item.get("displayName")
-        if p_type in ("SQLEndpoint",):
-            continue  # Skip system items
-        s_item = s_by_name_type.get((p_type, p_name))
-        entry = {"name": p_name, "type": p_type, "primary_permissions": [], "secondary_permissions": [],
-                 "in_sync": True}
-        try:
-            p_perms = fabric_api("GET", f"/workspaces/{p_id}/items/{p_item['id']}/permissions")
-            entry["primary_permissions"] = p_perms.get("value", []) if isinstance(p_perms, dict) else []
-        except Exception:
-            pass
-        if s_item:
-            try:
-                s_perms = fabric_api("GET", f"/workspaces/{s_id}/items/{s_item['id']}/permissions")
-                entry["secondary_permissions"] = s_perms.get("value", []) if isinstance(s_perms, dict) else []
-            except Exception:
-                pass
-        # Check sync status
-        p_set = {(p.get("principal", {}).get("id"), p.get("role")) for p in entry["primary_permissions"]}
-        s_set = {(p.get("principal", {}).get("id"), p.get("role")) for p in entry["secondary_permissions"]}
-        entry["in_sync"] = p_set == s_set
-        entry["missing_in_secondary"] = len(p_set - s_set)
-        entry["extra_in_secondary"] = len(s_set - p_set)
-
-        if entry["primary_permissions"] or entry["secondary_permissions"]:
-            items_perms.append(entry)
-
-    return jsonify({"items": items_perms})
+# NOTE: A /api/security/item-permissions route was removed here. It called
+# GET /workspaces/{id}/items/{id}/permissions, which is not a real Fabric REST
+# route (404), so it always reported every item as "in sync" with zero
+# permissions. Fabric exposes no public API for per-item permissions; item-level
+# shares must be inspected and re-applied in the Fabric portal.
+# See IMPLEMENTATION_GUIDE.md section 28.2.
 
 
 @app.route('/security', methods=['GET'])
