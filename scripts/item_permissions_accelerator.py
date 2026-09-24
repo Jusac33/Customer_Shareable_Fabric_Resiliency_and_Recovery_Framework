@@ -44,7 +44,11 @@ tenant actually returns.
 Usage:
   python item_permissions_accelerator.py --verify-contract
   python item_permissions_accelerator.py --plan
-  python item_permissions_accelerator.py --apply --i-understand-this-is-unsupported
+  # review data/item_permissions_plan.csv; delete rows you do not want
+  python item_permissions_accelerator.py --apply --i-understand-this-is-unsupported \
+      --contract-file contract.json
+
+--apply executes the reviewed CSV exactly as written. It does not re-plan.
 """
 
 import argparse
@@ -251,10 +255,12 @@ def extract_principals(access_payload: Any) -> List[Dict[str, Any]]:
             or principal.get("id")
             or principal.get("identifier")
         )
+        # No default: guessing "User" for a group would grant to the wrong
+        # principal kind. Untyped entries are surfaced and skipped by the planner.
         ptype = (
             principal.get("principalType")
             or principal.get("type")
-            or "User"
+            or ""
         )
         role = (
             e.get("permissionType")
@@ -364,6 +370,8 @@ def build_plan(
         "items_examined": 0,
         "items_unmapped": 0,
         "items_unreadable": 0,
+        "secondary_unreadable": 0,
+        "principals_untyped": 0,
         "grants_planned": 0,
         "already_present": 0,
     }
@@ -395,11 +403,27 @@ def build_plan(
             continue
 
         s_access, _ = read_item_access(cluster, s_item_id, logger)
+        if s_access is None:
+            # Unknown secondary state: planning here would treat every primary
+            # principal as missing and propose duplicate grants.
+            stats["secondary_unreadable"] += 1
+            logger.warning(
+                f"Skipping {item.get('displayName')}: secondary item {s_item_id} unreadable"
+            )
+            continue
+
         s_keys = {
             (x["principal_id"], x["role"]) for x in extract_principals(s_access)
         }
 
         for pr in p_principals:
+            if not pr["principal_type"]:
+                stats["principals_untyped"] += 1
+                logger.warning(
+                    f"Skipping principal {pr['principal_id']} on "
+                    f"{item.get('displayName')}: response gave no principal type"
+                )
+                continue
             if (pr["principal_id"], pr["role"]) in s_keys:
                 stats["already_present"] += 1
                 continue
@@ -421,29 +445,56 @@ def build_plan(
     return plan, stats
 
 
+PLAN_FIELDS = [
+    "item_name",
+    "item_type",
+    "primary_item_id",
+    "secondary_item_id",
+    "principal_id",
+    "principal_type",
+    "role",
+]
+
+REQUIRED_PLAN_FIELDS = ("secondary_item_id", "principal_id", "principal_type", "role")
+
+
 def write_plan_csv(plan: List[Dict[str, Any]], path: str, logger) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fields = [
-        "item_name",
-        "item_type",
-        "primary_item_id",
-        "secondary_item_id",
-        "principal_id",
-        "principal_type",
-        "role",
-    ]
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fields)
+        w = csv.DictWriter(f, fieldnames=PLAN_FIELDS)
         w.writeheader()
         w.writerows(plan)
     logger.info(f"Plan written to {path} ({len(plan)} rows)")
+
+
+def load_plan_csv(path: str) -> List[Dict[str, Any]]:
+    """
+    Load the operator-reviewed plan. --apply executes exactly these rows, so a
+    reviewer can delete rows they do not want applied.
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"Plan file {path} not found. Run --plan first and review it."
+        )
+
+    with open(path, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        missing = [c for c in REQUIRED_PLAN_FIELDS if c not in (reader.fieldnames or [])]
+        if missing:
+            raise ValueError(f"Plan file {path} is missing columns: {missing}")
+        rows = list(reader)
+
+    for i, row in enumerate(rows, start=2):  # row 1 is the header
+        blank = [c for c in REQUIRED_PLAN_FIELDS if not (row.get(c) or "").strip()]
+        if blank:
+            raise ValueError(f"Plan file {path} line {i} has blank fields: {blank}")
+    return rows
 
 
 def apply_plan(
     cluster: str,
     contract: Dict[str, Any],
     plan: List[Dict[str, Any]],
-    secondary_workspace_id: str,
     logger,
 ) -> Dict[str, Any]:
     result = {"applied": 0, "failed": 0, "failures": []}
@@ -560,7 +611,10 @@ def main() -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Apply the plan. Requires --i-understand-this-is-unsupported.",
+        help=(
+            "Apply the reviewed plan CSV exactly as written (does NOT re-plan). "
+            "Requires --i-understand-this-is-unsupported."
+        ),
     )
     parser.add_argument(
         "--i-understand-this-is-unsupported",
@@ -579,6 +633,12 @@ def main() -> int:
 
     if not any([args.verify_contract, args.plan, args.apply]):
         parser.error("Specify one of --verify-contract, --plan, or --apply")
+
+    if sum([args.verify_contract, args.plan, args.apply]) > 1:
+        parser.error(
+            "--verify-contract, --plan, and --apply are separate steps. Run "
+            "--plan, review the CSV, then run --apply on its own."
+        )
 
     if args.apply and not args.ack:
         parser.error(
@@ -600,9 +660,23 @@ def main() -> int:
         logger.error("Set FABRIC_INTERNAL_CLUSTER to bypass discovery.")
         return 1
 
-    if args.verify_contract:
-        return verify_contract(cluster, args.primary_workspace, logger)
+    try:
+        if args.verify_contract:
+            return verify_contract(cluster, args.primary_workspace, logger)
+        if args.plan:
+            return _run_plan(cluster, args, logger)
+        return _run_apply(cluster, args, logger)
+    except InternalApiError as e:
+        logger.error(f"Internal API rejected the request: {e}")
+        if e.status_code in (401, 403):
+            logger.error(
+                "These endpoints may not accept service principal tokens. "
+                "Nothing further was attempted."
+            )
+        return 1
 
+
+def _run_plan(cluster: str, args, logger) -> int:
     artifact_mapping = common.load_artifact_mapping()
     if not artifact_mapping:
         logger.error("No artifact mapping found - cannot map primary to secondary items.")
@@ -620,17 +694,39 @@ def main() -> int:
     print("\n" + "=" * 70)
     print("ITEM PERMISSION PLAN")
     print("=" * 70)
-    print(f"  Items examined:      {stats['items_examined']}")
-    print(f"  Items unmapped:      {stats['items_unmapped']}")
-    print(f"  Items unreadable:    {stats['items_unreadable']}")
-    print(f"  Already present:     {stats['already_present']}")
-    print(f"  Grants planned:      {stats['grants_planned']}")
-    print(f"  Plan CSV:            {args.plan_file}")
+    print(f"  Items examined:        {stats['items_examined']}")
+    print(f"  Items unmapped:        {stats['items_unmapped']}")
+    print(f"  Primary unreadable:    {stats['items_unreadable']}")
+    print(f"  Secondary unreadable:  {stats['secondary_unreadable']}")
+    print(f"  Principals untyped:    {stats['principals_untyped']}")
+    print(f"  Already present:       {stats['already_present']}")
+    print(f"  Grants planned:        {stats['grants_planned']}")
+    print(f"  Plan CSV:              {args.plan_file}")
     print("=" * 70 + "\n")
 
-    if not args.apply:
-        print("Read-only. Review the plan CSV, then rerun with --apply "
-              "--i-understand-this-is-unsupported.\n")
+    incomplete = (
+        stats["items_unreadable"]
+        + stats["secondary_unreadable"]
+        + stats["principals_untyped"]
+    )
+    if incomplete:
+        print(f"WARNING: {incomplete} item(s)/principal(s) could not be evaluated and")
+        print("are NOT in the plan. Handle them manually in the portal.\n")
+
+    print("Review the plan CSV (delete any rows you do not want), then run:")
+    print("  --apply --i-understand-this-is-unsupported --contract-file <file>\n")
+    return 1 if incomplete else 0
+
+
+def _run_apply(cluster: str, args, logger) -> int:
+    try:
+        plan = load_plan_csv(args.plan_file)
+    except (FileNotFoundError, ValueError) as e:
+        logger.error(str(e))
+        return 1
+
+    if not plan:
+        logger.info(f"Plan file {args.plan_file} has no rows - nothing to apply.")
         return 0
 
     contract = load_contract(args.contract_file, logger)
@@ -640,22 +736,24 @@ def main() -> int:
             "shape is wrong. Verify results in the portal afterwards."
         )
 
-    apply_result = apply_plan(
-        cluster, contract, plan, args.secondary_workspace, logger
-    )
+    logger.info(f"Applying {len(plan)} reviewed rows from {args.plan_file}")
+    apply_result = apply_plan(cluster, contract, plan, logger)
+
+    not_attempted = len(plan) - apply_result["applied"] - apply_result["failed"]
 
     print("\n" + "=" * 70)
     print("APPLY RESULT")
     print("=" * 70)
-    print(f"  Applied:  {apply_result['applied']}")
-    print(f"  Failed:   {apply_result['failed']}")
+    print(f"  Applied:        {apply_result['applied']}")
+    print(f"  Failed:         {apply_result['failed']}")
+    print(f"  Not attempted:  {not_attempted}")
     for f in apply_result["failures"][:10]:
         print(f"    - {f['item']} / {f['principal']}: HTTP {f['status']}")
     print("=" * 70)
     print("\nVERIFY THESE GRANTS IN THE FABRIC PORTAL. This tool used an")
     print("unsupported API and its success responses are not authoritative.\n")
 
-    return 0 if apply_result["failed"] == 0 else 1
+    return 0 if apply_result["failed"] == 0 and not_attempted == 0 else 1
 
 
 if __name__ == "__main__":

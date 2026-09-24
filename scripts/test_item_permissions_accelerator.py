@@ -257,7 +257,7 @@ class TestApplyPlanStopsOnSystemicFailure(unittest.TestCase):
     def test_stops_on_400_with_unverified_contract(self, mock_grant):
         mock_grant.side_effect = acc.InternalApiError(400, "u", "bad shape")
         result = acc.apply_plan(
-            "https://c", {"verified": False, "path": "/p"}, self.plan, "ws", self.logger
+            "https://c", {"verified": False, "path": "/p"}, self.plan, self.logger
         )
         self.assertEqual(result["applied"], 0)
         self.assertEqual(result["failed"], 1)
@@ -267,7 +267,7 @@ class TestApplyPlanStopsOnSystemicFailure(unittest.TestCase):
     def test_stops_on_auth_failure(self, mock_grant):
         mock_grant.side_effect = acc.InternalApiError(401, "u", "denied")
         result = acc.apply_plan(
-            "https://c", {"verified": True, "path": "/p"}, self.plan, "ws", self.logger
+            "https://c", {"verified": True, "path": "/p"}, self.plan, self.logger
         )
         self.assertEqual(mock_grant.call_count, 1)
         self.assertEqual(result["failed"], 1)
@@ -281,7 +281,7 @@ class TestApplyPlanStopsOnSystemicFailure(unittest.TestCase):
             None,
         ]
         result = acc.apply_plan(
-            "https://c", {"verified": True, "path": "/p"}, self.plan, "ws", self.logger
+            "https://c", {"verified": True, "path": "/p"}, self.plan, self.logger
         )
         self.assertEqual(result["applied"], 3)
         self.assertEqual(result["failed"], 1)
@@ -289,10 +289,209 @@ class TestApplyPlanStopsOnSystemicFailure(unittest.TestCase):
     @mock.patch("item_permissions_accelerator.grant_item_access", return_value=None)
     def test_all_success(self, _g):
         result = acc.apply_plan(
-            "https://c", {"verified": True, "path": "/p"}, self.plan, "ws", self.logger
+            "https://c", {"verified": True, "path": "/p"}, self.plan, self.logger
         )
         self.assertEqual(result["applied"], 4)
         self.assertEqual(result["failed"], 0)
+
+
+class TestExtractPrincipalsNoTypeGuess(unittest.TestCase):
+    def test_missing_type_is_blank_not_user(self):
+        out = acc.extract_principals([{"principalId": "a", "permissionType": "Read"}])
+        self.assertEqual(out[0]["principal_type"], "")
+
+
+class TestBuildPlan(unittest.TestCase):
+    """Regression tests for planner correctness found on recheck."""
+
+    def setUp(self):
+        self.logger = mock.MagicMock()
+        self.items = [{"id": "p1", "displayName": "LH", "type": "Lakehouse"}]
+        self.mapping = {"p1": "s1"}
+        patcher = mock.patch("item_permissions_accelerator.common.save_json")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    def _run(self, reads):
+        def fake_read(cluster, item_id, logger):
+            return reads[item_id]
+
+        with mock.patch(
+            "item_permissions_accelerator.common.get_items", return_value=self.items
+        ), mock.patch(
+            "item_permissions_accelerator.read_item_access", side_effect=fake_read
+        ):
+            return acc.build_plan("https://c", "pw", "sw", self.mapping, self.logger)
+
+    def test_unreadable_secondary_is_skipped_not_planned(self):
+        plan, stats = self._run(
+            {
+                "p1": ([{"principalId": "u", "principalType": "User", "permissionType": "Read"}], "/x"),
+                "s1": (None, None),
+            }
+        )
+        self.assertEqual(plan, [])
+        self.assertEqual(stats["secondary_unreadable"], 1)
+        self.assertEqual(stats["grants_planned"], 0)
+
+    def test_untyped_principal_is_skipped(self):
+        plan, stats = self._run(
+            {
+                "p1": ([{"principalId": "u", "permissionType": "Read"}], "/x"),
+                "s1": ([], "/x"),
+            }
+        )
+        self.assertEqual(plan, [])
+        self.assertEqual(stats["principals_untyped"], 1)
+
+    def test_missing_grant_is_planned(self):
+        plan, stats = self._run(
+            {
+                "p1": ([{"principalId": "u", "principalType": "Group", "permissionType": "Read"}], "/x"),
+                "s1": ([], "/x"),
+            }
+        )
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0]["secondary_item_id"], "s1")
+        self.assertEqual(plan[0]["principal_type"], "Group")
+
+    def test_existing_grant_not_replanned(self):
+        entry = {"principalId": "u", "principalType": "User", "permissionType": "Read"}
+        plan, stats = self._run({"p1": ([entry], "/x"), "s1": ([entry], "/x")})
+        self.assertEqual(plan, [])
+        self.assertEqual(stats["already_present"], 1)
+
+
+class TestPlanCsvRoundTrip(unittest.TestCase):
+    def setUp(self):
+        self.logger = mock.MagicMock()
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "plan.csv")
+
+    def tearDown(self):
+        if os.path.exists(self.path):
+            os.unlink(self.path)
+        os.rmdir(self.dir)
+
+    def test_round_trip(self):
+        rows = [
+            {
+                "item_name": "LH",
+                "item_type": "Lakehouse",
+                "primary_item_id": "p1",
+                "secondary_item_id": "s1",
+                "principal_id": "u",
+                "principal_type": "User",
+                "role": "Read",
+            }
+        ]
+        acc.write_plan_csv(rows, self.path, self.logger)
+        self.assertEqual(acc.load_plan_csv(self.path), rows)
+
+    def test_missing_file_raises(self):
+        with self.assertRaises(FileNotFoundError):
+            acc.load_plan_csv(self.path)
+
+    def test_missing_column_raises(self):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("item_name,principal_id\nLH,u\n")
+        with self.assertRaises(ValueError):
+            acc.load_plan_csv(self.path)
+
+    def test_blank_required_field_raises(self):
+        acc.write_plan_csv(
+            [
+                {
+                    "item_name": "LH",
+                    "item_type": "",
+                    "primary_item_id": "p1",
+                    "secondary_item_id": "s1",
+                    "principal_id": "u",
+                    "principal_type": "",
+                    "role": "Read",
+                }
+            ],
+            self.path,
+            self.logger,
+        )
+        with self.assertRaises(ValueError):
+            acc.load_plan_csv(self.path)
+
+
+class TestMainApplyUsesReviewedPlan(unittest.TestCase):
+    """The core recheck finding: --apply must not re-plan from live state."""
+
+    def _argv(self, *extra):
+        return ["item_permissions_accelerator.py", *extra]
+
+    @mock.patch("item_permissions_accelerator.resolve_cluster", return_value="https://c")
+    @mock.patch("item_permissions_accelerator.build_plan")
+    @mock.patch("item_permissions_accelerator.apply_plan")
+    def test_apply_reads_csv_and_never_calls_build_plan(self, mock_apply, mock_build, _rc):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "plan.csv")
+        reviewed = [
+            {
+                "item_name": "Kept",
+                "item_type": "Lakehouse",
+                "primary_item_id": "p1",
+                "secondary_item_id": "s1",
+                "principal_id": "u",
+                "principal_type": "User",
+                "role": "Read",
+            }
+        ]
+        acc.write_plan_csv(reviewed, path, mock.MagicMock())
+        mock_apply.return_value = {"applied": 1, "failed": 0, "failures": []}
+        try:
+            with mock.patch.object(
+                sys,
+                "argv",
+                self._argv(
+                    "--apply",
+                    "--i-understand-this-is-unsupported",
+                    "--plan-file",
+                    path,
+                ),
+            ):
+                rc = acc.main()
+        finally:
+            os.unlink(path)
+            os.rmdir(d)
+
+        self.assertEqual(rc, 0)
+        mock_build.assert_not_called()
+        applied_rows = mock_apply.call_args[0][2]
+        self.assertEqual([r["item_name"] for r in applied_rows], ["Kept"])
+
+    @mock.patch("item_permissions_accelerator.resolve_cluster", return_value="https://c")
+    def test_apply_without_plan_file_fails_cleanly(self, _rc):
+        with mock.patch.object(
+            sys,
+            "argv",
+            self._argv(
+                "--apply",
+                "--i-understand-this-is-unsupported",
+                "--plan-file",
+                os.path.join(tempfile.gettempdir(), "does-not-exist-xyz.csv"),
+            ),
+        ):
+            self.assertEqual(acc.main(), 1)
+
+    def test_modes_are_mutually_exclusive(self):
+        with mock.patch.object(sys, "argv", self._argv("--plan", "--apply", "--i-understand-this-is-unsupported")):
+            with self.assertRaises(SystemExit) as ctx:
+                acc.main()
+        self.assertEqual(ctx.exception.code, 2)
+
+    @mock.patch("item_permissions_accelerator.resolve_cluster", return_value="https://c")
+    @mock.patch(
+        "item_permissions_accelerator.verify_contract",
+        side_effect=acc.InternalApiError(403, "u", "denied"),
+    )
+    def test_auth_error_exits_cleanly_not_traceback(self, _vc, _rc):
+        with mock.patch.object(sys, "argv", self._argv("--verify-contract")):
+            self.assertEqual(acc.main(), 1)
 
 
 class TestNotWiredIntoAutomatedPaths(unittest.TestCase):

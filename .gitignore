@@ -60,6 +60,8 @@ logs/
 # Data (ignore generated reports but track templates)
 data/*.json
 data/*.bak
+# Contains principal IDs from item_permissions_accelerator.py
+data/item_permissions_plan.csv
 
 # Cache
 .cache/

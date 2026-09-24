@@ -1948,8 +1948,8 @@ the **Fabric/Power BI internal portal backend** — the same endpoints the porta
 own Share dialog calls:
 
 ```
-POST  {cluster}/metadata/access                 (grant)
-GET   {cluster}/metadata/access/artifacts/{id}  (read)
+POST  {cluster}/metadata/access                                    (grant)
+GET   {cluster}/metadata/access/artifacts/{id}  or  /m/access/...  (read; both tried)
 ```
 
 `{cluster}` is the tenant's backend host (e.g.
@@ -1978,13 +1978,20 @@ python scripts/item_permissions_accelerator.py --verify-contract
 # 2. Read-only diff: what would be granted on secondary?
 python scripts/item_permissions_accelerator.py --plan
 
-# 3. Review data/item_permissions_plan.csv, then apply
+# 3. Review data/item_permissions_plan.csv (delete rows you do not want), then apply
 python scripts/item_permissions_accelerator.py --apply \
     --i-understand-this-is-unsupported --contract-file contract.json
 ```
 
-`--apply` is refused without the acknowledgement flag. Steps 1 and 2 write
-nothing.
+`--apply` is refused without the acknowledgement flag, and executes the reviewed
+CSV **exactly as written** — it does not re-plan, so the review is a real
+control. The three modes are mutually exclusive. Steps 1 and 2 write nothing to
+Fabric. The plan CSV contains principal IDs and is gitignored.
+
+`--plan` does **not** guess when state is ambiguous. Items whose primary or
+secondary access cannot be read, and principals the response gives no type for,
+are left out of the plan, counted in the summary, and make the run exit
+non-zero so they get handled manually.
 
 #### The write payload is UNVERIFIED
 
