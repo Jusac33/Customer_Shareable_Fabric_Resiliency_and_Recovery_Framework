@@ -1923,9 +1923,11 @@ been removed so the gap is explicit rather than silent.
 | Workspace roles | `GET/POST/PATCH/DELETE /workspaces/{id}/roleAssignments` | ✅ Synced — section 28.1 |
 | Connection roles | `GET/POST /connections/{id}/roleAssignments` | ✅ Synced — see "Closed Gap: Connection Role Assignments" |
 | OneLake data access roles (RLS/CLS) | `GET/PUT /items/{id}/dataAccessRoles` | ✅ Synced — section 28.3 |
-| Power BI report/dataset sharing | `/groups/{ws}/reports/{id}/users`, `/groups/{ws}/datasets/{id}/users` (Power BI base URL) | ⬜ Not implemented |
-| Generic item sharing | **None — portal UI only** | ❌ Not possible via API |
-| Item access audit | `GET /admin/workspaces/{ws}/items/{item}/users` (admin-only, read-only, `Tenant.Read.All`) | ⬜ Not implemented |
+| Power BI semantic model sharing | `GET/POST/PUT /groups/{ws}/datasets/{id}/users` (Power BI base URL) | ⬜ Not implemented — real and GA |
+| Power BI report / dashboard sharing | **None** — the `Reports` and `Dashboards` operation groups have no user operations | ❌ Not possible via API |
+| Generic item sharing | **None — portal UI only** | ⚠️ Accelerator available — section 28.2.1 |
+| Item access audit | `GET /admin/workspaces/{ws}/items/{item}/users` (admin-only, `Tenant.Read.All`, 200 req/hr) | ⬜ Not implemented |
+| Item access audit, bulk | `POST /v1.0/myorg/admin/workspaces/getInfo?getArtifactUsers=true` (Scanner API, 500 req/hr) | ⬜ Not implemented — best read option |
 
 **Operational impact:** in most deployments workspace-level roles carry the
 effective access, so this gap is usually benign. It matters when an item has been
@@ -1936,6 +1938,145 @@ lose access after failover.
 grant access via workspace roles or Entra groups instead. Where direct shares are
 unavoidable, record them in the runbook and re-apply them manually in the secondary
 workspace via the Fabric portal (**Item → Share**) after failover.
+
+### 28.2.1 Item Permissions Accelerator — ⚠️ Unsupported Internal API
+
+**File:** `scripts/item_permissions_accelerator.py`
+
+Where manual re-application is impractical, this operator-run accelerator drives
+the **Fabric/Power BI internal portal backend** — the same endpoints the portal's
+own Share dialog calls:
+
+```
+POST  {cluster}/metadata/access                                    (grant)
+GET   {cluster}/metadata/access/artifacts/{id}  or  /m/access/...  (read; both tried)
+```
+
+`{cluster}` is the tenant's backend host (e.g.
+`https://wabi-us-east2-a-primary-redirect.analysis.windows.net`), resolved at
+runtime or pinned with `FABRIC_INTERNAL_CLUSTER`. Tokens use the Power BI
+audience (`POWERBI_API_SCOPE`), **not** the Fabric audience.
+
+> **These endpoints are undocumented, unversioned, carry no deprecation policy,
+> and Microsoft Support will not assist with them.** They may change or disappear
+> without notice.
+
+**Sanctioned use:** operator-run accelerator producing a reviewed plan, applied
+with a human verifying the result in the portal afterwards.
+
+**Not sanctioned:** wiring this into automated failover or treating it as a DR
+control the recovery plan silently depends on. The module is deliberately not
+imported by `sync_permissions.py`, `failover.py`, or `failback.py`, and
+`test_item_permissions_accelerator.py` asserts that this stays true.
+
+#### Workflow
+
+```bash
+# 1. Read-only probe: are the endpoints reachable, and what shape do they return?
+python scripts/item_permissions_accelerator.py --verify-contract
+
+# 2. Read-only diff: what would be granted on secondary?
+python scripts/item_permissions_accelerator.py --plan
+
+# 3. Review data/item_permissions_plan.csv (delete rows you do not want), then apply
+python scripts/item_permissions_accelerator.py --apply \
+    --i-understand-this-is-unsupported --contract-file contract.json
+```
+
+`--apply` is refused without the acknowledgement flag, and executes the reviewed
+CSV **exactly as written** — it does not re-plan, so the review is a real
+control. The three modes are mutually exclusive. Steps 1 and 2 write nothing to
+Fabric. The plan CSV contains principal IDs and is gitignored.
+
+`--plan` does **not** guess when state is ambiguous. Items whose primary or
+secondary access cannot be read, principals the response gives no type for, and
+access entries the parser cannot interpret are left out of the plan, counted in
+the summary, and make the run exit non-zero so they get handled manually.
+
+#### Live test results (read side, 2026-09-26)
+
+The read side was tested against a real workspace using an interactive **user**
+token (no service principal credentials were available, so SPN support is still
+untested). Findings:
+
+| Item type | `/metadata/access/artifacts/{id}` | `/m/access/artifacts/{id}` |
+|-----------|-----------------------------------|----------------------------|
+| Lakehouse, Warehouse, Notebook | ✅ 200 | ❌ 404 |
+| Report, SemanticModel | ❌ 404 | ❌ 404 |
+
+Reports and semantic models cannot be handled by this tool. Semantic models have
+a supported alternative (`/groups/{ws}/datasets/{id}/users`); Reports have none.
+
+The live response differs from the community-reported shape, and the first
+version of the parser recognised **none** of its entries:
+
+- Entries are under `detail`, not `permissions`/`value`.
+- The principal is `objectId`. In this shape `id` is the item's numeric ID and
+  is never used as a principal.
+- Permissions are **integer bitmasks** (`permissions`, `artifactPermissions`),
+  not role names. They are carried as `{role}` and `{artifact_permissions}` and
+  sent as JSON numbers.
+- Groups carry `groupId`; users carry `userType: 0`. Anything else is left
+  untyped and skipped.
+- **Most listed access is inherited.** Entries with `accessSource.folderRole`
+  (Administrator / Member / Contributor / Viewer) come from workspace roles. In
+  the test, 8 of 12 entries were inherited. These are counted and **skipped**:
+  workspace roles already sync via `roleAssignments`, and copying them as direct
+  shares would leave grants behind if the role were later removed. Only direct
+  shares (no `accessSource`) are planned.
+
+#### The write payload is UNVERIFIED
+
+`DEFAULT_WRITE_CONTRACT` holds a best-guess request shape, updated to carry the
+bitmasks observed on the read side. The grant body itself has **not** been
+verified against a captured request. Unlike the removed dead code, this
+matters: the endpoint genuinely exists, so a wrong body yields HTTP 400, or a
+partial success that silently grants the wrong permission level. It was not
+live-tested, because a test grant would change real permissions.
+
+Capture ground truth from the portal (F12 → Network → share a test item →
+filter `access` → copy the request JSON), then supply it via `--contract-file`:
+
+```json
+{
+  "path": "/metadata/access",
+  "body_template": {
+    "artifactObjectIds": ["{item_id}"],
+    "permissions": [{
+      "principalId": "{principal_id}",
+      "principalType": "{principal_type}",
+      "permissionType": "{role}",
+      "artifactPermissions": "{artifact_permissions}",
+      "grant": true
+    }]
+  },
+  "role_map": {}
+}
+```
+
+Placeholders `{item_id}`, `{principal_id}`, `{principal_type}`, `{role}`, and
+`{artifact_permissions}` are substituted at call time. A value that is exactly
+one placeholder is sent with its type (digits become JSON numbers, blank becomes
+`null`); placeholders inside longer strings are replaced as text. `role_map`
+optionally translates a read-side value to what the grant expects; unmapped
+values pass through unchanged.
+
+#### Failure behaviour
+
+The module is built to fail **loudly**, inverting the pattern that made the
+removed code dangerous:
+
+| Condition | Behaviour |
+|-----------|-----------|
+| Any non-2xx | Raises `InternalApiError` with status and full response body |
+| HTTP 400 with unverified contract | Logs a payload-shape diagnostic and **halts** the run |
+| HTTP 401 / 403 | Logs that SPN tokens may be rejected outright and **halts** |
+| Read path 404 | Tries the next known path variant, then warns |
+| Isolated failure, verified contract | Records it and continues |
+
+**Service principal caveat:** these endpoints are built around interactive user
+sessions. A service principal token may be rejected outright. Run
+`--verify-contract` before investing in this path — it reports exactly that.
 
 ### 28.3 OneLake Data Access Roles — Delta Sync
 
@@ -2088,7 +2229,7 @@ When replicating artifacts using `getDefinition` / `updateDefinition`, only the 
 | **Job Schedules** | P0 | `GET/POST /items/{id}/jobs/{jobType}/schedules` | Failover script handles (pause/resume). Full sync not yet implemented. |
 | **Item Ownership** | P0 | `POST /groups/{ws}/datasets/{id}/Default.TakeOver` | ✅ **Closed for SemanticModel** — `failover.py` step 5 takes over every model in the secondary workspace. No GA takeover API exists for other item types. |
 | **Connection Role Assignments** | P0 | `GET /items/{id}/connections`, `GET/POST /connections/{id}/roleAssignments` | ✅ **Closed** — `sync_permissions.py` grants the DR principal a role on every connection actually in use. |
-| **Item-Level Permissions** | P1 | *None — no public Fabric API* | ❌ **Open, not closable.** No REST route exists for per-item permissions (`/items/{id}/permissions` returns 404). Item shares must be re-applied in the portal after failover. See section 28.2. |
+| **Item-Level Permissions** | P1 | *No public Fabric API* | ⚠️ **Partially mitigated.** No REST route exists (`/items/{id}/permissions` returns 404). `scripts/item_permissions_accelerator.py` drives the unsupported internal portal backend as an operator-run accelerator; not wired into automated failover. See sections 28.2 and 28.2.1. |
 | **Sensitivity Labels** | P1 | `GET /items/{id}` (read), Admin API (write) | Detection in drift page. Applying requires Admin API or MIP SDK. |
 | **Item Description** | P2 | `PATCH /items/{id}` with `{description}` | Not yet synced. |
 | **Tags** | P2 | Fabric Tags API | Not yet synced. |
