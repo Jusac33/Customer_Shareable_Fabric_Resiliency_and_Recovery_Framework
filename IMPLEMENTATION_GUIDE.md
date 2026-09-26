@@ -1989,17 +1989,50 @@ control. The three modes are mutually exclusive. Steps 1 and 2 write nothing to
 Fabric. The plan CSV contains principal IDs and is gitignored.
 
 `--plan` does **not** guess when state is ambiguous. Items whose primary or
-secondary access cannot be read, and principals the response gives no type for,
-are left out of the plan, counted in the summary, and make the run exit
-non-zero so they get handled manually.
+secondary access cannot be read, principals the response gives no type for, and
+access entries the parser cannot interpret are left out of the plan, counted in
+the summary, and make the run exit non-zero so they get handled manually.
+
+#### Live test results (read side, 2026-09-26)
+
+The read side was tested against a real workspace using an interactive **user**
+token (no service principal credentials were available, so SPN support is still
+untested). Findings:
+
+| Item type | `/metadata/access/artifacts/{id}` | `/m/access/artifacts/{id}` |
+|-----------|-----------------------------------|----------------------------|
+| Lakehouse, Warehouse, Notebook | ✅ 200 | ❌ 404 |
+| Report, SemanticModel | ❌ 404 | ❌ 404 |
+
+Reports and semantic models cannot be handled by this tool. Semantic models have
+a supported alternative (`/groups/{ws}/datasets/{id}/users`); Reports have none.
+
+The live response differs from the community-reported shape, and the first
+version of the parser recognised **none** of its entries:
+
+- Entries are under `detail`, not `permissions`/`value`.
+- The principal is `objectId`. In this shape `id` is the item's numeric ID and
+  is never used as a principal.
+- Permissions are **integer bitmasks** (`permissions`, `artifactPermissions`),
+  not role names. They are carried as `{role}` and `{artifact_permissions}` and
+  sent as JSON numbers.
+- Groups carry `groupId`; users carry `userType: 0`. Anything else is left
+  untyped and skipped.
+- **Most listed access is inherited.** Entries with `accessSource.folderRole`
+  (Administrator / Member / Contributor / Viewer) come from workspace roles. In
+  the test, 8 of 12 entries were inherited. These are counted and **skipped**:
+  workspace roles already sync via `roleAssignments`, and copying them as direct
+  shares would leave grants behind if the role were later removed. Only direct
+  shares (no `accessSource`) are planned.
 
 #### The write payload is UNVERIFIED
 
-`DEFAULT_WRITE_CONTRACT` holds the community-reported request shape. It has
-**not** been verified against a captured request — field names and the
-permission enum may differ in your tenant. Unlike the removed dead code, this
+`DEFAULT_WRITE_CONTRACT` holds a best-guess request shape, updated to carry the
+bitmasks observed on the read side. The grant body itself has **not** been
+verified against a captured request. Unlike the removed dead code, this
 matters: the endpoint genuinely exists, so a wrong body yields HTTP 400, or a
-partial success that silently grants the wrong permission level.
+partial success that silently grants the wrong permission level. It was not
+live-tested, because a test grant would change real permissions.
 
 Capture ground truth from the portal (F12 → Network → share a test item →
 filter `access` → copy the request JSON), then supply it via `--contract-file`:
@@ -2013,16 +2046,20 @@ filter `access` → copy the request JSON), then supply it via `--contract-file`
       "principalId": "{principal_id}",
       "principalType": "{principal_type}",
       "permissionType": "{role}",
+      "artifactPermissions": "{artifact_permissions}",
       "grant": true
     }]
   },
-  "role_map": { "Read": "CanView" }
+  "role_map": {}
 }
 ```
 
-Placeholders `{item_id}`, `{principal_id}`, `{principal_type}`, and `{role}` are
-substituted at call time. `role_map` translates Fabric role names to whatever
-this endpoint expects; unmapped roles pass through unchanged.
+Placeholders `{item_id}`, `{principal_id}`, `{principal_type}`, `{role}`, and
+`{artifact_permissions}` are substituted at call time. A value that is exactly
+one placeholder is sent with its type (digits become JSON numbers, blank becomes
+`null`); placeholders inside longer strings are replaced as text. `role_map`
+optionally translates a read-side value to what the grant expects; unmapped
+values pass through unchanged.
 
 #### Failure behaviour
 

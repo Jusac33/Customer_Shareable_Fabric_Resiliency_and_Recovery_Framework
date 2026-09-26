@@ -72,12 +72,18 @@ CLUSTER_DISCOVERY_URL = (
 )
 
 # The portal has used more than one path for the read. Tried in order.
+# Live-tested 2026-09-26 with a user token: the first path returns data for
+# Lakehouse, Warehouse and Notebook items; the second returned 404 everywhere.
+# Report and SemanticModel items returned 404 on both.
 READ_PATH_VARIANTS = [
     "/metadata/access/artifacts/{item_id}",
     "/m/access/artifacts/{item_id}",
 ]
 
 # UNVERIFIED - see module docstring. Override with --contract-file.
+# The read side is live-verified: permissions are integer bitmasks
+# ("permissions", "artifactPermissions"), which {role} and
+# {artifact_permissions} carry. The grant body shape itself is still a guess.
 DEFAULT_WRITE_CONTRACT: Dict[str, Any] = {
     "path": "/metadata/access",
     "body_template": {
@@ -87,12 +93,13 @@ DEFAULT_WRITE_CONTRACT: Dict[str, Any] = {
                 "principalId": "{principal_id}",
                 "principalType": "{principal_type}",
                 "permissionType": "{role}",
+                "artifactPermissions": "{artifact_permissions}",
                 "grant": True,
             }
         ],
     },
-    # Maps a Fabric role name -> whatever this endpoint calls it. Identity by
-    # default; replace once you have seen a real request.
+    # Optional translation of the read-side value to what the grant expects.
+    # Identity by default; replace once you have seen a real request.
     "role_map": {},
     "verified": False,
 }
@@ -221,62 +228,119 @@ def read_item_access(cluster: str, item_id: str, logger) -> Tuple[Optional[Any],
     return None, None
 
 
-def extract_principals(access_payload: Any) -> List[Dict[str, Any]]:
+def _principal_type_of(entry: Dict[str, Any], principal: Dict[str, Any]) -> str:
     """
-    Normalize an access payload into [{principal_id, principal_type, role}].
+    Resolve principal kind. Never defaults: guessing "User" for a group would
+    grant to the wrong principal kind. Untyped entries are skipped by the planner.
+    """
+    explicit = principal.get("principalType") or principal.get("type")
+    if explicit:
+        return str(explicit)
+    # Observed live shape (/metadata/access/artifacts): groups carry groupId,
+    # users carry userType == 0. Anything else is left untyped on purpose.
+    if entry.get("groupId"):
+        return "Group"
+    if entry.get("userType") == 0:
+        return "User"
+    return ""
 
-    The internal response shape is not contractual, so this probes the field
-    names the portal has been observed to use and skips anything it cannot
-    interpret rather than guessing.
+
+def _is_inherited(entry: Dict[str, Any]) -> bool:
     """
+    True when access comes from a workspace role, not a direct share.
+
+    Replicating these as direct item grants would be wrong: workspace roles are
+    already synced via roleAssignments, and a direct copy would outlive the
+    role if it were later removed.
+    """
+    src = entry.get("accessSource")
+    if not isinstance(src, dict):
+        return False
+    return src.get("folderRoleId") is not None or bool(src.get("folderRole"))
+
+
+def parse_access(access_payload: Any) -> Dict[str, Any]:
+    """
+    Parse an access payload into direct shares, plus counts of entries that
+    were inherited from workspace roles or could not be interpreted.
+
+    Returns {"direct": [...], "inherited": int, "unparsed": int}. Each direct
+    entry is {principal_id, principal_type, role, artifact_permissions}.
+
+    "unparsed" is reported rather than silently dropped. A previous revision
+    recognised none of the live response's entries and would have reported
+    "0 grants planned" as if nothing needed syncing.
+    """
+    result = {"direct": [], "inherited": 0, "unparsed": 0}
     if not access_payload:
-        return []
+        return result
 
     entries = None
+    live_shape = False
     if isinstance(access_payload, list):
         entries = access_payload
     elif isinstance(access_payload, dict):
-        for key in ("permissions", "accessDetails", "value", "entries", "artifactAccess"):
+        # "detail" is the shape observed live from /metadata/access/artifacts.
+        for key in ("detail", "permissions", "accessDetails", "value", "entries", "artifactAccess"):
             if isinstance(access_payload.get(key), list):
                 entries = access_payload[key]
+                live_shape = key == "detail"
                 break
 
     if not entries:
-        return []
+        return result
 
-    out = []
     for e in entries:
         if not isinstance(e, dict):
+            result["unparsed"] += 1
             continue
+
+        if _is_inherited(e):
+            result["inherited"] += 1
+            continue
+
         principal = e.get("principal") if isinstance(e.get("principal"), dict) else e
-        pid = (
-            principal.get("principalId")
-            or principal.get("objectId")
-            or principal.get("id")
-            or principal.get("identifier")
-        )
-        # No default: guessing "User" for a group would grant to the wrong
-        # principal kind. Untyped entries are surfaced and skipped by the planner.
-        ptype = (
-            principal.get("principalType")
-            or principal.get("type")
-            or ""
-        )
+        if live_shape:
+            # In the live shape "id" is the artifact's numeric id, not the
+            # principal, so it must never be used as a fallback here.
+            pid = principal.get("objectId")
+        else:
+            pid = (
+                principal.get("principalId")
+                or principal.get("objectId")
+                or principal.get("id")
+                or principal.get("identifier")
+            )
+
         role = (
             e.get("permissionType")
             or e.get("role")
             or e.get("permission")
             or e.get("accessRight")
         )
-        if pid and role:
-            out.append(
-                {
-                    "principal_id": str(pid),
-                    "principal_type": str(ptype),
-                    "role": str(role),
-                }
-            )
-    return out
+        if role is None and e.get("permissions") is not None:
+            # Live shape: integer permission bitmask, e.g. 1 or 327.
+            role = e.get("permissions")
+
+        if not pid or role is None or role == "":
+            result["unparsed"] += 1
+            continue
+
+        artifact_perms = e.get("artifactPermissions")
+        result["direct"].append(
+            {
+                "principal_id": str(pid),
+                "principal_type": _principal_type_of(e, principal),
+                "role": str(role),
+                "artifact_permissions": "" if artifact_perms is None else str(artifact_perms),
+            }
+        )
+    return result
+
+
+def extract_principals(access_payload: Any) -> List[Dict[str, Any]]:
+    """Direct (non-inherited) principals only. See parse_access for counts."""
+    return parse_access(access_payload)["direct"]
 
 
 # ---------------------------------------------------------------------------
@@ -304,12 +368,30 @@ def load_contract(contract_file: Optional[str], logger) -> Dict[str, Any]:
     return contract
 
 
-def _substitute(node: Any, values: Dict[str, str]) -> Any:
-    """Recursively replace {placeholder} tokens in a body template."""
+def _coerce(value: Any) -> Any:
+    """Digit strings (e.g. permission bitmasks read back from the CSV) -> int."""
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    if value == "":
+        return None
+    return value
+
+
+def _substitute(node: Any, values: Dict[str, Any]) -> Any:
+    """
+    Recursively replace {placeholder} tokens in a body template.
+
+    A string that is exactly one placeholder (e.g. "{role}") is replaced by the
+    typed value, so numeric bitmasks are sent as JSON numbers, not strings.
+    Placeholders embedded in longer strings are replaced textually.
+    """
     if isinstance(node, str):
+        for k, v in values.items():
+            if node == "{" + k + "}":
+                return _coerce(v)
         out = node
         for k, v in values.items():
-            out = out.replace("{" + k + "}", v)
+            out = out.replace("{" + k + "}", "" if v is None else str(v))
         return out
     if isinstance(node, list):
         return [_substitute(n, values) for n in node]
@@ -324,6 +406,7 @@ def build_grant_payload(
     principal_id: str,
     principal_type: str,
     role: str,
+    artifact_permissions: str = "",
 ) -> Dict[str, Any]:
     mapped_role = contract.get("role_map", {}).get(role, role)
     return _substitute(
@@ -333,6 +416,7 @@ def build_grant_payload(
             "principal_id": principal_id,
             "principal_type": principal_type,
             "role": mapped_role,
+            "artifact_permissions": artifact_permissions,
         },
     )
 
@@ -345,8 +429,11 @@ def grant_item_access(
     principal_type: str,
     role: str,
     logger,
+    artifact_permissions: str = "",
 ) -> Any:
-    payload = build_grant_payload(contract, item_id, principal_id, principal_type, role)
+    payload = build_grant_payload(
+        contract, item_id, principal_id, principal_type, role, artifact_permissions
+    )
     return internal_call("POST", cluster, contract["path"], logger, payload=payload)
 
 
@@ -372,6 +459,8 @@ def build_plan(
         "items_unreadable": 0,
         "secondary_unreadable": 0,
         "principals_untyped": 0,
+        "inherited_skipped": 0,
+        "entries_unparsed": 0,
         "grants_planned": 0,
         "already_present": 0,
     }
@@ -398,7 +487,15 @@ def build_plan(
 
         raw_dump[p_item_id] = {"path": p_path, "payload": p_access}
 
-        p_principals = extract_principals(p_access)
+        p_parsed = parse_access(p_access)
+        stats["inherited_skipped"] += p_parsed["inherited"]
+        if p_parsed["unparsed"]:
+            stats["entries_unparsed"] += p_parsed["unparsed"]
+            logger.warning(
+                f"{item.get('displayName')}: {p_parsed['unparsed']} access entries "
+                f"could not be interpreted - see {RAW_DUMP}"
+            )
+        p_principals = p_parsed["direct"]
         if not p_principals:
             continue
 
@@ -413,7 +510,8 @@ def build_plan(
             continue
 
         s_keys = {
-            (x["principal_id"], x["role"]) for x in extract_principals(s_access)
+            (x["principal_id"], x["role"], x["artifact_permissions"])
+            for x in extract_principals(s_access)
         }
 
         for pr in p_principals:
@@ -424,7 +522,7 @@ def build_plan(
                     f"{item.get('displayName')}: response gave no principal type"
                 )
                 continue
-            if (pr["principal_id"], pr["role"]) in s_keys:
+            if (pr["principal_id"], pr["role"], pr["artifact_permissions"]) in s_keys:
                 stats["already_present"] += 1
                 continue
             plan.append(
@@ -436,6 +534,7 @@ def build_plan(
                     "principal_id": pr["principal_id"],
                     "principal_type": pr["principal_type"],
                     "role": pr["role"],
+                    "artifact_permissions": pr["artifact_permissions"],
                 }
             )
             stats["grants_planned"] += 1
@@ -453,6 +552,7 @@ PLAN_FIELDS = [
     "principal_id",
     "principal_type",
     "role",
+    "artifact_permissions",
 ]
 
 REQUIRED_PLAN_FIELDS = ("secondary_item_id", "principal_id", "principal_type", "role")
@@ -509,6 +609,7 @@ def apply_plan(
                 row["principal_type"],
                 row["role"],
                 logger,
+                artifact_permissions=row.get("artifact_permissions", ""),
             )
             result["applied"] += 1
             logger.info(
@@ -562,7 +663,8 @@ def verify_contract(cluster: str, workspace_id: str, logger) -> int:
         return 1
 
     probed = 0
-    for item in items[:5]:
+    sample = items[:5]
+    for item in sample:
         access, path = read_item_access(cluster, item["id"], logger)
         print(f"\nItem: {item.get('displayName')} ({item.get('type')})")
         print(f"  id:   {item['id']}")
@@ -571,11 +673,19 @@ def verify_contract(cluster: str, workspace_id: str, logger) -> int:
             continue
         probed += 1
         print(f"  read: OK via {path}")
-        print(f"  raw:  {json.dumps(access)[:600]}")
-        parsed = extract_principals(access)
-        print(f"  parsed principals: {len(parsed)}")
-        for p in parsed[:5]:
-            print(f"    - {p['principal_id']} ({p['principal_type']}) : {p['role']}")
+        parsed = parse_access(access)
+        print(
+            f"  direct shares: {len(parsed['direct'])}  "
+            f"inherited from workspace roles: {parsed['inherited']}  "
+            f"unparsed: {parsed['unparsed']}"
+        )
+        for p in parsed["direct"][:5]:
+            print(
+                f"    - {p['principal_id']} ({p['principal_type'] or 'UNTYPED'}) "
+                f": permissions={p['role']} artifactPermissions={p['artifact_permissions'] or '-'}"
+            )
+        if parsed["unparsed"]:
+            print(f"  raw:  {json.dumps(access)[:600]}")
 
     print("\n" + "-" * 70)
     if probed == 0:
@@ -584,10 +694,11 @@ def verify_contract(cluster: str, workspace_id: str, logger) -> int:
         print("Try an interactive user token before investing further.")
         return 1
 
-    print(f"RESULT: read path works ({probed}/5 items probed).")
-    print("Compare 'raw' above against a captured portal request to confirm the")
-    print("field names and permission values, then build a --contract-file for")
-    print("the write side. Do not apply with an unverified contract.")
+    print(f"RESULT: read path works ({probed}/{len(sample)} items probed).")
+    print("Items that failed to read (e.g. Reports, semantic models) are not")
+    print("supported by this endpoint and must be handled manually.")
+    print("The WRITE side is still unverified: capture a real grant request from")
+    print("portal dev-tools and pass it as --contract-file before --apply.")
     print("-" * 70 + "\n")
     return 0
 
@@ -699,6 +810,8 @@ def _run_plan(cluster: str, args, logger) -> int:
     print(f"  Primary unreadable:    {stats['items_unreadable']}")
     print(f"  Secondary unreadable:  {stats['secondary_unreadable']}")
     print(f"  Principals untyped:    {stats['principals_untyped']}")
+    print(f"  Entries unparsed:      {stats['entries_unparsed']}")
+    print(f"  Inherited (skipped):   {stats['inherited_skipped']}  (from workspace roles; synced separately)")
     print(f"  Already present:       {stats['already_present']}")
     print(f"  Grants planned:        {stats['grants_planned']}")
     print(f"  Plan CSV:              {args.plan_file}")
@@ -708,6 +821,7 @@ def _run_plan(cluster: str, args, logger) -> int:
         stats["items_unreadable"]
         + stats["secondary_unreadable"]
         + stats["principals_untyped"]
+        + stats["entries_unparsed"]
     )
     if incomplete:
         print(f"WARNING: {incomplete} item(s)/principal(s) could not be evaluated and")

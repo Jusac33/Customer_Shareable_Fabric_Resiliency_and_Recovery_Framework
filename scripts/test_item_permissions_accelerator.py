@@ -383,6 +383,7 @@ class TestPlanCsvRoundTrip(unittest.TestCase):
                 "principal_id": "u",
                 "principal_type": "User",
                 "role": "Read",
+                "artifact_permissions": "9",
             }
         ]
         acc.write_plan_csv(rows, self.path, self.logger)
@@ -492,6 +493,138 @@ class TestMainApplyUsesReviewedPlan(unittest.TestCase):
     def test_auth_error_exits_cleanly_not_traceback(self, _vc, _rc):
         with mock.patch.object(sys, "argv", self._argv("--verify-contract")):
             self.assertEqual(acc.main(), 1)
+
+
+# Sanitized copy of the shape returned live by /metadata/access/artifacts/{id}
+# on 2026-09-26 (fake IDs, PII fields removed). Entries with accessSource are
+# inherited from workspace roles; entries without it are direct shares.
+LIVE_SHAPE = {
+    "id": 243287,
+    "displayName": "LakeHouse01",
+    "objectId": "aaaaaaaa-0000-0000-0000-000000000000",
+    "permissions": 327,
+    "artifactPermissions": 15,
+    "sharedWithCount": 0,
+    "detail": [
+        {"id": 243287, "userId": 1, "permissions": 327, "artifactPermissions": 15,
+         "objectId": "11111111-0000-0000-0000-000000000001", "userType": 0,
+         "accessSource": {"id": 9, "artifactLinkId": None, "folderRoleId": 1,
+                          "folderRole": {"id": 1, "name": "Administrator"}}},
+        {"id": 243287, "userId": 2, "permissions": 1,
+         "objectId": "22222222-0000-0000-0000-000000000002", "groupId": 77},
+        {"id": 243287, "userId": 3, "permissions": 1,
+         "objectId": "33333333-0000-0000-0000-000000000003", "userType": 0},
+        {"id": 243287, "userId": 4, "permissions": 1, "artifactPermissions": 9,
+         "objectId": "44444444-0000-0000-0000-000000000004", "userType": 0},
+        {"id": 243287, "userId": 5, "permissions": 71, "artifactPermissions": 11,
+         "objectId": "55555555-0000-0000-0000-000000000005", "userType": 0,
+         "accessSource": {"id": 9, "folderRoleId": 2,
+                          "folderRole": {"id": 2, "name": "Member"}}},
+    ],
+}
+
+
+class TestLiveResponseShape(unittest.TestCase):
+    """Regression: the shipped parser recognised 0 of 12 live entries."""
+
+    def test_counts(self):
+        r = acc.parse_access(LIVE_SHAPE)
+        self.assertEqual(len(r["direct"]), 3)
+        self.assertEqual(r["inherited"], 2)
+        self.assertEqual(r["unparsed"], 0)
+
+    def test_inherited_workspace_roles_are_not_direct(self):
+        ids = {p["principal_id"] for p in acc.extract_principals(LIVE_SHAPE)}
+        self.assertNotIn("11111111-0000-0000-0000-000000000001", ids)
+        self.assertNotIn("55555555-0000-0000-0000-000000000005", ids)
+
+    def test_group_and_user_types(self):
+        by_id = {p["principal_id"]: p for p in acc.extract_principals(LIVE_SHAPE)}
+        self.assertEqual(by_id["22222222-0000-0000-0000-000000000002"]["principal_type"], "Group")
+        self.assertEqual(by_id["33333333-0000-0000-0000-000000000003"]["principal_type"], "User")
+
+    def test_bitmasks_captured(self):
+        by_id = {p["principal_id"]: p for p in acc.extract_principals(LIVE_SHAPE)}
+        p = by_id["44444444-0000-0000-0000-000000000004"]
+        self.assertEqual(p["role"], "1")
+        self.assertEqual(p["artifact_permissions"], "9")
+        self.assertEqual(by_id["33333333-0000-0000-0000-000000000003"]["artifact_permissions"], "")
+
+    def test_numeric_artifact_id_never_used_as_principal(self):
+        entry = {"detail": [{"id": 243287, "permissions": 1, "userType": 0}]}
+        r = acc.parse_access(entry)
+        self.assertEqual(r["direct"], [])
+        self.assertEqual(r["unparsed"], 1)
+
+    def test_untyped_live_entry_left_blank(self):
+        entry = {"detail": [{"id": 1, "permissions": 1, "objectId": "x"}]}
+        self.assertEqual(acc.extract_principals(entry)[0]["principal_type"], "")
+
+    def test_zero_permission_bitmask_is_parsed_not_dropped(self):
+        entry = {"detail": [{"id": 1, "permissions": 0, "objectId": "x", "userType": 0}]}
+        self.assertEqual(acc.extract_principals(entry)[0]["role"], "0")
+
+
+class TestTypedSubstitution(unittest.TestCase):
+    def test_bitmask_sent_as_json_number(self):
+        body = acc.build_grant_payload(
+            acc.DEFAULT_WRITE_CONTRACT, "i", "p", "User", "1", artifact_permissions="9"
+        )
+        perm = body["permissions"][0]
+        self.assertEqual(perm["permissionType"], 1)
+        self.assertEqual(perm["artifactPermissions"], 9)
+
+    def test_blank_artifact_permissions_becomes_null(self):
+        body = acc.build_grant_payload(acc.DEFAULT_WRITE_CONTRACT, "i", "p", "User", "1")
+        self.assertIsNone(body["permissions"][0]["artifactPermissions"])
+
+    def test_guid_stays_string(self):
+        body = acc.build_grant_payload(
+            acc.DEFAULT_WRITE_CONTRACT, "i", "12345678-aaaa-bbbb-cccc-000000000000", "User", "1"
+        )
+        self.assertEqual(body["permissions"][0]["principalId"], "12345678-aaaa-bbbb-cccc-000000000000")
+
+    def test_embedded_placeholder_is_textual(self):
+        contract = {"path": "/x", "body_template": {"note": "grant {role} on {item_id}"}, "role_map": {}}
+        body = acc.build_grant_payload(contract, "abc", "p", "User", "1")
+        self.assertEqual(body["note"], "grant 1 on abc")
+
+
+class TestBuildPlanLiveShape(unittest.TestCase):
+    def setUp(self):
+        self.logger = mock.MagicMock()
+        patcher = mock.patch("item_permissions_accelerator.common.save_json")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    def _run(self, p_payload, s_payload):
+        reads = {"p1": (p_payload, "/x"), "s1": (s_payload, "/x")}
+        with mock.patch(
+            "item_permissions_accelerator.common.get_items",
+            return_value=[{"id": "p1", "displayName": "LH", "type": "Lakehouse"}],
+        ), mock.patch(
+            "item_permissions_accelerator.read_item_access",
+            side_effect=lambda c, i, l: reads[i],
+        ):
+            return acc.build_plan("https://c", "pw", "sw", {"p1": "s1"}, self.logger)
+
+    def test_plans_only_direct_shares(self):
+        plan, stats = self._run(LIVE_SHAPE, {"detail": []})
+        self.assertEqual(stats["grants_planned"], 3)
+        self.assertEqual(stats["inherited_skipped"], 2)
+        self.assertEqual({r["principal_type"] for r in plan}, {"User", "Group"})
+
+    def test_different_artifact_permissions_is_not_already_present(self):
+        s = {"detail": [{"id": 9, "permissions": 1, "objectId": "44444444-0000-0000-0000-000000000004", "userType": 0}]}
+        plan, stats = self._run(LIVE_SHAPE, s)
+        ids = [r["principal_id"] for r in plan]
+        self.assertIn("44444444-0000-0000-0000-000000000004", ids)
+
+    def test_unparsed_entries_are_counted(self):
+        bad = {"detail": [{"id": 1, "permissions": 1}]}
+        plan, stats = self._run(bad, {"detail": []})
+        self.assertEqual(plan, [])
+        self.assertEqual(stats["entries_unparsed"], 1)
 
 
 class TestNotWiredIntoAutomatedPaths(unittest.TestCase):
