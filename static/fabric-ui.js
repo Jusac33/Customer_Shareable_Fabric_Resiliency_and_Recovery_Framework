@@ -131,14 +131,38 @@
     window.alert = function (message) { toast(message); };
 
     // ----------------------------------------------------------- checked fetch
+    // Turn raw API errors (often embedded JSON) into one actionable sentence.
+    function friendlyError(raw, status) {
+        var m = String(raw || '');
+        var code = (m.match(/"errorCode"\s*:\s*"([^"]+)"/) || [])[1] || '';
+        var api = (m.match(/(Fabric|Power BI) API (\d{3})/) || []);
+        var st = status || +(api[2] || 0);
+        if (/TokenExpired|token has expired/i.test(m) || code === 'TokenExpired')
+            return 'Your sign-in expired. Refresh the page or sign in again.';
+        if (st === 401 || /Not authenticated/i.test(m)) return 'Not signed in (401). Sign in again.';
+        if (st === 403 || /InsufficientPrivileges|Forbidden/i.test(m))
+            return 'Access denied (403): this account lacks the permission this check needs.' + (code ? ' [' + code + ']' : '');
+        if (st === 429 || /TooManyRequests|throttl/i.test(m)) return 'Fabric is throttling requests (429). Wait a minute and retry.';
+        if (/timed out|ConnectTimeout|ReadTimeout|aborted/i.test(m)) return 'The Fabric API did not respond in time. Retry; if it persists, check network or Fabric status.';
+        if (/Could not list items in workspace/i.test(m)) return 'Could not list the workspace items, so this check could not run. ' + (code ? '[' + code + ']' : 'Retry shortly.');
+        var plain = m.replace(/\{[\s\S]*\}/g, '').replace(/\s+/g, ' ').trim();
+        return (plain || ('Request failed' + (st ? ' (' + st + ')' : ''))).slice(0, 220) + (code ? ' [' + code + ']' : '');
+    }
+
     async function fetchJSON(url, options) {
-        var resp = await fetch(url, options);
+        var resp;
+        try { resp = await fetch(url, options); }
+        catch (e) { var ne = new Error(friendlyError(e && e.message)); ne.raw = e && e.message; throw ne; }
         var data = null;
         try { data = await resp.json(); } catch (_) { data = null; }
         if (!resp.ok) {
-            var msg = (data && (data.error || data.message)) || (resp.status + ' ' + resp.statusText);
-            var err = new Error(msg);
+            var raw = (data && (data.error || data.message)) || (resp.status + ' ' + resp.statusText);
+            if (resp.status === 401 || /TokenExpired|token has expired/i.test(String(raw))) {
+                document.dispatchEvent(new CustomEvent('bcdr:session-expired'));
+            }
+            var err = new Error(friendlyError(raw, resp.status));
             err.status = resp.status;
+            err.raw = raw;
             err.data = data;
             throw err;
         }
@@ -261,9 +285,121 @@
         };
     }
 
+    // Failover readiness: one rule set shared by Managed Failover and the Command Center.
+    // Each check: {id, label, level: ok|warn|bad|unknown, detail, href}. Verdict: NO-GO if any bad.
+    async function readiness(opts) {
+        opts = opts || {};
+        var q = opts.refresh ? '?refresh=1' : '';
+        var get = function (u, ms) {
+            var ctl = new AbortController();
+            var t = setTimeout(function () { ctl.abort(); }, ms || 90000);
+            return fetchJSON(u, { signal: ctl.signal }).finally(function () { clearTimeout(t); });
+        };
+        var r = await Promise.allSettled([
+            get('/api/active-pair-info'), get('/api/bcdr/data-freshness' + q), get('/api/bcdr/status'),
+            get('/api/bcdr/model-readiness' + q), get('/api/bcdr/schedules' + q, 180000), get('/api/security/item-permissions' + q),
+            get('/api/lineage/connections?max_inspect=20', 120000), get('/api/gateways'),
+        ]);
+        var v = function (i) { return r[i].status === 'fulfilled' ? r[i].value : null; };
+        var why = function (i) { return r[i].status === 'rejected' ? (r[i].reason && r[i].reason.message) || 'unavailable' : ''; };
+        var hrs = function (h) { return h == null ? '—' : h < 1 ? Math.round(h * 60) + ' min' : h < 48 ? h.toFixed(1) + ' h' : (h / 24).toFixed(1) + ' days'; };
+        var checks = [];
+        var add = function (id, label, level, detail, href) { checks.push({ id: id, label: label, level: level, detail: detail, href: href }); };
+
+        var pair = v(0);
+        if (pair) {
+            var pr = pair.primary_region, sr = pair.secondary_region;
+            add('region', 'Secondary in a different region', pr && sr ? (pr === sr ? 'bad' : 'ok') : 'unknown',
+                pr && sr ? (pr === sr ? 'Both workspaces are in ' + pr + '; a regional outage takes out both.' : pr + ' → ' + sr) : 'Region not reported.', '/architecture');
+            var cs = (pair.secondary_capacity_state || '').toLowerCase();
+            add('capacity', 'Secondary capacity running', !cs ? 'unknown' : cs === 'active' ? 'ok' : 'warn',
+                cs ? (pair.secondary_capacity || 'Secondary capacity') + ' is ' + pair.secondary_capacity_state + (cs === 'active' ? '' : '; resume it before failover.') : 'Capacity state not reported.', '/architecture');
+        } else add('region', 'Secondary in a different region', 'unknown', why(0), '/architecture');
+
+        var fr = v(1);
+        if (fr) {
+            var s = fr.summary || {}, h = s.measured_rpo_hours, st = s.states || {};
+            var lvl = h == null ? 'unknown' : st.diverged ? 'bad' : h <= 1 ? 'ok' : h <= 24 ? 'warn' : 'bad';
+            add('rpo', 'Data current in secondary (measured RPO)', lvl,
+                (s.rpo_is_lower_bound ? '≥ ' : '') + hrs(h) + ' behind · ' + (st.behind || 0) + ' of ' + s.tables_compared + ' tables behind' +
+                (st.diverged ? ' · ' + st.diverged + ' diverged' : '') + '. An unplanned failover loses up to this much data.', '/lakehouse');
+        } else add('rpo', 'Data current in secondary (measured RPO)', 'unknown', why(1), '/lakehouse');
+
+        var bs = v(2);
+        if (bs) {
+            var missing = [];
+            (bs.type_cards || []).forEach(function (c) {
+                if (!c.supported) return;
+                var sn = {}; (c.secondary_items || []).forEach(function (i) { sn[i.name] = 1; });
+                (c.primary_items || []).forEach(function (i) { if (!sn[i.name]) missing.push(i.name + ' (' + c.type + ')'); });
+            });
+            add('items', 'Every item exists in secondary', missing.length ? 'warn' : 'ok',
+                missing.length ? missing.length + ' missing: ' + missing.slice(0, 4).join(', ') + (missing.length > 4 ? '…' : '') : bs.total_mirrored + '/' + bs.total_primary + ' items replicated.', '/inventory');
+        } else add('items', 'Every item exists in secondary', 'unknown', why(2), '/inventory');
+
+        var mr = v(3);
+        if (mr) {
+            var nr = (mr.models || []).filter(function (m) { return !m.ready; });
+            add('models', 'Semantic models queryable in secondary', nr.length ? 'bad' : 'ok',
+                nr.length ? nr.length + ' not refreshed/framed: ' + nr.map(function (m) { return m.name; }).slice(0, 3).join(', ') + '. Reports would show no data.' : (mr.models || []).length + ' model(s) ready.', '/architecture');
+        } else add('models', 'Semantic models queryable in secondary', 'unknown', why(3), '/architecture');
+
+        var sc = v(4);
+        if (sc) {
+            var c = sc.counts || {}, todo = (c.create_paused || 0) + (c.missing_item_in_secondary || 0), on = (sc.enabled_on_secondary || []).length;
+            add('schedules', 'Job schedules replicated (paused) to secondary', sc.errors && sc.errors.length ? 'warn' : todo ? 'warn' : on ? 'warn' : 'ok',
+                sc.primary_schedules === 0 ? 'Primary has no job schedules — nothing to activate on failover. Is the pipeline scheduled at all?'
+                    : todo ? todo + ' of ' + sc.primary_schedules + ' schedule(s) not on secondary yet; run a sync.'
+                    : on ? on + ' schedule(s) already enabled on the standby: ' + sc.enabled_on_secondary.slice(0, 3).join(', ')
+                    : sc.primary_schedules + ' schedule(s) ready, ' + sc.primary_enabled + ' will be enabled on failover.', '/lakehouse');
+        } else add('schedules', 'Job schedules replicated (paused) to secondary', 'unknown', why(4), '/lakehouse');
+
+        var ip = v(5);
+        if (ip) {
+            var ic = ip.counts || {}, cov = ip.coverage || {};
+            var open = (ic.grant_dataset_user || 0) + (ic.upgrade_dataset_user || 0) + (ic.manual_portal_share || 0);
+            add('perms', 'Item permissions replicated', open ? 'warn' : cov.not_scanned ? 'warn' : 'ok',
+                open ? open + ' share(s) still to replicate.' : cov.not_scanned ? cov.not_scanned + ' item(s) not scanned (needs Fabric admin or the opt-in API).' : 'All scanned shares in place.', '/security');
+        } else add('perms', 'Item permissions replicated', 'unknown', why(5), '/security');
+
+        var ln = v(6);
+        if (ln) {
+            var stale = (ln.summary || {}).stale || 0;
+            add('refs', 'Secondary items point at secondary (no primary references)', stale ? 'bad' : 'ok',
+                stale ? stale + ' reference(s) still point at the primary.' : ((ln.summary || {}).total_connections || 0) + ' references checked, all remapped.', '/topology');
+        } else add('refs', 'Secondary items point at secondary (no primary references)', 'unknown', why(6), '/topology');
+
+        var gw = v(7);
+        if (gw) {
+            var bad = (gw.gateways || []).filter(function (g) { return g.dr && g.dr.level !== 'ok'; });
+            add('gateways', 'Gateways available after failover', bad.some(function (g) { return g.dr.level === 'bad'; }) ? 'bad' : bad.length ? 'warn' : 'ok',
+                bad.length ? bad.map(function (g) { return g.name + ': ' + g.dr.text; }).slice(0, 2).join(' ') : (gw.gateways || []).length + ' gateway(s) OK.', '/gateways');
+        } else add('gateways', 'Gateways available after failover', 'unknown', why(7), '/gateways');
+
+        var n = function (l) { return checks.filter(function (c) { return c.level === l; }).length; };
+        // Unknown on a critical check means we can't vouch for the failover, so never call it GO.
+        var critical = ['region', 'rpo', 'items', 'models', 'refs'];
+        var blind = checks.filter(function (c) { return c.level === 'unknown' && critical.indexOf(c.id) >= 0; }).length;
+        var verdict = n('bad') ? 'NO-GO' : blind ? "CAN'T ASSESS" : n('warn') || n('unknown') ? 'GO WITH RISK' : 'GO';
+        return { checks: checks, verdict: verdict, counts: { ok: n('ok'), warn: n('warn'), bad: n('bad'), unknown: n('unknown') },
+                 expected_data_loss_hours: fr ? (fr.summary || {}).measured_rpo_hours : null, measured_at: new Date().toISOString() };
+    }
+
+    function renderReadiness(el, res, opts) {
+        opts = opts || {};
+        var ic = { ok: 'fa-circle-check', warn: 'fa-triangle-exclamation', bad: 'fa-circle-xmark', unknown: 'fa-circle-question' };
+        var list = opts.onlyIssues ? res.checks.filter(function (c) { return c.level !== 'ok'; }) : res.checks;
+        el.innerHTML = list.map(function (c) {
+            return '<li class="rd-check rd-' + c.level + '"><i class="fas ' + ic[c.level] + '" aria-hidden="true"></i>' +
+                '<div><div class="rd-check-label">' + esc(c.label) + '</div><div class="rd-check-detail">' + esc(c.detail) + '</div></div>' +
+                (c.href ? '<a class="rd-check-link" href="' + esc(c.href) + '">Open <i class="fas fa-arrow-right" aria-hidden="true"></i></a>' : '') + '</li>';
+        }).join('') || '<li class="rd-check rd-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><div class="rd-check-label">Nothing to fix</div></div></li>';
+    }
+
     window.FabricUI = {
         icon: icon, iconUrl: iconUrl, productIcon: productIcon, esc: esc,
-        toast: toast, fetchJSON: fetchJSON, reveal: revealWithin, ITEM_ICONS: ITEM_ICONS
+        toast: toast, fetchJSON: fetchJSON, friendlyError: friendlyError, reveal: revealWithin, ITEM_ICONS: ITEM_ICONS,
+        readiness: readiness, renderReadiness: renderReadiness
     };
     window.escapeHtml = esc;
 

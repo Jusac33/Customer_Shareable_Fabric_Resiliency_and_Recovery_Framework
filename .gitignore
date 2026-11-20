@@ -50,6 +50,7 @@ venv.bak/
 .dr_events.json
 .devops_config.json
 .sp_config.json
+.internal_sharing_optin.json
 .artifact_hashes.json
 .defcheck_state.json
 

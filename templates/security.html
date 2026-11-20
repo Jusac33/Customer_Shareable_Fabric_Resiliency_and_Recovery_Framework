@@ -210,6 +210,16 @@
         <div id="ip-coverage" style="margin:12px 0"></div>
         <div id="ip-table"></div>
     </div>
+
+    <div class="sec-panel optin-panel" id="ix-panel">
+        <h4><i class="fas fa-flask" aria-hidden="true"></i> Opt-in: Fabric portal sharing API <span class="status-badge warning">Unsupported</span></h4>
+        <p class="desc">Replicates direct shares on <strong>every item type the portal can share</strong> (lakehouses and their SQL endpoints,
+            warehouses, notebooks, pipelines, KQL, ML, agents…) through the same internal endpoint the portal's Share dialog uses.
+            Permission values are copied exactly, each grant is read back to confirm it, and nothing is ever revoked.
+            It is not documented or supported: it can change without notice, so keep the supported path above as your baseline
+            and re-verify after every run. Reports and semantic models are not served by this endpoint and stay on the supported path.</p>
+        <div id="ix-body" class="text-muted">Checking opt-in status…</div>
+    </div>
 </div>
 
 {% endblock %}
@@ -561,7 +571,90 @@ async function applyItemPerms() {
 }
 document.getElementById('ip-scan').addEventListener('click', scanItemPerms);
 document.getElementById('ip-apply').addEventListener('click', applyItemPerms);
-document.querySelector('.tab[data-tab="itemperms"]').addEventListener('click', () => { if (!window._ipRows) scanItemPerms(); });
+document.querySelector('.tab[data-tab="itemperms"]').addEventListener('click', () => {
+    if (!window._ipRows) scanItemPerms();
+    if (!window._ixLoaded) loadInternalSharing();
+});
+
+// ───── Opt-in: unsupported portal sharing API ─────
+const IX_LABEL = { grant: ['Will grant', 'info'], upgrade: ['Will add rights', 'info'], present: ['In place', 'success'] };
+async function loadInternalSharing(refresh) {
+    const esc = FabricUI.esc, body = document.getElementById('ix-body');
+    window._ixLoaded = true;
+    body.innerHTML = '<span class="text-muted">Loading…</span>';
+    let s;
+    try { s = await FabricUI.fetchJSON('/api/security/item-permissions/internal' + (refresh ? '?refresh=1' : '')); }
+    catch (e) { body.innerHTML = `<div class="alert alert-danger">${esc(e.message)}</div>`; return; }
+    if (!s.enabled) {
+        body.innerHTML = `
+            <label for="ix-ack" class="optin-label">To turn it on, type: <code>${esc(s.ack_phrase)}</code></label>
+            <div class="actions-row">
+                <input id="ix-ack" class="optin-input" type="text" autocomplete="off" aria-describedby="ix-panel">
+                <button type="button" class="btn-action" id="ix-enable"><i class="fas fa-toggle-on" aria-hidden="true"></i> Enable opt-in</button>
+            </div>`;
+        document.getElementById('ix-enable').addEventListener('click', async () => {
+            try {
+                await FabricUI.fetchJSON('/api/security/item-permissions/internal/optin', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: true, acknowledgement: document.getElementById('ix-ack').value }) });
+                FabricUI.toast('Unsupported sharing API enabled', 'warn');
+                loadInternalSharing(true);
+            } catch (e) { FabricUI.toast(e.message, 'bad'); }
+        });
+        return;
+    }
+    window._ixAck = s.ack_phrase;
+    const cov = s.coverage || {}, rows = s.rows || [];
+    const notServed = Object.entries(cov.not_served || {}).map(([t, n]) => `${FabricUI.icon(t, 'sm')} ${esc(t)} ×${n}`).join(' &nbsp; ');
+    const open = rows.filter(r => r.action !== 'present').length;
+    body.innerHTML = `
+        <div class="actions-row">
+            <span class="status-badge warning"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> Enabled${s.enabled_at ? ' ' + esc(new Date(s.enabled_at).toLocaleString()) : ''}</span>
+            <button type="button" class="btn-action" id="ix-rescan"><i class="fas fa-rotate" aria-hidden="true"></i> Rescan</button>
+            <button type="button" class="btn-action green" id="ix-apply" ${open ? '' : 'disabled'}><i class="fas fa-user-check" aria-hidden="true"></i> Apply selected</button>
+            <button type="button" class="btn-action" id="ix-disable"><i class="fas fa-toggle-off" aria-hidden="true"></i> Disable</button>
+        </div>
+        <div class="grid-4" style="margin:12px 0">
+            <div class="metric-card"><h3>Items read</h3><div class="metric-value">${cov.items_read || 0}</div></div>
+            <div class="metric-card"><h3>Direct shares</h3><div class="metric-value">${rows.length}</div></div>
+            <div class="metric-card"><h3>To replicate</h3><div class="metric-value" style="color:${open ? 'var(--warn)' : 'var(--ok)'}">${open}</div></div>
+            <div class="metric-card"><h3>Not served</h3><div class="metric-value">${Object.values(cov.not_served || {}).reduce((a, b) => a + b, 0)}</div></div>
+        </div>
+        ${notServed ? `<p class="text-muted">Not served by this endpoint (use the supported path above): ${notServed}</p>` : ''}
+        ${(cov.errors || []).map(e => `<div class="alert alert-danger">${esc(e)}</div>`).join('')}
+        ${rows.length ? `<table class="table"><thead><tr><th scope="col"><span class="sr-only">Select</span></th><th scope="col">Item</th>
+            <th scope="col">Principal</th><th scope="col">Permission values</th><th scope="col">Action</th></tr></thead><tbody>
+            ${rows.map((r, i) => {
+                const [label, cls] = IX_LABEL[r.action] || [r.action, 'info'];
+                return `<tr><td>${r.action !== 'present' ? `<input type="checkbox" class="ix-pick" data-i="${i}" checked aria-label="Replicate ${esc(r.principal_label || r.principal_object_id)} on ${esc(r.item_name)}">` : ''}</td>
+                    <td>${FabricUI.icon(r.item_type, 'sm')} ${esc(r.item_name)} <span class="text-muted">${esc(r.item_type)}</span></td>
+                    <td>${esc(r.principal_label || r.principal_object_id)} <span class="text-muted">(${esc(r.principal_kind)})</span></td>
+                    <td><code>permissions=${r.permissions} artifactPermissions=${r.artifact_permissions}</code></td>
+                    <td><span class="status-badge ${cls}">${esc(label)}</span></td></tr>`;
+            }).join('')}</tbody></table>`
+          : '<p class="text-muted">No direct shares on primary items served by this endpoint.</p>'}`;
+    window._ixRows = rows;
+    document.getElementById('ix-rescan').addEventListener('click', () => loadInternalSharing(true));
+    document.getElementById('ix-disable').addEventListener('click', async () => {
+        await FabricUI.fetchJSON('/api/security/item-permissions/internal/optin', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+        FabricUI.toast('Unsupported sharing API disabled', 'ok');
+        loadInternalSharing(true);
+    });
+    document.getElementById('ix-apply').addEventListener('click', async () => {
+        const picks = [...document.querySelectorAll('.ix-pick:checked')].map(c => window._ixRows[+c.dataset.i]);
+        if (!picks.length) return;
+        if (!confirm(`Replicate ${picks.length} share(s) to the secondary through the UNSUPPORTED portal API?`)) return;
+        try {
+            const r = await FabricUI.fetchJSON('/api/security/item-permissions/internal/apply', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ acknowledgement: window._ixAck,
+                    rows: picks.map(p => ({ secondary_item_id: p.secondary_item_id, principal_object_id: p.principal_object_id })) }) });
+            FabricUI.toast(`Granted ${r.applied}, verified ${r.verified}, failed ${r.failed}${r.rejected ? `, rejected ${r.rejected}` : ''}`, r.failed ? 'bad' : 'ok');
+        } catch (e) { FabricUI.toast('Apply failed: ' + e.message, 'bad'); }
+        loadInternalSharing(true);
+    });
+}
 
 // ───── Init ─────
 document.addEventListener('DOMContentLoaded', () => {

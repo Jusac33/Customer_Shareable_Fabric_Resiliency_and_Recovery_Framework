@@ -65,33 +65,37 @@
 
     .type-cards-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        gap: 10px;
         margin-bottom: 8px;
     }
     .type-card {
         background: var(--surface);
         border-radius: 10px;
-        border: 2px solid var(--line);
-        padding: 20px;
+        border: 1px solid var(--line);
+        padding: 10px 12px 8px;
         position: relative;
-        transition: all 0.2s;
+        transition: box-shadow .2s var(--ease-out), transform .2s var(--ease-out), border-color .2s;
         cursor: pointer;
     }
-    .type-card:hover { box-shadow: 0 4px 15px rgba(0,0,0,0.08); transform: translateY(-2px); }
-    .type-card.synced { border-color: #4caf50; }
-    .type-card.partial { border-color: #ff9800; }
-    .type-card.unsynced { border-color: #f44336; }
-    .type-card.unsupported { border-color: #90a4ae; opacity: 0.7; }
-
-    .type-card-header {
-        display: flex; justify-content: space-between; align-items: flex-start;
-        margin-bottom: 12px;
-    }
+    .type-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); transform: translateY(-1px); border-color: var(--brand-300, #9bd); }
+    .type-card:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; }
+    .type-card.unsynced { background: color-mix(in srgb, var(--bad-bg, #fde7e9) 55%, var(--surface)); }
+    .type-card.unsupported { opacity: 0.75; }
+    .tc-row { display: flex; align-items: center; gap: 10px; }
+    .tc-main { flex: 1; min-width: 0; }
+    .tc-main .type-name { font-size: 13px; font-weight: 650; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tc-main .type-count { font-size: 11px; color: var(--text-3); margin: 0; }
+    .tc-bar { height: 4px; border-radius: 2px; background: var(--surface-2, #eee); margin-top: 8px; overflow: hidden; }
+    .tc-bar span { display: block; height: 100%; border-radius: 2px; background: var(--ok); }
+    .type-card.partial .tc-bar span { background: var(--warn); }
+    .type-card.unsynced .tc-bar span { background: var(--bad); }
+    .type-card.unsupported .tc-bar span { background: var(--text-3); }
+    .type-card-header { display: contents; }
     .type-icon {
-        width: 42px; height: 42px; border-radius: 8px;
+        width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
         display: flex; align-items: center; justify-content: center;
-        font-size: 20px;
+        background: var(--surface-2); font-size: 16px;
     }
     .type-icon.lakehouse { background: #e3f2fd; color: #1565c0; }
     .type-icon.warehouse { background: #e8eaf6; color: #283593; }
@@ -103,7 +107,7 @@
     .type-icon.default { background: var(--surface-2); color: #616161; }
 
     .btn-sync {
-        padding: 5px 14px; border-radius: 14px; font-size: 11px; font-weight: 700;
+        padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 700;
         border: 1.5px solid #c62828; color: #c62828; background: transparent;
         cursor: pointer; transition: all 0.2s; white-space: nowrap;
         position: relative;
@@ -132,9 +136,11 @@
     .sync-dropdown-item .dd-desc { font-size: 10px; color: var(--text-3); margin-top: 1px; }
 
     .type-percentage {
-        font-size: 32px; font-weight: 800; color: #1a1a2e; line-height: 1;
+        font-size: 17px; font-weight: 800; color: var(--text); line-height: 1; font-variant-numeric: tabular-nums;
     }
-    .type-percentage.green { color: #2e7d32; }
+    .type-percentage.green { color: var(--ok); }
+    .type-card.partial .type-percentage { color: var(--warn); }
+    .type-card.unsynced .type-percentage { color: var(--bad); }
     .type-name {
         font-size: 15px; font-weight: 600; color: #333; margin-top: 4px;
     }
@@ -204,7 +210,7 @@
     <div class="ws-name" id="ws-name">Loading...</div>
     <span class="pair-label-tag status-badge info" id="pair-label-tag" hidden></span>
     <div class="badges">
-        <span class="badge-bcdr disabled" id="bcdr-badge" title="Share of primary items that exist in secondary, matched by type and name">Item coverage · 0%</span>
+        <span class="badge-bcdr" id="bcdr-badge" title="Share of primary items that exist in secondary, matched by type and name">Item coverage · …</span>
         <button type="button" class="btn-setup" onclick="window.location='/setup'">
             <i class="fas fa-gear" aria-hidden="true"></i> Configure
         </button>
@@ -238,10 +244,20 @@
     </a>
 </section>
 
+<!-- What blocks a failover right now (same rules as Managed Failover) -->
+<section class="rd-panel" aria-labelledby="na-title">
+    <div class="rd-head">
+        <h3 id="na-title"><i class="fas fa-list-check" aria-hidden="true"></i> What to fix before failover</h3>
+        <span class="rd-verdict" id="na-verdict" role="status">Checking…</span>
+        <a class="rd-check-link" href="/failover">Failover readiness <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+    </div>
+    <ul class="rd-list" id="na-list"><li class="rd-check rd-unknown"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i><div><div class="rd-check-label">Measuring from live data…</div></div></li></ul>
+</section>
+
 <!-- Secondary workspace info bar -->
 <div class="secondary-info" id="secondary-info">
     <i class="fas fa-info-circle"></i>
-    <span id="secondary-info-text">Secondary workspace not configured. Select one in Configure to enable replication.</span>
+    <span id="secondary-info-text">Checking recovery target…</span>
 </div>
 
 <!-- Data Storage section -->
@@ -280,7 +296,22 @@
         return { html: FabricUI.icon(type, 'lg'), small: FabricUI.icon(type, 'sm') };
     }
 
-    document.addEventListener('DOMContentLoaded', () => { loadBcdr(); loadReadiness(); });
+    document.addEventListener('DOMContentLoaded', () => { loadBcdr(); loadReadiness(); loadNextActions(); });
+
+    async function loadNextActions() {
+        const verdict = document.getElementById('na-verdict');
+        try {
+            const r = await FabricUI.readiness();
+            verdict.className = 'rd-verdict ' + ({ 'GO': 'rd-ok', 'GO WITH RISK': 'rd-warn', "CAN'T ASSESS": 'rd-warn', 'NO-GO': 'rd-bad' }[r.verdict]);
+            verdict.textContent = r.verdict;
+            const order = { bad: 0, warn: 1, unknown: 2 };
+            r.checks.sort((a, b) => (order[a.level] ?? 3) - (order[b.level] ?? 3));
+            FabricUI.renderReadiness(document.getElementById('na-list'), r, { onlyIssues: true });
+        } catch (e) {
+            verdict.textContent = 'Unavailable';
+            document.getElementById('na-list').innerHTML = `<li class="rd-check rd-unknown"><i class="fas fa-circle-question" aria-hidden="true"></i><div>${FabricUI.esc(e.message)}</div></li>`;
+        }
+    }
 
     // Recovery readiness strip — every value is measured from the live tenant.
     async function loadReadiness() {
@@ -307,7 +338,8 @@
 
         if (models.status === 'fulfilled') {
             const m = models.value.models, ready = m.filter(x => x.ready).length;
-            setCard('rd-models', `${ready}/${m.length}`, ready < m.length ? 'not refreshed/framed in secondary' : 'all queryable', ready < m.length ? 'bad' : 'ok');
+            if (!m.length) setCard('rd-models', 'None', 'no semantic models in secondary', '');
+            else setCard('rd-models', `${ready}/${m.length}`, ready < m.length ? 'not refreshed/framed in secondary' : 'all queryable', ready < m.length ? 'bad' : 'ok');
         } else setCard('rd-models', '—', models.reason.message, 'warn');
 
         if (perms.status === 'fulfilled') {
@@ -319,7 +351,8 @@
 
         if (info.status === 'fulfilled' && info.value.configured) {
             const i = info.value, same = i.primary_region && i.primary_region === i.secondary_region;
-            setCard('rd-region', same ? 'Same region' : 'Separate', `${i.primary_region || '?'} → ${i.secondary_region || '?'}`, same ? 'bad' : 'ok');
+            if (!i.primary_region || !i.secondary_region) setCard('rd-region', 'Unknown', 'capacity region not reported', 'warn');
+            else setCard('rd-region', same ? 'Same region' : 'Separate', `${i.primary_region} → ${i.secondary_region}`, same ? 'bad' : 'ok');
         } else setCard('rd-region', '—', 'pair not configured', 'warn');
     }
 
@@ -327,7 +360,15 @@
         try {
             const resp = await fetch('/api/bcdr/status');
             bcdrData = await resp.json();
-            if (bcdrData.error) { console.error(bcdrData.error); return; }
+            if (bcdrData.error) {
+                const badge = document.getElementById('bcdr-badge');
+                badge.textContent = 'Item coverage · unavailable';
+                badge.className = 'badge-bcdr partial';
+                document.getElementById('secondary-info').className = 'secondary-info';
+                document.getElementById('secondary-info-text').textContent = 'Item coverage could not be measured: ' + FabricUI.friendlyError(bcdrData.error, resp.status);
+                if (/TokenExpired|token has expired/i.test(bcdrData.error)) document.dispatchEvent(new CustomEvent('bcdr:session-expired'));
+                return;
+            }
             renderBcdr();
             // Show active pair label
             try {
@@ -417,8 +458,13 @@
                 <div class="type-card ${stateClass}" role="button" tabindex="0" aria-label="${FabricUI.esc(card.type)}: ${FabricUI.esc(countText)}"
                      onclick="openTypeDetail('${FabricUI.esc(card.type)}')"
                      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTypeDetail('${FabricUI.esc(card.type)}')}">
-                    <div class="type-card-header">
+                    <div class="tc-row">
                         <div class="type-icon">${icon.html}</div>
+                        <div class="tc-main">
+                            <div class="type-name" title="${FabricUI.esc(card.type)}">${FabricUI.esc(card.type)}</div>
+                            <div class="type-count">${countText}</div>
+                        </div>
+                        <div class="type-percentage ${pctClass}">${card.supported ? card.percentage + '%' : card.primary_count}</div>
                         ${card.supported && bcdrData.has_secondary ? `
                             <div class="sync-dropdown-wrap">
                                 <button class="btn-sync ${btnClass}" onclick="event.stopPropagation(); toggleSyncMenu(this)">
@@ -443,9 +489,7 @@
                             </div>
                         ` : ''}
                     </div>
-                    <div class="type-percentage ${pctClass}">${card.supported ? card.percentage + '%' : card.primary_count}</div>
-                    <div class="type-name">${FabricUI.esc(card.type)}</div>
-                    <div class="type-count">${countText}</div>
+                    <div class="tc-bar" aria-hidden="true"><span style="width:${card.supported ? card.percentage : 100}%"></span></div>
                 </div>
             `;
         }).join('');

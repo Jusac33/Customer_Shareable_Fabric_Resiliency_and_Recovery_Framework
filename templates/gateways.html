@@ -22,6 +22,11 @@
 </section>
 
 <style>
+    .gw-dr { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 4px; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.45; }
+    .gw-dr i { margin-top: 2px; }
+    .gw-dr-ok { background: var(--ok-bg); color: var(--ok); }
+    .gw-dr-warn { background: var(--warn-bg); color: var(--warn); }
+    .gw-dr-bad { background: var(--bad-bg); color: var(--bad); }
     .gw-status-bar {
         display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
         font-size: 12px; font-weight: 600; color: #2e7d32;
@@ -151,7 +156,10 @@
                 return;
             }
 
-            grid.innerHTML = gateways.map(gw => renderGatewayCard(gw)).join('') + `
+            const pr = d.pair_regions || {};
+            const pairLine = (pr.primary && pr.primary.region) ? `<p class="text-muted" style="margin:0 0 12px">Workspace pair: primary in <strong>${esc(pr.primary.region)}</strong>,
+                secondary in <strong>${esc((pr.secondary || {}).region || '?')}</strong>.</p>` : '';
+            grid.innerHTML = pairLine + gateways.map(gw => renderGatewayCard(gw)).join('') + `
                 <div class="gw-bcdr-note">
                     <i class="fas fa-exclamation-triangle"></i>
                     <strong>Resiliency & Recovery Note:</strong> During failover, artifacts in the secondary workspace
@@ -184,6 +192,10 @@
         if (gw.version) metaItems += `<div class="gw-meta-item"><i class="fas fa-code-branch"></i><span class="gw-meta-label">Version:</span><span class="gw-meta-value">${esc(gw.version)}</span></div>`;
         if (gw.clusterStatus) metaItems += `<div class="gw-meta-item"><i class="fas fa-circle ${gw.clusterStatus === 'Running' ? 'text-green' : 'text-orange'}"></i><span class="gw-meta-label">Status:</span><span class="gw-meta-value">${esc(gw.clusterStatus)}</span></div>`;
         if (gw.contactInfo) metaItems += `<div class="gw-meta-item"><i class="fas fa-envelope"></i><span class="gw-meta-label">Contact:</span><span class="gw-meta-value">${esc(gw.contactInfo)}</span></div>`;
+        if (gw.region) metaItems += `<div class="gw-meta-item"><i class="fas fa-earth-americas"></i><span class="gw-meta-label">Region:</span><span class="gw-meta-value">${esc(gw.region)}${gw.capacityName ? ' · ' + esc(gw.capacityName) : ''}</span></div>`;
+        if (gw.vnet) metaItems += `<div class="gw-meta-item"><i class="fas fa-network-wired"></i><span class="gw-meta-label">VNet:</span><span class="gw-meta-value">${esc(gw.vnet.virtualNetworkName)} / ${esc(gw.vnet.subnetName)}</span></div>`;
+        if (gw.memberCount != null) metaItems += `<div class="gw-meta-item"><i class="fas fa-server"></i><span class="gw-meta-label">Members:</span><span class="gw-meta-value">${gw.memberCount}</span></div>`;
+        metaItems += `<div class="gw-meta-item"><i class="fas fa-plug"></i><span class="gw-meta-label">Connections:</span><span class="gw-meta-value">${gw.connectionCount ?? 0}</span></div>`;
         metaItems += `<div class="gw-meta-item"><i class="fas fa-key"></i><span class="gw-meta-label">ID:</span><span class="gw-meta-value gw-conn-detail">${esc(gw.id)}</span></div>`;
 
         let dsHtml = '';
@@ -223,8 +235,12 @@
                     <tbody>${rows}</tbody>
                 </table>`;
         } else {
-            dsHtml = '<p class="gw-no-ds">No data sources configured on this gateway.</p>';
+            dsHtml = gw.type === 'VirtualNetwork' ? '' : '<p class="gw-no-ds">No data sources configured on this gateway.</p>';
         }
+        const dr = gw.dr || {};
+        const drIcon = { ok: 'fa-circle-check', warn: 'fa-triangle-exclamation', bad: 'fa-circle-xmark' }[dr.level] || 'fa-circle-info';
+        const drHtml = dr.text ? `<div class="gw-dr gw-dr-${esc(dr.level)}" role="note"><i class="fas ${drIcon}" aria-hidden="true"></i>
+            <div><strong>If the primary region fails:</strong> ${esc(dr.text)}</div></div>` : '';
 
         return `
             <div class="gw-card">
@@ -234,6 +250,7 @@
                     <span class="gw-type-badge ${typeClass}">${esc(typeLabel)}</span>
                 </div>
                 <div class="gw-meta">${metaItems}</div>
+                ${drHtml}
                 ${dsHtml}
             </div>`;
     }
@@ -246,5 +263,6 @@
     }
 </script>
 {% endblock %}
+
 
 

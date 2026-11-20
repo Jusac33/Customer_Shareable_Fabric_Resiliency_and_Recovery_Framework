@@ -48,6 +48,17 @@
         <div class="fo-sync-pct" id="fo-sync-pct">—</div>
     </div>
 
+    <!-- Failover readiness (go / no-go) -->
+    <section class="rd-panel" aria-labelledby="rd-title">
+        <div class="rd-head">
+            <h3 id="rd-title"><i class="fas fa-list-check" aria-hidden="true"></i> Failover readiness</h3>
+            <span class="rd-verdict" id="rd-verdict" role="status">Checking…</span>
+            <button type="button" class="btn-action" id="rd-refresh"><i class="fas fa-rotate" aria-hidden="true"></i> Re-check</button>
+        </div>
+        <div class="rd-loss" id="rd-loss"></div>
+        <ul class="rd-list" id="rd-list"><li class="rd-check rd-unknown"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i><div><div class="rd-check-label">Measuring readiness from live data…</div></div></li></ul>
+    </section>
+
     <!-- Action Buttons Row -->
     <div class="fo-actions" id="fo-actions">
         <!-- Buttons injected by JS based on dr_state -->
@@ -118,7 +129,7 @@
     .fo-sync-track {
         flex: 1; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden;
     }
-    .fo-sync-fill { height: 100%; background: #4caf50; border-radius: 4px; transition: width 0.5s; }
+    .fo-sync-fill { height: 100%; background: #4caf50; border-radius: 4px; }
     .fo-sync-pct { font-size: 13px; font-weight: 700; color: #333; min-width: 40px; text-align: right; }
 
     /* Actions */
@@ -354,8 +365,37 @@ async function runSimulation() {
     }
 }
 
+let _readiness = null;
+async function loadReadiness(refresh) {
+    const verdict = document.getElementById('rd-verdict');
+    verdict.className = 'rd-verdict';
+    verdict.textContent = 'Checking…';
+    try {
+        _readiness = await FabricUI.readiness({ refresh });
+    } catch (e) {
+        verdict.textContent = 'Could not measure';
+        document.getElementById('rd-list').innerHTML = `<li class="rd-check rd-bad"><i class="fas fa-circle-xmark" aria-hidden="true"></i><div>${FabricUI.esc(e.message)}</div></li>`;
+        return;
+    }
+    const cls = { 'GO': 'rd-ok', 'GO WITH RISK': 'rd-warn', "CAN'T ASSESS": 'rd-warn', 'NO-GO': 'rd-bad' }[_readiness.verdict];
+    verdict.className = 'rd-verdict ' + cls;
+    verdict.textContent = _readiness.verdict;
+    const h = _readiness.expected_data_loss_hours;
+    const fmt = x => x < 1 ? Math.round(x * 60) + ' minutes' : x < 48 ? x.toFixed(1) + ' hours' : (x / 24).toFixed(1) + ' days';
+    document.getElementById('rd-loss').innerHTML = h == null ? '' :
+        `<strong>Unplanned failover right now:</strong> up to <strong>${fmt(h)}</strong> of data written to the primary would be lost (measured RPO).
+         <strong>Planned failover:</strong> stop writes on the primary, run a sync until measured RPO is near zero, then fail over.`;
+    FabricUI.renderReadiness(document.getElementById('rd-list'), _readiness);
+}
+document.addEventListener('DOMContentLoaded', () => {
+    loadReadiness();
+    document.getElementById('rd-refresh').addEventListener('click', () => loadReadiness(true));
+});
+
 function confirmFailover() {
+    const blockers = (_readiness ? _readiness.checks : []).filter(c => c.level === 'bad');
     const msg = 'EXECUTE FAILOVER?\n\n' +
+        (blockers.length ? `READINESS: NO-GO — ${blockers.length} blocker(s):\n` + blockers.map(b => ' • ' + b.label + ': ' + b.detail).join('\n') + '\n\n' : '') +
         'This will:\n' +
         '1. Run a final sync from primary → secondary\n' +
         '2. Validate secondary readiness\n' +

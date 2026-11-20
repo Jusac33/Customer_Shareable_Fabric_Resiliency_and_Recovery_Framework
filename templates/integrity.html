@@ -55,19 +55,27 @@
     </div>
 </section>
 
+<section class="card" aria-labelledby="fresh-title">
+    <h2 class="section-title" id="fresh-title"><i class="fas fa-hourglass-half" aria-hidden="true"></i> DATA CURRENCY — MEASURED</h2>
+    <p class="section-description">Item counts say an item exists; this says whether its data is current. Each table's Delta version on the
+        secondary is compared with the primary's commit history (OneLake data plane). The worst lag is your effective RPO right now.</p>
+    <div class="inv-cov-filters" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:13px">
+        <span id="fresh-summary" class="text-muted">Measuring…</span>
+        <button type="button" class="btn-action" id="fresh-refresh"><i class="fas fa-rotate" aria-hidden="true"></i> Re-measure</button>
+    </div>
+    <div id="fresh-table" class="assurance-table-container"></div>
+</section>
+
 <style>
     .assurance-stats { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
     .assurance-stat {
         padding: 12px 20px; border-radius: 8px; background: var(--surface-2);
-        border-left: 4px solid #ccc; min-width: 120px; text-align: center;
+        border: 1px solid var(--line); min-width: 120px; text-align: center;
     }
     .assurance-stat .label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
     .assurance-stat .value { display: block; font-size: 24px; font-weight: 700; }
-    .assurance-stat.success { border-left-color: #4caf50; }
     .assurance-stat.success .value { color: #2e7d32; }
-    .assurance-stat.warning { border-left-color: #ff9800; }
     .assurance-stat.warning .value { color: #e65100; }
-    .assurance-stat.error { border-left-color: #f44336; }
     .assurance-stat.error .value { color: #c62828; }
 
     .assurance-table-container { margin-top: 16px; overflow-x: auto; }
@@ -94,6 +102,40 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+    async function loadFreshness(refresh) {
+        const esc = FabricUI.esc, sum = document.getElementById('fresh-summary'), box = document.getElementById('fresh-table');
+        sum.textContent = 'Measuring…';
+        try {
+            const f = await FabricUI.fetchJSON('/api/bcdr/data-freshness' + (refresh ? '?refresh=1' : ''));
+            const s = f.summary || {}, st = s.states || {};
+            const hrs = h => h == null ? '—' : h < 1 ? Math.round(h * 60) + ' min' : h < 48 ? h.toFixed(1) + ' h' : (h / 24).toFixed(1) + ' d';
+            sum.innerHTML = `Measured RPO <strong>${s.rpo_is_lower_bound ? '≥ ' : ''}${hrs(s.measured_rpo_hours)}</strong> · ${st.in_sync || 0} in sync · ${st.behind || 0} behind`
+                + `${st.missing_in_secondary ? ' · ' + st.missing_in_secondary + ' missing' : ''}${st.diverged ? ' · ' + st.diverged + ' diverged' : ''}`
+                + ` · measured ${new Date(f.measured_at).toLocaleTimeString()}`;
+            const rows = (f.lakehouses || []).flatMap(lh => (lh.tables || []).map(t => ({ lh: lh.lakehouse, ...t })))
+                .sort((a, b) => (b.behind_hours ?? -1) - (a.behind_hours ?? -1));
+            const badge = { in_sync: ['In sync', 'success'], behind: ['Behind', 'warning'], missing_in_secondary: ['Missing', 'error'],
+                            extra_in_secondary: ['Only in secondary', 'warning'], diverged: ['Diverged', 'error'], unknown: ['Unknown', 'warning'] };
+            box.innerHTML = (f.lakehouses || []).filter(l => l.error).map(l => `<div class="alert alert-danger">${esc(l.error)}</div>`).join('') +
+                `<table class="assurance-table"><thead><tr><th scope="col">Lakehouse</th><th scope="col">Table</th>
+                <th scope="col">Delta version (primary → secondary)</th><th scope="col">Behind</th><th scope="col">Time travel by timestamp</th><th scope="col">Status</th></tr></thead><tbody>
+                ${rows.map(r => { const [l, c] = badge[r.state] || [r.state, 'warning'];
+                    return `<tr><td>${FabricUI.icon('Lakehouse', 'sm')} ${esc(r.lh)}</td><td>${esc(r.table)}</td>
+                        <td>v${r.primary_version ?? '—'} → v${r.secondary_version ?? '—'}</td>
+                        <td>${r.lag_is_lower_bound ? '≥ ' : ''}${hrs(r.behind_hours)}</td>
+                        <td>${r.in_commit_timestamps === false ? '<span class="text-muted">Unreliable on replica (no in-commit timestamps)</span>' : r.in_commit_timestamps ? 'Reliable' : '—'}</td>
+                        <td><span class="badge ${c}">${l}</span></td></tr>`; }).join('')}</tbody></table>`;
+        } catch (e) {
+            sum.textContent = '';
+            box.innerHTML = `<div class="alert alert-danger">${FabricUI.esc(e.message)}</div>`;
+        }
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        loadFreshness();
+        document.getElementById('fresh-refresh').addEventListener('click', () => loadFreshness(true));
+    });
+</script>
 <script>
     let assuranceData = {{ assurance_data | safe }};
     let slowChecks = [];

@@ -30,6 +30,8 @@ from flask_cors import CORS
 
 import bcdr_freshness
 import item_permissions
+import item_permissions_internal
+import bcdr_schedules
 
 # Initialize Flask app
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -326,6 +328,25 @@ def _get_onelake_token() -> Optional[str]:
             logger.warning(f"OneLake token failed: {err}")
     else:
         logger.warning("No MSAL accounts for OneLake token")
+    return None
+
+
+def _get_pbi_token() -> Optional[str]:
+    """Power BI-audience token (https://analysis.windows.net/powerbi/api), used by the opt-in internal sharing API."""
+    scopes = ["https://analysis.windows.net/powerbi/api/.default"]
+    if _auth_state.get("auth_mode") == "service_principal":
+        sp_app = _auth_state.get("msal_app")
+        if sp_app and isinstance(sp_app, msal.ConfidentialClientApplication):
+            result = sp_app.acquire_token_for_client(scopes=scopes)
+            if result and "access_token" in result:
+                return result["access_token"]
+        return None
+    app_client = _get_msal_app()
+    accounts = _auth_state.get("accounts") or app_client.get_accounts()
+    if accounts:
+        result = app_client.acquire_token_silent(scopes, account=accounts[0])
+        if result and "access_token" in result:
+            return result["access_token"]
     return None
 
 
@@ -2222,30 +2243,46 @@ def list_all_workspaces() -> List[Dict[str, Any]]:
     return workspaces
 
 
-def get_workspace_items(workspace_id: str) -> List[Dict[str, Any]]:
-    """Get ALL items in a workspace with pagination (cached)."""
-    def _fetch(ws_id):
-        all_items = []
-        try:
-            endpoint = f"/workspaces/{ws_id}/items"
-            while endpoint:
-                data = fabric_api("GET", endpoint)
-                all_items.extend(data.get("value", []))
-                # Handle pagination via continuationUri or continuationToken
-                continuation = data.get("continuationUri") or data.get("continuationToken")
-                if continuation:
-                    if continuation.startswith("http"):
-                        # continuationUri is a full URL — strip the base
-                        endpoint = continuation.replace(FABRIC_API_BASE, "")
-                    else:
-                        endpoint = f"/workspaces/{ws_id}/items?continuationToken={continuation}"
+_items_errors: Dict[str, Dict[str, Any]] = {}
+
+
+def get_workspace_items(workspace_id: str, strict: bool = False) -> List[Dict[str, Any]]:
+    """Get ALL items in a workspace with pagination (cached).
+
+    A failed listing is never cached. Lenient callers get [] (legacy behaviour);
+    strict=True raises, so readiness checks report an error instead of "0 items".
+    """
+    cache_key = f"items:{workspace_id}"
+    now = time.time()
+    if cache_key in _cache and now < _cache_ttl.get(cache_key, 0):
+        return _cache[cache_key]
+    all_items: List[Dict[str, Any]] = []
+    try:
+        endpoint = f"/workspaces/{workspace_id}/items"
+        while endpoint:
+            data = fabric_api("GET", endpoint)
+            all_items.extend(data.get("value", []))
+            # Handle pagination via continuationUri or continuationToken
+            continuation = data.get("continuationUri") or data.get("continuationToken")
+            if continuation:
+                if continuation.startswith("http"):
+                    # continuationUri is a full URL — strip the base
+                    endpoint = continuation.replace(FABRIC_API_BASE, "")
                 else:
-                    endpoint = None
-            logger.info(f"Workspace {ws_id}: fetched {len(all_items)} items")
-        except Exception as e:
-            logger.error(f"Error listing items for {ws_id}: {e}")
-        return all_items
-    return _cached_call(f"items:{workspace_id}", _fetch, workspace_id)
+                    endpoint = f"/workspaces/{workspace_id}/items?continuationToken={continuation}"
+            else:
+                endpoint = None
+        logger.info(f"Workspace {workspace_id}: fetched {len(all_items)} items")
+    except Exception as e:
+        logger.error(f"Error listing items for {workspace_id}: {e}")
+        _items_errors[workspace_id] = {"error": str(e)[:300], "at": now}
+        if strict:
+            raise RuntimeError(f"Could not list items in workspace {workspace_id}: {e}") from e
+        return []
+    _items_errors.pop(workspace_id, None)
+    _cache[cache_key] = all_items
+    _cache_ttl[cache_key] = now + CACHE_SECONDS
+    return all_items
 
 
 _BCDR_PREFIXES = ("BCDR_",)
@@ -3828,7 +3865,7 @@ def api_data_freshness():
     token = _get_onelake_token()
     if not token:
         return jsonify({"error": "Could not acquire a OneLake (storage) token; data freshness cannot be measured."}), 503
-    lh = lambda ws: {i["displayName"]: i["id"] for i in get_workspace_items(ws) if i.get("type") == "Lakehouse"}
+    lh = lambda ws: {i["displayName"]: i["id"] for i in get_workspace_items(ws, strict=True) if i.get("type") == "Lakehouse"}
     try:
         result = bcdr_freshness.measure_pair(token, p_id, s_id, lh(p_id), lh(s_id))
     except Exception as e:
@@ -3860,7 +3897,7 @@ def api_item_permissions_supported():
 
     def build():
         plan = item_permissions.build_plan(_fabric_call, _pbi_call, p_id, s_id,
-                                           get_workspace_items(p_id), get_workspace_items(s_id), logger=logger)
+                                           get_workspace_items(p_id, strict=True), get_workspace_items(s_id, strict=True), logger=logger)
         for r in plan["rows"]:
             r.pop("keys", None)
         return {**plan, "measured_at": datetime.utcnow().isoformat() + "Z"}
@@ -3883,13 +3920,151 @@ def api_item_permissions_apply():
     wanted = {(r.get("secondary_item_id"), (r.get("principal") or "").lower())
               for r in (request.get_json(silent=True) or {}).get("rows", [])}
     plan = item_permissions.build_plan(_fabric_call, _pbi_call, p_id, s_id,
-                                       get_workspace_items(p_id), get_workspace_items(s_id), logger=logger)
+                                       get_workspace_items(p_id, strict=True), get_workspace_items(s_id, strict=True), logger=logger)
     grantable = [r for r in plan["rows"]
                  if r["action"] in (item_permissions.ACTION_GRANT, item_permissions.ACTION_UPGRADE)
                  and (r["secondary_item_id"], r["principal"].lower()) in wanted]
     result = item_permissions.apply_rows(_pbi_call, s_id, grantable, logger)
     result["rejected"] = len(wanted) - len(grantable)
     _cache.pop(f"itemperms:{p_id}:{s_id}", None)
+    return jsonify(result), (200 if result["failed"] == 0 else 207)
+
+
+@app.route('/api/bcdr/schedules', methods=['GET'])
+def api_bcdr_schedules():
+    """Read-only: are primary job schedules replicated (paused) on the standby secondary?"""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    p_id, s_id = _ws_id("primary"), _ws_id("secondary")
+    if not p_id or not s_id:
+        return jsonify({"error": "Workspace pair not configured"}), 400
+
+    def build():
+        client = bcdr_schedules.ScheduleClient(_fabric_call)
+        sched = lambda ws: [i for i in get_workspace_items(ws, strict=True) if i.get("type") in bcdr_schedules.SCHEDULABLE_TYPES
+                            and not i.get("displayName", "").startswith("BCDR_")]
+        s_items = sched(s_id)
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fp = pool.submit(bcdr_schedules.collect, bcdr_schedules.ScheduleClient(_fabric_call), p_id, sched(p_id))
+            fs = pool.submit(bcdr_schedules.collect, client, s_id, s_items)
+            p, s = fp.result(), fs.result()
+        plan = bcdr_schedules.plan_replication(p["entries"], s["entries"], s_items)
+        counts: Dict[str, int] = {}
+        for r in plan["rows"]:
+            counts[r["action"]] = counts.get(r["action"], 0) + 1
+        manifest = bcdr_schedules.load_manifest()
+        return {
+            "primary_schedules": len(p["entries"]),
+            "primary_enabled": sum(1 for e in p["entries"] if e["enabled"]),
+            "counts": counts,
+            "enabled_on_secondary": [f"{e['item_name']} ({e['job_type']})" for e in s["entries"] if e["enabled"]],
+            "manifest_entries": len(manifest),
+            "errors": p["errors"] + s["errors"],
+            "measured_at": datetime.utcnow().isoformat() + "Z",
+        }
+    try:
+        return jsonify(_cached_json(f"schedules:{p_id}:{s_id}", 120, build))
+    except Exception as e:
+        logger.exception("Schedule readiness failed")
+        return jsonify({"error": f"Schedule readiness failed: {e}"}), 502
+
+
+# ---------------------------------------------------------------------------
+# OPT-IN, UNSUPPORTED: Fabric portal internal sharing API (item_permissions_internal.py)
+# ---------------------------------------------------------------------------
+_INTERNAL_SHARING_FILE = os.path.join(os.path.dirname(__file__), ".internal_sharing_optin.json")
+
+
+def _internal_sharing_settings() -> Dict[str, Any]:
+    try:
+        with open(_INTERNAL_SHARING_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _internal_sharing_client() -> item_permissions_internal.InternalSharingClient:
+    def headers():
+        token = _get_pbi_token() or _ensure_token()
+        if not token:
+            raise _ApiStatusError(401, "Not authenticated")
+        return {"Authorization": f"Bearer {token}"}
+    return item_permissions_internal.InternalSharingClient(headers)
+
+
+@app.route('/api/security/item-permissions/internal', methods=['GET'])
+def api_internal_sharing_plan():
+    """Opt-in status, plus a read-only plan when enabled."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    settings = _internal_sharing_settings()
+    status = {"enabled": item_permissions_internal.enabled(settings),
+              "enabled_by": settings.get("enabled_by"), "enabled_at": settings.get("enabled_at"),
+              "ack_phrase": item_permissions_internal.ACK_PHRASE}
+    if not status["enabled"]:
+        return jsonify(status)
+    p_id, s_id = _ws_id("primary"), _ws_id("secondary")
+    if not p_id or not s_id:
+        return jsonify({**status, "error": "Workspace pair not configured"}), 400
+
+    def build():
+        plan = item_permissions_internal.build_plan(_internal_sharing_client(), get_workspace_items(p_id, strict=True),
+                                                    get_workspace_items(s_id, strict=True), logger=logger)
+        return {**plan, "measured_at": datetime.utcnow().isoformat() + "Z"}
+    try:
+        return jsonify({**status, **_cached_json(f"internalshare:{p_id}:{s_id}", 120, build)})
+    except Exception as e:
+        logger.exception("Internal sharing plan failed")
+        return jsonify({**status, "error": f"Internal sharing API read failed: {e}"}), 502
+
+
+@app.route('/api/security/item-permissions/internal/optin', methods=['POST'])
+def api_internal_sharing_optin():
+    """Turn the opt-in on (requires the acknowledgement phrase) or off."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    body = request.get_json(silent=True) or {}
+    if body.get("enabled"):
+        if (body.get("acknowledgement") or "").strip() != item_permissions_internal.ACK_PHRASE:
+            return jsonify({"error": "Type the acknowledgement exactly to enable the unsupported API."}), 400
+        data = {"internal_sharing_api_enabled": True, "enabled_at": datetime.utcnow().isoformat() + "Z",
+                "enabled_by": _auth_state.get("user_name") or _auth_state.get("auth_mode") or "unknown"}
+    else:
+        data = {"internal_sharing_api_enabled": False}
+    with open(_INTERNAL_SHARING_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+    _cache.clear()
+    logger.warning(f"Internal sharing API opt-in set to {data['internal_sharing_api_enabled']}")
+    return jsonify({"enabled": data["internal_sharing_api_enabled"]})
+
+
+@app.route('/api/security/item-permissions/internal/apply', methods=['POST'])
+def api_internal_sharing_apply():
+    """Apply selected rows. Re-plans server-side and only sends rows in the fresh plan."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    p_id, s_id = _ws_id("primary"), _ws_id("secondary")
+    if not p_id or not s_id:
+        return jsonify({"error": "Workspace pair not configured"}), 400
+    body = request.get_json(silent=True) or {}
+    settings = _internal_sharing_settings()
+    if not item_permissions_internal.enabled(settings):
+        return jsonify({"error": "The internal sharing API is not enabled."}), 403
+    wanted = {(r.get("secondary_item_id"), (r.get("principal_object_id") or "").lower())
+              for r in body.get("rows", [])}
+    client = _internal_sharing_client()
+    plan = item_permissions_internal.build_plan(client, get_workspace_items(p_id, strict=True), get_workspace_items(s_id, strict=True),
+                                                logger=logger)
+    rows = [r for r in plan["rows"] if r["action"] != item_permissions_internal.ACTION_PRESENT
+            and (r["secondary_item_id"], r["principal_object_id"]) in wanted]
+    try:
+        result = item_permissions_internal.apply_rows(client, rows, body.get("acknowledgement", ""), settings,
+                                                      logger)
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    result["rejected"] = len(wanted) - len(rows)
+    _cache.pop(f"internalshare:{p_id}:{s_id}", None)
     return jsonify(result), (200 if result["failed"] == 0 else 207)
 
 
@@ -3953,7 +4128,7 @@ def api_model_readiness():
 
     def build():
         from concurrent.futures import ThreadPoolExecutor
-        targets = [i for i in get_workspace_items(s_id) if i.get("type") == "SemanticModel"
+        targets = [i for i in get_workspace_items(s_id, strict=True) if i.get("type") == "SemanticModel"
                    and not i.get("displayName", "").startswith("BCDR_")]
         with ThreadPoolExecutor(max_workers=6) as pool:
             models = list(pool.map(check, targets))
@@ -4196,8 +4371,8 @@ def api_lineage_connections():
             return jsonify({"error": "No workspace pair configured"}), 400
 
         # Load live items from both workspaces
-        p_items = _filter_business_items(get_workspace_items(p_id))
-        s_items = _filter_business_items(get_workspace_items(s_id))
+        p_items = _filter_business_items(get_workspace_items(p_id, strict=True))
+        s_items = _filter_business_items(get_workspace_items(s_id, strict=True))
 
         # Build lookup tables: id → {name, type, workspace}
         id_lookup = {}
@@ -4512,10 +4687,15 @@ def api_bcdr_status():
     if not is_authenticated():
         return jsonify({"error": "Not authenticated"}), 401
     try:
+        # Fail loudly when either workspace can't be listed: "0 of 0 mirrored" would read as a real result.
+        for role in ("primary", "secondary"):
+            ws = _ws_id(role)
+            if ws:
+                get_workspace_items(ws, strict=True)
         return jsonify(get_bcdr_status())
     except Exception as e:
         logger.exception("Error getting Resiliency & Recovery status")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e)}), 502
 
 
 @app.route('/api/bcdr/bulk-sync', methods=['POST'])
@@ -8703,7 +8883,7 @@ def get_gateway_info() -> Dict[str, Any]:
 
         gateways.append({
             "id": gw_id,
-            "name": gw.get("name", "Unknown"),
+            "name": gw.get("displayName") or gw.get("name") or "Unknown",
             "type": gw_type,
             "publicKey": gw.get("publicKey", {}),
             "version": annotation.get("gatewayWireDefaultVersion", ""),
@@ -8712,12 +8892,75 @@ def get_gateway_info() -> Dict[str, Any]:
             "contactInfo": annotation.get("gatewayContactInformation", ""),
             "datasources": datasources,
             "datasourceCount": len(datasources),
+            "capacityId": gw.get("capacityId", ""),
+            "memberCount": gw.get("numberOfMemberGateways"),
+            "vnet": {k: (gw.get("virtualNetworkAzureResource") or {}).get(k, "")
+                     for k in ("virtualNetworkName", "subnetName")} if gw_type == "VirtualNetwork" else None,
         })
+
+    # DR context: which region each gateway lives in, and how many connections depend on it.
+    try:
+        caps = {c["id"]: c for c in fabric_api("GET", "/capacities").get("value", [])}
+    except Exception:
+        caps = {}
+    conn_count: Dict[str, int] = {}
+    try:
+        url = "/connections"
+        while url:
+            resp = fabric_api("GET", url)
+            for c in resp.get("value", []):
+                if c.get("gatewayId"):
+                    conn_count[c["gatewayId"]] = conn_count.get(c["gatewayId"], 0) + 1
+            tok = resp.get("continuationToken")
+            url = f"/connections?continuationToken={tok}" if tok else None
+    except Exception as e:
+        logger.warning(f"Could not count gateway connections: {e}")
+    regions = {}
+    for role in ("primary", "secondary"):
+        try:
+            ws = fabric_api("GET", f"/workspaces/{_ws_id(role)}") if _ws_id(role) else {}
+            cap = caps.get(ws.get("capacityId", ""), {})
+            regions[role] = {"capacity": cap.get("displayName", ""), "region": cap.get("region", "")}
+        except Exception:
+            regions[role] = {}
+    for g in gateways:
+        cap = caps.get(g.get("capacityId") or "", {})
+        g["region"] = cap.get("region", "")
+        g["capacityName"] = cap.get("displayName", "")
+        g["connectionCount"] = conn_count.get(g["id"], 0)
+        g["dr"] = _gateway_dr_verdict(g, regions)
 
     return {
         "gateways": gateways,
         "total": len(gateways),
+        "pair_regions": regions,
     }
+
+
+def _gateway_dr_verdict(gw: Dict[str, Any], regions: Dict[str, Dict[str, str]]) -> Dict[str, str]:
+    """How a gateway behaves when the primary region is lost. Pure (unit-tested)."""
+    p_reg = (regions.get("primary") or {}).get("region", "")
+    s_reg = (regions.get("secondary") or {}).get("region", "")
+    n = gw.get("connectionCount", 0)
+    if gw.get("type") == "VirtualNetwork":
+        reg = gw.get("region", "")
+        if reg and s_reg and reg != s_reg and (reg == p_reg or not p_reg):
+            return {"level": "bad", "text": f"Region-bound to {reg}. If that region fails, the {n} connection(s) on this gateway "
+                    f"stop working. Create a VNet gateway on a capacity in {s_reg} and bind the DR connections to it."}
+        if reg and s_reg and reg == s_reg and p_reg == s_reg:
+            return {"level": "warn", "text": f"Runs in {reg}, the same region as both workspaces, so a regional outage takes it "
+                    f"down with them. Plan a VNet gateway on a capacity in another region for the {n} connection(s)."}
+        if reg and reg == s_reg:
+            return {"level": "ok", "text": f"Runs in the DR region ({reg}); usable after failover."}
+        if not reg:
+            same = f" Both workspaces are in {p_reg}, so unless the gateway's capacity is elsewhere it fails with them." if p_reg and p_reg == s_reg else ""
+            return {"level": "warn", "text": f"Its capacity isn't visible to you, so its region is unknown. VNet gateways are "
+                    f"region-bound; {n} connection(s) depend on this one.{same} Confirm a gateway exists in the DR region."}
+        return {"level": "warn", "text": "VNet gateways are region-bound. Confirm a gateway exists in the DR region."}
+    members = gw.get("memberCount") or len(gw.get("datasources") or []) or 0
+    if members < 2:
+        return {"level": "warn", "text": f"Single gateway member. Add a cluster member at the DR site so the {n} connection(s) survive a site loss."}
+    return {"level": "ok", "text": f"{members} cluster members. Confirm at least one member runs at the DR site."}
 
 
 @app.route('/api/gateways', methods=['GET'])

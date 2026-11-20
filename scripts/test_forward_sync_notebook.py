@@ -268,5 +268,61 @@ class TestDeploySyncArtifactsUsesDefaultEngine(unittest.TestCase):
             self.fail(f"spark_cdf notebook not JSON-serialisable: {e}")
 
 
+
+
+class TestGatewayDrVerdict(unittest.TestCase):
+    """DR verdict per gateway shown on the Data Gateways page and in failover readiness."""
+
+    R_SAME = {"primary": {"region": "West Central US"}, "secondary": {"region": "West Central US"}}
+    R_SPLIT = {"primary": {"region": "West Central US"}, "secondary": {"region": "East US 2"}}
+
+    def v(self, gw, regions):
+        return app_module._gateway_dr_verdict(gw, regions)
+
+    def test_vnet_in_primary_region_is_a_blocker(self):
+        r = self.v({"type": "VirtualNetwork", "region": "West Central US", "connectionCount": 12}, self.R_SPLIT)
+        self.assertEqual(r["level"], "bad")
+        self.assertIn("12 connection", r["text"])
+
+    def test_vnet_in_dr_region_is_ok(self):
+        self.assertEqual(self.v({"type": "VirtualNetwork", "region": "East US 2"}, self.R_SPLIT)["level"], "ok")
+
+    def test_vnet_with_unknown_region_warns_and_explains(self):
+        r = self.v({"type": "VirtualNetwork", "region": "", "connectionCount": 3}, self.R_SAME)
+        self.assertEqual(r["level"], "warn")
+        self.assertIn("isn't visible", r["text"])
+        self.assertIn("West Central US", r["text"])
+
+    def test_single_member_onprem_gateway_warns(self):
+        self.assertEqual(self.v({"type": "Resource", "memberCount": 1}, self.R_SPLIT)["level"], "warn")
+        self.assertEqual(self.v({"type": "Resource", "memberCount": 2}, self.R_SPLIT)["level"], "ok")
+
+
+class TestWorkspaceItemsNeverCacheFailures(unittest.TestCase):
+    """A transient API failure must not be cached as an empty workspace (it showed '0 connections' for 10 min)."""
+
+    def setUp(self):
+        app_module._cache.pop("items:ws-x", None)
+        app_module._cache_ttl.pop("items:ws-x", None)
+
+    def test_failure_not_cached_and_strict_raises(self):
+        from unittest import mock as _m
+        calls = {"n": 0}
+
+        def flaky(method, endpoint, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("connect timeout")
+            return {"value": [{"id": "1", "displayName": "a", "type": "Notebook"}]}
+        with _m.patch.object(app_module, "fabric_api", side_effect=flaky):
+            self.assertEqual(app_module.get_workspace_items("ws-x"), [])
+            self.assertIn("ws-x", app_module._items_errors)
+            self.assertEqual(len(app_module.get_workspace_items("ws-x")), 1)
+            self.assertNotIn("ws-x", app_module._items_errors)
+        app_module._cache.pop("items:ws-x", None)
+        with _m.patch.object(app_module, "fabric_api", side_effect=RuntimeError("down")):
+            with self.assertRaises(RuntimeError):
+                app_module.get_workspace_items("ws-x", strict=True)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

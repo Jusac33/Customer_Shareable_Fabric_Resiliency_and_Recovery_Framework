@@ -2087,6 +2087,44 @@ secondary, and verified identical (8/8 plus role membership). The real-time test
 caught an ordering bug. An object-level `GRANT` clears column-level permissions, so
 statements now run in scope order: database → schema → object → column.
 
+#### 28.2.4 Opt-in: Fabric portal sharing API (unsupported)
+
+**Files:** `item_permissions_internal.py`, Security → *Item permissions* → *Opt-in* panel,
+routes `GET /api/security/item-permissions/internal`, `POST …/internal/optin`, `POST …/internal/apply`.
+Tests: `scripts/test_item_permissions_internal.py`.
+
+This option uses the same internal endpoints as the portal's Share dialog. It writes direct shares
+on every item type that dialog can share: lakehouses and their SQL analytics endpoints, warehouses,
+notebooks, pipelines, KQL items, ML items and agents. The endpoints are undocumented and unsupported:
+Microsoft can change them without notice, and Microsoft Support won't help with them.
+**The supported path in 28.2.1–28.2.3 remains the baseline.**
+
+| Call | Purpose |
+|---|---|
+| `GET {cluster}/metadata/access/artifacts/{itemId}` | Read direct and inherited access. Reports and semantic models return 404 here and stay on the supported path. |
+| `POST {cluster}/metadata/access` | Grant. Body captured from the portal on 2026-11-20: `artifacts: [{id, artifactObjectId, permissions, artifactPermissions, userObjectId \| groupObjectId, isServicePrincipal}]` |
+
+Guard rails:
+- **Off by default.** To enable it, set `BCDR_ENABLE_INTERNAL_SHARING_API=true`, or type the
+  acknowledgement phrase in the dashboard. Every apply also requires that phrase.
+- **Copies permissions verbatim.** Permission integers are copied exactly per item; lakehouse and
+  SQL endpoint are separate items, and none of the values are decoded.
+- **Never downgrades or revokes.** When the secondary already has some rights, the union is granted.
+- **Verifies every grant.** Each grant is read back. If the API accepts a grant that then doesn't
+  appear, it is reported as **failed**.
+- **Inherited access is skipped.** Access that comes from a workspace role is replicated through
+  role assignments instead.
+
+**Real-time test (crestshield, MSIT, 2026-11-20, cleaned up):**
+1. A service principal you own was shared on the primary `bronze_lakehouse` through the portal
+   (Read + read all SQL data).
+2. The plan detected two rows: the lakehouse and its SQL endpoint.
+3. Apply was refused without opt-in and acknowledgement.
+4. After opt-in, 2/2 grants were applied and verified by read-back. A re-plan showed them as present.
+5. Both shares were then removed. The portal's removal request (`PUT /metadata/access` with
+   `permissions: 0`, keyed by internal `userId`) was captured and used once for secondary cleanup.
+   Revocation is deliberately not a feature.
+
 ### 28.3 OneLake Data Access Roles — Delta Sync
 
 **File:** `scripts/sync_permissions.py` → `sync_data_access_roles()`
@@ -2427,7 +2465,7 @@ The project has three pytest test suites covering the lakehouse sync, failback, 
 python -m pytest scripts/ -v
 ```
 
-**Latest result: 213/213 tests passing** (adds `test_item_permissions_supported.py`, `test_bcdr_freshness.py`, `test_connection_mapping.py`, `test_sql_permissions.py`, `test_bcdr_schedules.py`, `TestRefreshSemanticModels` and `TestRetryAfter`).
+**Latest result: 227/227 tests passing** (adds `test_item_permissions_supported.py`, `test_bcdr_freshness.py`, `test_connection_mapping.py`, `test_sql_permissions.py`, `test_bcdr_schedules.py`, `TestRefreshSemanticModels` and `TestRetryAfter`).
 
 ### `scripts/test_failback_sync.py` — 33 tests
 
@@ -2617,3 +2655,72 @@ workaround where it doesn't.
 - **Test failover every quarter.**
 - **Fail back** with the same procedure in reverse, only after reverse
   replication has caught up.
+
+
+---
+
+## 36. Failover Readiness Gate and BCDR-Focused Pages
+
+### 36.1 Go / no-go
+The **Managed Failover** page and the Command Center share one rule set
+(`FabricUI.readiness()` in `static/fabric-ui.js`). Every check is measured live:
+
+| Check | Source | Blocks failover when |
+|---|---|---|
+| Secondary in a different region | `/api/active-pair-info` | both capacities are in the same region |
+| Secondary capacity running | `/api/active-pair-info` | (warn) capacity paused |
+| Data current (measured RPO) | `/api/bcdr/data-freshness` | > 24 h behind, or any table diverged |
+| Every item exists | `/api/bcdr/status` | (warn) named items missing |
+| Semantic models queryable | `/api/bcdr/model-readiness` | a model is not refreshed/framed |
+| Job schedules replicated (paused) | `/api/bcdr/schedules` | (warn) not replicated, or already enabled on the standby |
+| Item permissions | `/api/security/item-permissions` | (warn) open shares or unscanned items |
+| References remapped | `/api/lineage/connections` | any secondary item still points at the primary |
+| Gateways | `/api/gateways` | VNet gateway bound to the failed region |
+
+The verdict is computed as follows:
+- **NO-GO** if any check fails.
+- **CAN'T ASSESS** if a critical check (region, RPO, items, models, references) could not be measured.
+- **GO WITH RISK** if there are only warnings.
+- **GO** otherwise.
+
+The page also states the data an unplanned failover would lose right now (the measured RPO), and how
+to run a planned failover instead. The failover confirmation lists the blockers.
+
+Crestshield today is **NO-GO**:
+- same region;
+- 53.6 days behind;
+- semantic model not framed;
+- 2 items missing;
+- 22 items not scanned for permissions;
+- VNet gateway region unknown.
+
+### 36.2 Page changes
+- **Topology & Lineage.** Interactive lineage:
+  - Data flows from a referenced item to the item that uses it, laid out in tiers: data stores →
+    engineering & ML → models → consumption. Ordering reduces line crossings.
+  - **Click a line** to see both ends, every reference (definition part path and status), and the
+    DR impact.
+  - **Click an item** to see what it reads from, what uses it, and its blast radius (transitive
+    downstream count). Escape or clicking empty space clears the selection.
+  - Search, a stale-only filter, and zoom/fit.
+- **Workspace Inventory.** Recovery coverage by item type: primary and secondary counts, missing
+  items named, items that exist only in the secondary, and how each type is protected.
+- **Data Assurance.** Measured data currency per table: Delta version primary → secondary, lag, and
+  whether time travel by timestamp is reliable on the replica.
+- **Data Gateways.** The real gateway name, region, members, and the number of connections that
+  depend on it. A DR verdict per gateway says what happens if the primary region fails.
+- **Command Center.**
+  - Compact coverage cards with progress bars.
+  - A **What to fix before failover** list.
+  - A readiness strip that shows *unknown* rather than a false "Separate" or "0/0 queryable" when
+    data can't be read.
+- **Account.** A header menu on every page: who is signed in and how, workspace pairs, sign in with
+  another account, sign out. An expired session shows a banner with **Sign in again** instead of
+  broken cards.
+
+### 36.3 Silent-failure fix
+`get_workspace_items` cached an empty list whenever a listing failed. A brief network outage
+therefore showed "0 connections" and "0 items" for up to 10 minutes. Failed listings are no longer
+cached. Readiness-critical routes call it with `strict=True`, so an outage surfaces as an error.
+API errors reach the UI through `FabricUI.friendlyError`, which turns them into one actionable
+sentence (expired sign-in, 403, 429, timeout).

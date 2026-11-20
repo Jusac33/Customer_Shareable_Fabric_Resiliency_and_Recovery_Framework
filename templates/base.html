@@ -103,8 +103,34 @@
                     <button type="button" class="btn btn-secondary" onclick="location.reload()">
                         <i class="fas fa-rotate" aria-hidden="true"></i> Refresh
                     </button>
+                    <div class="account" id="account">
+                        <a class="btn btn-primary" id="account-signin" href="/login" hidden>
+                            <i class="fas fa-right-to-bracket" aria-hidden="true"></i> Sign in
+                        </a>
+                        <button type="button" class="account-btn" id="account-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu" hidden>
+                            <span class="account-avatar" id="account-avatar" aria-hidden="true">?</span>
+                            <span class="account-name" id="account-name">Account</span>
+                            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                        </button>
+                        <div class="account-menu" id="account-menu" role="menu" hidden>
+                            <div class="account-menu-head">
+                                <div class="account-menu-name" id="account-menu-name"></div>
+                                <div class="account-menu-mail" id="account-menu-mail"></div>
+                                <div class="account-menu-mode" id="account-menu-mode"></div>
+                            </div>
+                            <a role="menuitem" href="/setup"><i class="fas fa-layer-group" aria-hidden="true"></i> Workspace pairs</a>
+                            <a role="menuitem" href="/logout?next=login" id="account-switch"><i class="fas fa-user-gear" aria-hidden="true"></i> Sign in with another account</a>
+                            <a role="menuitem" href="/logout" class="danger"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Sign out</a>
+                        </div>
+                    </div>
                 </div>
             </header>
+
+            <div class="session-banner" id="session-banner" role="alert" hidden>
+                <i class="fas fa-user-clock" aria-hidden="true"></i>
+                <span id="session-banner-text">Your sign-in has expired, so live data can't load.</span>
+                <a class="btn btn-primary" href="/logout?next=login">Sign in again</a>
+            </div>
 
             <section class="pair-context-banner" id="pair-context-banner" aria-label="Active workspace pair" hidden>
                 <div class="pair-context-inner">
@@ -141,6 +167,51 @@
     </div>
 
     <script src="{{ url_for('static', filename='fabric-ui.js') }}"></script>
+    <script>
+    // ───── Account: who is signed in, sign out, re-sign-in when the session expires ─────
+    (function () {
+        const btn = document.getElementById('account-btn'), menu = document.getElementById('account-menu');
+        const setMenu = open => { menu.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
+        btn.addEventListener('click', e => { e.stopPropagation(); setMenu(menu.hidden); if (!menu.hidden) menu.querySelector('a').focus(); });
+        document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) setMenu(false); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { setMenu(false); btn.focus(); } });
+
+        async function loadAccount() {
+            let s = null;
+            try { s = await (await fetch('/api/auth/status')).json(); } catch (_) {}
+            if (!s || !s.authenticated) {
+                document.getElementById('account-signin').hidden = false;
+                btn.hidden = true;
+                const b = document.getElementById('session-banner');
+                document.getElementById('session-banner-text').textContent = s && s.user_name
+                    ? 'Your sign-in has expired, so live data can\'t load.' : 'You are not signed in, so live data can\'t load.';
+                b.hidden = false;
+                return;
+            }
+            const name = s.user_name || 'Signed in', mail = s.user_email || '';
+            const initials = name.replace(/^SP:\s*/, '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+            document.getElementById('account-avatar').textContent = s.auth_mode === 'service_principal' ? 'SP' : initials;
+            document.getElementById('account-name').textContent = name;
+            document.getElementById('account-menu-name').textContent = name;
+            document.getElementById('account-menu-mail').textContent = mail;
+            document.getElementById('account-menu-mode').textContent = s.auth_mode === 'service_principal' ? 'Service principal' : 'Interactive (Microsoft account)';
+            btn.setAttribute('aria-label', 'Account: ' + name);
+            btn.hidden = false;
+        }
+        // An expired session surfaces as 401 on any API call: show the banner instead of broken cards.
+        const origFetch = window.fetch;
+        window.fetch = function () {
+            return origFetch.apply(this, arguments).then(r => {
+                if (r.status === 401 && !String(arguments[0]).includes('/api/auth/')) {
+                    document.getElementById('session-banner').hidden = false;
+                }
+                return r;
+            });
+        };
+        document.addEventListener('bcdr:session-expired', () => { document.getElementById('session-banner').hidden = false; });
+        loadAccount();
+    })();
+    </script>
     <script>
     (function () {
         let allPairs = [];

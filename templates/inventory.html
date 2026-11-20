@@ -20,6 +20,16 @@
     </div>
 </section>
 
+<section class="card" aria-labelledby="cov-title">
+    <h2 class="section-title" id="cov-title"><i class="fas fa-shield-halved" aria-hidden="true"></i> RECOVERY COVERAGE BY ITEM TYPE</h2>
+    <p class="section-description">Active pair only. For each item type: what exists in the recovery target, what is missing by name, and how the framework protects it.</p>
+    <div class="inv-cov-filters">
+        <label class="lin-toggle"><input type="checkbox" id="cov-gaps" onchange="renderCoverage()"> Show gaps only</label>
+        <span class="text-muted" id="cov-summary"></span>
+    </div>
+    <div id="cov-table"><p class="text-muted">Loading…</p></div>
+</section>
+
 <style>
     .inv-status-bar {
         display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
@@ -55,13 +65,63 @@
     }
     .inv-item-count { font-weight: 600; color: #333; }
     .inv-region { color: var(--text-3); }
+    .inv-cov-filters { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }
+    .inv-cov td { vertical-align: top; }
+    .inv-cov .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .inv-cov .names { font-size: 12px; color: var(--bad); }
+    .inv-cov .names.extra { color: var(--text-3); }
+    .inv-cov .how { font-size: 12px; color: var(--text-3); }
 </style>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', loadInventory);
+    document.addEventListener('DOMContentLoaded', () => { loadInventory(); loadCoverage(); });
+
+    // How each type is protected (mirrors Architecture page / guide section 30).
+    const PROTECT = {
+        Lakehouse: 'Definition + OneLake table copy (shortcut or notebook sync)', Warehouse: 'Definition only — data needs a separate copy',
+        Notebook: 'Definition copy with connection remap', DataPipeline: 'Definition copy; schedules replicated paused',
+        SemanticModel: 'Definition copy, rebind + refresh/frame on failover', Report: 'Definition copy, rebound to secondary model',
+        Eventhouse: 'Definition copy (RTI sync); data re-ingested', KQLDatabase: 'Schema copy (RTI sync); data re-ingested',
+        KQLQueryset: 'Definition copy', Eventstream: 'Definition copy; sources must reach DR region',
+        MLModel: 'Model re-registered from experiment artifacts', MLExperiment: 'Experiment + run metadata copy',
+        DataAgent: 'Definition copy with source remap', Ontology: 'Definition copy', GraphModel: 'Definition copy',
+        SQLEndpoint: 'Auto-created with its lakehouse', Environment: 'Definition copy (libraries + Spark settings)',
+        SparkJobDefinition: 'Definition copy', Dataflow: 'Definition copy; gateway binding is manual', CopyJob: 'Definition copy',
+    };
+    let _cov = null;
+    async function loadCoverage() {
+        try { _cov = await FabricUI.fetchJSON('/api/bcdr/status'); renderCoverage(); }
+        catch (e) { document.getElementById('cov-table').innerHTML = `<div class="alert alert-danger">${esc(e.message)}</div>`; }
+    }
+    function renderCoverage() {
+        if (!_cov) return;
+        const gapsOnly = document.getElementById('cov-gaps').checked;
+        let gaps = 0;
+        const rows = (_cov.type_cards || []).map(c => {
+            const sn = new Set((c.secondary_items || []).map(i => i.name));
+            const pn = new Set((c.primary_items || []).map(i => i.name));
+            const missing = (c.primary_items || []).filter(i => !sn.has(i.name)).map(i => i.name);
+            const extra = (c.secondary_items || []).filter(i => !pn.has(i.name) && !i.name.startsWith('BCDR_')).map(i => i.name);
+            if (missing.length) gaps++;
+            return { c, missing, extra };
+        }).filter(r => !gapsOnly || r.missing.length || !r.c.supported)
+          .sort((a, b) => b.missing.length - a.missing.length || a.c.type.localeCompare(b.c.type));
+        document.getElementById('cov-summary').textContent =
+            `${_cov.total_mirrored}/${_cov.total_primary} items in ${_cov.secondary_name || 'secondary'} · ${gaps} type(s) with gaps`;
+        document.getElementById('cov-table').innerHTML = `<table class="table inv-cov"><thead><tr>
+            <th scope="col">Item type</th><th scope="col" class="num">Primary</th><th scope="col" class="num">Secondary</th>
+            <th scope="col">Status</th><th scope="col">Missing in secondary</th><th scope="col">How it is protected</th></tr></thead><tbody>
+            ${rows.map(({ c, missing, extra }) => {
+                const st = !c.supported ? ['Not replicated', 'info'] : missing.length ? [`${missing.length} missing`, 'danger'] : ['Covered', 'success'];
+                return `<tr><td>${FabricUI.icon(c.type, 'sm')} ${esc(c.type)}</td><td class="num">${c.primary_count}</td><td class="num">${c.secondary_count}</td>
+                    <td><span class="status-badge ${st[1]}">${st[0]}</span></td>
+                    <td><div class="names">${missing.map(esc).join(', ') || '—'}</div>${extra.length ? `<div class="names extra">Only in secondary: ${extra.map(esc).join(', ')}</div>` : ''}</td>
+                    <td class="how">${esc(PROTECT[c.type] || 'Definition copy (generic)')}</td></tr>`;
+            }).join('')}</tbody></table>`;
+    }
 
     async function loadInventory() {
         try {

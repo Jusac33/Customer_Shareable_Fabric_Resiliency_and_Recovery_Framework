@@ -103,27 +103,45 @@ class ScheduleClient:
                          {"enabled": enabled, "configuration": schedule.get("configuration") or {}})
 
 
-def collect(client: ScheduleClient, workspace_id: str, items: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Every schedule on every schedulable item. Read-only."""
-    entries: List[Dict[str, Any]] = []
-    unsupported: Dict[str, int] = {}
-    errors: List[str] = []
-    for item in items:
-        if item.get("type") not in JOB_TYPE_CANDIDATES:
-            continue
+def collect(client: ScheduleClient, workspace_id: str, items: List[Dict[str, Any]],
+            workers: int = 8) -> Dict[str, Any]:
+    """Every schedule on every schedulable item. Read-only; items are read in parallel."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    targets = [i for i in items if i.get("type") in JOB_TYPE_CANDIDATES]
+    # Resolve each type's job type once (sequentially) so parallel reads don't race the probe.
+    for t in {i["type"]: i for i in targets}.values():
+        try:
+            client.job_type(workspace_id, t)
+        except Exception:
+            pass
+
+    def one(item: Dict[str, Any]):
         try:
             jt = client.job_type(workspace_id, item)
             if not jt:
-                unsupported[item["type"]] = unsupported.get(item["type"], 0) + 1
-                continue
-            for s in client.list(workspace_id, item["id"], jt):
-                entries.append({
-                    "item_id": item["id"], "item_name": item["displayName"], "item_type": item["type"],
-                    "job_type": jt, "schedule_id": s.get("id", ""), "enabled": bool(s.get("enabled")),
-                    "configuration": s.get("configuration") or {},
-                })
+                return ("unsupported", item["type"], None)
+            return ("ok", item, jt, client.list(workspace_id, item["id"], jt))
         except Exception as e:
-            errors.append(f"{item['type']}:{item.get('displayName')}: {str(e)[:200]}")
+            return ("error", f"{item['type']}:{item.get('displayName')}: {str(e)[:200]}", None)
+
+    entries: List[Dict[str, Any]] = []
+    unsupported: Dict[str, int] = {}
+    errors: List[str] = []
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for res in pool.map(one, targets):
+            if res[0] == "unsupported":
+                unsupported[res[1]] = unsupported.get(res[1], 0) + 1
+            elif res[0] == "error":
+                errors.append(res[1])
+            else:
+                _, item, jt, schedules = res
+                for s in schedules:
+                    entries.append({
+                        "item_id": item["id"], "item_name": item["displayName"], "item_type": item["type"],
+                        "job_type": jt, "schedule_id": s.get("id", ""), "enabled": bool(s.get("enabled")),
+                        "configuration": s.get("configuration") or {},
+                    })
     return {"entries": entries, "unsupported_types": unsupported, "errors": errors}
 
 
