@@ -35,30 +35,31 @@
     .badge-bcdr.disabled { border-color: #f44336; color: #c62828; background: #ffebee; }
     .btn-setup {
         padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
-        background: #f5f5f5; color: #333; border: 1px solid #ddd; cursor: pointer;
+        background: var(--surface-2); color: #333; border: 1px solid var(--line); cursor: pointer;
         display: inline-flex; align-items: center; gap: 6px;
     }
     .btn-setup:hover { background: #e0e0e0; }
     .btn-refresh {
-        width: 36px; height: 36px; border-radius: 50%; border: 1px solid #ddd;
-        background: #fff; cursor: pointer; display: flex; align-items: center;
+        width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line);
+        background: var(--surface); cursor: pointer; display: flex; align-items: center;
         justify-content: center; font-size: 14px; color: #666;
     }
-    .btn-refresh:hover { background: #f0f0f0; }
+    .btn-refresh:hover { background: var(--surface-2); }
     .btn-refresh.spinning i { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .secondary-info {
-        background: #fff3e0; border-left: 4px solid #ff9800; padding: 12px 18px;
-        border-radius: 4px; margin-bottom: 24px; display: flex; align-items: center;
-        gap: 10px; font-size: 13px; color: #e65100;
+        background: var(--warn-bg); border: 1px solid rgba(188, 75, 9, 0.28); padding: 12px 18px;
+        border-radius: var(--r); margin-bottom: 20px; display: flex; align-items: center;
+        gap: 10px; font-size: 13px; color: var(--warn);
+        -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
     }
-    .secondary-info.configured { background: #e8f5e9; border-color: #4caf50; color: #2e7d32; }
+    .secondary-info.configured { background: var(--ok-bg); border-color: rgba(16, 124, 65, 0.28); color: var(--ok); }
 
     .section-label {
         font-size: 14px; font-weight: 700; color: #555; text-transform: uppercase;
         letter-spacing: 1px; margin: 28px 0 16px; padding-bottom: 8px;
-        border-bottom: 2px solid #e0e0e0;
+        border-bottom: 2px solid var(--line);
     }
     .section-label:first-of-type { margin-top: 0; }
 
@@ -69,9 +70,9 @@
         margin-bottom: 8px;
     }
     .type-card {
-        background: #fff;
+        background: var(--surface);
         border-radius: 10px;
-        border: 2px solid #e0e0e0;
+        border: 2px solid var(--line);
         padding: 20px;
         position: relative;
         transition: all 0.2s;
@@ -99,7 +100,7 @@
     .type-icon.report { background: #fff8e1; color: #f57f17; }
     .type-icon.semanticmodel { background: #f3e5f5; color: #6a1b9a; }
     .type-icon.sqlendpoint { background: #e0f2f1; color: #00695c; }
-    .type-icon.default { background: #f5f5f5; color: #616161; }
+    .type-icon.default { background: var(--surface-2); color: #616161; }
 
     .btn-sync {
         padding: 5px 14px; border-radius: 14px; font-size: 11px; font-weight: 700;
@@ -116,8 +117,8 @@
     .sync-dropdown-wrap { position: relative; display: inline-block; }
     .sync-dropdown {
         display: none; position: absolute; top: 100%; right: 0; z-index: 100;
-        min-width: 180px; margin-top: 4px; background: #fff;
-        border: 1px solid #e0e0e0; border-radius: 8px;
+        min-width: 180px; margin-top: 4px; background: var(--surface);
+        border: 1px solid var(--line); border-radius: 8px;
         box-shadow: 0 6px 20px rgba(0,0,0,0.12); overflow: hidden;
     }
     .sync-dropdown.open { display: block; }
@@ -125,10 +126,10 @@
         padding: 9px 14px; font-size: 12px; color: #333; cursor: pointer;
         display: flex; align-items: center; gap: 8px; transition: background 0.15s;
     }
-    .sync-dropdown-item:hover { background: #f5f5f5; }
+    .sync-dropdown-item:hover { background: var(--surface-2); }
     .sync-dropdown-item i { width: 16px; text-align: center; color: #666; font-size: 11px; }
     .sync-dropdown-item .dd-label { font-weight: 600; }
-    .sync-dropdown-item .dd-desc { font-size: 10px; color: #999; margin-top: 1px; }
+    .sync-dropdown-item .dd-desc { font-size: 10px; color: var(--text-3); margin-top: 1px; }
 
     .type-percentage {
         font-size: 32px; font-weight: 800; color: #1a1a2e; line-height: 1;
@@ -138,7 +139,7 @@
         font-size: 15px; font-weight: 600; color: #333; margin-top: 4px;
     }
     .type-count {
-        font-size: 12px; color: #999; margin-top: 2px;
+        font-size: 12px; color: var(--text-3); margin-top: 2px;
     }
 
     /* Item detail modal */
@@ -148,17 +149,17 @@
     }
     .modal-overlay.active { display: flex; }
     .modal-content {
-        background: #fff; border-radius: 12px; width: 600px; max-width: 90vw;
+        background: var(--surface); border-radius: 12px; width: 600px; max-width: 90vw;
         max-height: 80vh; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     }
     .modal-header {
-        padding: 20px 24px; border-bottom: 1px solid #e0e0e0;
+        padding: 20px 24px; border-bottom: 1px solid var(--line);
         display: flex; justify-content: space-between; align-items: center;
     }
     .modal-header h3 { font-size: 18px; color: #1a1a2e; }
     .modal-close {
         width: 32px; height: 32px; border-radius: 50%; border: none;
-        background: #f5f5f5; cursor: pointer; font-size: 16px; color: #666;
+        background: var(--surface-2); cursor: pointer; font-size: 16px; color: #666;
     }
     .modal-close:hover { background: #e0e0e0; }
     .modal-body {
@@ -183,7 +184,7 @@
     .btn-replicate-item:hover { background: #1976d2; color: #fff; }
 
     .modal-footer {
-        padding: 14px 24px; border-top: 1px solid #e0e0e0;
+        padding: 14px 24px; border-top: 1px solid var(--line);
         display: flex; justify-content: space-between; align-items: center;
     }
     .btn-replicate-all {
@@ -199,19 +200,43 @@
 {% block content %}
 <!-- Resiliency & Recovery Header -->
 <div class="bcdr-header">
-    <div class="ws-icon"><i class="fas fa-sitemap"></i></div>
+    <div class="ws-icon"><img class="fx-icon lg" src="{{ url_for('static', filename='img/fabric/workspace.svg') }}" alt=""></div>
     <div class="ws-name" id="ws-name">Loading...</div>
-    <span class="pair-label-tag" id="pair-label-tag" style="font-size:11px;background:#e3f2fd;color:#1565C0;padding:2px 10px;border-radius:10px;font-weight:600;display:none;"></span>
+    <span class="pair-label-tag status-badge info" id="pair-label-tag" hidden></span>
     <div class="badges">
-        <span class="badge-bcdr disabled" id="bcdr-badge">Resiliency & Recovery · 0%</span>
-        <button class="btn-setup" onclick="window.location='/setup'">
-            <i class="fas fa-cog"></i> Configure
+        <span class="badge-bcdr disabled" id="bcdr-badge" title="Share of primary items that exist in secondary, matched by type and name">Item coverage · 0%</span>
+        <button type="button" class="btn-setup" onclick="window.location='/setup'">
+            <i class="fas fa-gear" aria-hidden="true"></i> Configure
         </button>
-        <button class="btn-refresh" onclick="refreshBcdr()" id="btn-refresh">
-            <i class="fas fa-sync-alt"></i>
+        <button type="button" class="btn-refresh" onclick="refreshBcdr()" id="btn-refresh" aria-label="Refresh status">
+            <i class="fas fa-rotate" aria-hidden="true"></i>
         </button>
     </div>
 </div>
+
+<!-- Recovery readiness: measured, not inferred -->
+<section class="grid-4 readiness" aria-label="Recovery readiness" style="margin-bottom:16px">
+    <a class="metric-card ready-card" href="/architecture">
+        <h3>Measured RPO</h3>
+        <div class="metric-value" id="rd-rpo"><span class="fx-skeleton">0.0 h</span></div>
+        <div class="metric-unit" id="rd-rpo-sub">from OneLake Delta commits</div>
+    </a>
+    <a class="metric-card ready-card" href="/architecture">
+        <h3>Semantic models ready in DR</h3>
+        <div class="metric-value" id="rd-models"><span class="fx-skeleton">0/0</span></div>
+        <div class="metric-unit" id="rd-models-sub">refreshed / framed in secondary</div>
+    </a>
+    <a class="metric-card ready-card" href="/security">
+        <h3>Item permissions</h3>
+        <div class="metric-value" id="rd-perms"><span class="fx-skeleton">0</span></div>
+        <div class="metric-unit" id="rd-perms-sub">open actions</div>
+    </a>
+    <a class="metric-card ready-card" href="/architecture">
+        <h3>Region separation</h3>
+        <div class="metric-value" id="rd-region"><span class="fx-skeleton">—</span></div>
+        <div class="metric-unit" id="rd-region-sub">primary vs secondary capacity</div>
+    </a>
+</section>
 
 <!-- Secondary workspace info bar -->
 <div class="secondary-info" id="secondary-info">
@@ -250,31 +275,51 @@
     let bcdrData = null;
     let currentModalType = null;
 
-    const TYPE_ICONS = {
-        'Lakehouse': { icon: 'fas fa-water', cls: 'lakehouse' },
-        'Warehouse': { icon: 'fas fa-building', cls: 'warehouse' },
-        'SQLEndpoint': { icon: 'fas fa-database', cls: 'sqlendpoint' },
-        'Notebook': { icon: 'fas fa-code', cls: 'notebook' },
-        'Pipeline': { icon: 'fas fa-random', cls: 'pipeline' },
-        'DataPipeline': { icon: 'fas fa-random', cls: 'pipeline' },
-        'Report': { icon: 'fas fa-chart-bar', cls: 'report' },
-        'SemanticModel': { icon: 'fas fa-project-diagram', cls: 'semanticmodel' },
-        'CopyJob': { icon: 'fas fa-clone', cls: 'default' },
-        'GraphQLApi': { icon: 'fas fa-cogs', cls: 'default' },
-        'VariableLibrary': { icon: 'fas fa-brackets-curly', cls: 'default' },
-        'KQLDatabase': { icon: 'fas fa-database', cls: 'sqlendpoint' },
-        'Eventhouse': { icon: 'fas fa-broadcast-tower', cls: 'default' },
-        'SparkJobDefinition': { icon: 'fas fa-bolt', cls: 'default' },
-        'Environment': { icon: 'fas fa-leaf', cls: 'default' },
-        'MLModel': { icon: 'fas fa-brain', cls: 'default' },
-        'MLExperiment': { icon: 'fas fa-flask', cls: 'default' },
-    };
-
+    // Item-type icons come from the shared FabricUI helper (official Microsoft Fabric icons).
     function getTypeIcon(type) {
-        return TYPE_ICONS[type] || { icon: 'fas fa-cube', cls: 'default' };
+        return { html: FabricUI.icon(type, 'lg'), small: FabricUI.icon(type, 'sm') };
     }
 
-    document.addEventListener('DOMContentLoaded', loadBcdr);
+    document.addEventListener('DOMContentLoaded', () => { loadBcdr(); loadReadiness(); });
+
+    // Recovery readiness strip — every value is measured from the live tenant.
+    async function loadReadiness() {
+        const fmt = (h) => h == null ? '—' : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} d`;
+        const setCard = (id, value, sub, level) => {
+            const v = document.getElementById(id);
+            v.textContent = value;
+            v.style.color = level === 'bad' ? 'var(--bad)' : level === 'warn' ? 'var(--warn)' : level === 'ok' ? 'var(--ok)' : '';
+            if (sub !== undefined) document.getElementById(id + '-sub').textContent = sub;
+        };
+        const [fresh, models, perms, info] = await Promise.allSettled([
+            FabricUI.fetchJSON('/api/bcdr/data-freshness'),
+            FabricUI.fetchJSON('/api/bcdr/model-readiness'),
+            FabricUI.fetchJSON('/api/security/item-permissions'),
+            FabricUI.fetchJSON('/api/active-pair-info'),
+        ]);
+        if (fresh.status === 'fulfilled') {
+            const s = fresh.value.summary, h = s.measured_rpo_hours;
+            setCard('rd-rpo', fmt(h), `${(s.states || {}).behind || 0} of ${s.tables_compared} tables behind`,
+                h == null ? '' : h <= 1 ? 'ok' : h <= 24 ? 'warn' : 'bad');
+        } else setCard('rd-rpo', '—', fresh.reason.message, 'warn');
+
+        if (models.status === 'fulfilled') {
+            const m = models.value.models, ready = m.filter(x => x.ready).length;
+            setCard('rd-models', `${ready}/${m.length}`, ready < m.length ? 'not refreshed/framed in secondary' : 'all queryable', ready < m.length ? 'bad' : 'ok');
+        } else setCard('rd-models', '—', models.reason.message, 'warn');
+
+        if (perms.status === 'fulfilled') {
+            const c = perms.value.counts || {}, cov = perms.value.coverage || {};
+            const open = (c.grant_dataset_user || 0) + (c.upgrade_dataset_user || 0) + (c.manual_portal_share || 0);
+            setCard('rd-perms', String(open), cov.not_scanned ? `${cov.not_scanned} items not scanned (admin API)` : 'all items scanned',
+                open ? 'warn' : cov.not_scanned ? 'warn' : 'ok');
+        } else setCard('rd-perms', '—', perms.reason.message, 'warn');
+
+        if (info.status === 'fulfilled' && info.value.configured) {
+            const i = info.value, same = i.primary_region && i.primary_region === i.secondary_region;
+            setCard('rd-region', same ? 'Same region' : 'Separate', `${i.primary_region || '?'} → ${i.secondary_region || '?'}`, same ? 'bad' : 'ok');
+        } else setCard('rd-region', '—', 'pair not configured', 'warn');
+    }
 
     async function loadBcdr() {
         try {
@@ -290,7 +335,7 @@
                 if (active && (pd.pairs || []).length > 1) {
                     const tag = document.getElementById('pair-label-tag');
                     tag.textContent = active.label || active.primary_name;
-                    tag.style.display = '';
+                    tag.hidden = false;
                 }
             } catch (_) {}
         } catch (e) { console.error(e); }
@@ -301,7 +346,7 @@
         // Header
         document.getElementById('ws-name').textContent = d.workspace_name;
         const badge = document.getElementById('bcdr-badge');
-        badge.textContent = `Resiliency & Recovery Enabled · ${d.overall_percentage}%`;
+        badge.textContent = `Item coverage · ${d.overall_percentage}%`;
         badge.className = 'badge-bcdr ' + (d.overall_percentage === 100 ? 'enabled' : d.overall_percentage > 0 ? 'partial' : 'disabled');
 
         // Secondary info
@@ -367,9 +412,11 @@
                 `${card.mirrored_count}/${card.primary_count} mirrored`;
 
             return `
-                <div class="type-card ${stateClass}" onclick="openTypeDetail('${card.type}')">
+                <div class="type-card ${stateClass}" role="button" tabindex="0" aria-label="${FabricUI.esc(card.type)}: ${FabricUI.esc(countText)}"
+                     onclick="openTypeDetail('${FabricUI.esc(card.type)}')"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTypeDetail('${FabricUI.esc(card.type)}')}">
                     <div class="type-card-header">
-                        <div class="type-icon ${icon.cls}"><i class="${icon.icon}"></i></div>
+                        <div class="type-icon">${icon.html}</div>
                         ${card.supported && bcdrData.has_secondary ? `
                             <div class="sync-dropdown-wrap">
                                 <button class="btn-sync ${btnClass}" onclick="event.stopPropagation(); toggleSyncMenu(this)">
@@ -395,7 +442,7 @@
                         ` : ''}
                     </div>
                     <div class="type-percentage ${pctClass}">${card.supported ? card.percentage + '%' : card.primary_count}</div>
-                    <div class="type-name">${card.type}</div>
+                    <div class="type-name">${FabricUI.esc(card.type)}</div>
                     <div class="type-count">${countText}</div>
                 </div>
             `;
@@ -417,7 +464,7 @@
             const isMirrored = sNames.has(item.name);
             html += `
                 <div class="item-row">
-                    <i class="${getTypeIcon(type).icon}" style="color:#666;"></i>
+                    ${getTypeIcon(type).small}
                     <span class="item-name">${escapeHtml(item.name)}</span>
                     ${isMirrored ?
                         '<span class="item-status mirrored">Mirrored</span>' :
@@ -430,7 +477,7 @@
                 </div>
             `;
         });
-        document.getElementById('modal-body').innerHTML = html || '<p style="color:#999;text-align:center;">No items found.</p>';
+        document.getElementById('modal-body').innerHTML = html || '<p style="color:var(--text-3);text-align:center;">No items found.</p>';
 
         const missing = card.primary_count - card.mirrored_count;
         document.getElementById('modal-summary').textContent = `${card.mirrored_count} mirrored, ${missing} missing`;

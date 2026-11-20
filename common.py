@@ -311,25 +311,21 @@ def _execute_rest_call(
             operation_url = response.headers.get("Operation-Location")
             return poll_long_running_operation(operation_url, headers)
 
-        # Handle 429 Too Many Requests
-        if response.status_code == 429:
+        # Handle 429 Too Many Requests / 503 Service Unavailable: honour the
+        # server's Retry-After (capped), falling back to exponential backoff.
+        if response.status_code in (429, 503):
             if retry < MAX_RETRIES:
-                wait_time = RESPONSE_BACKOFF * (2 ** retry)  # Exponential backoff
-                logger.warning(f"Rate limited. Retrying in {wait_time}s...")
+                try:
+                    retry_after = int(str((response.headers or {}).get("Retry-After", "0")).strip() or 0)
+                except (TypeError, ValueError, AttributeError):
+                    retry_after = 0
+                wait_time = min(max(retry_after, RESPONSE_BACKOFF * (2 ** retry)), 120)
+                reason = "Rate limited" if response.status_code == 429 else "Service unavailable"
+                logger.warning(f"{reason}. Retrying in {wait_time}s...")
                 time.sleep(wait_time)
                 return retry_fn(method, endpoint, payload, retry + 1, timeout)
-            else:
-                raise Exception("Max retries exceeded for rate limit")
-
-        # Handle 503 Service Unavailable
-        if response.status_code == 503:
-            if retry < MAX_RETRIES:
-                wait_time = RESPONSE_BACKOFF * (2 ** retry)
-                logger.warning(f"Service unavailable. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
-                return retry_fn(method, endpoint, payload, retry + 1, timeout)
-            else:
-                raise Exception("Service unavailable after retries")
+            raise Exception("Max retries exceeded for rate limit" if response.status_code == 429
+                            else "Service unavailable after retries")
 
         # Handle errors
         if response.status_code >= 400:
@@ -768,19 +764,70 @@ def remap_definition(
     return result
 
 
-def build_combined_mapping() -> Dict[str, str]:
+def build_combined_mapping(primary_workspace_id: Optional[str] = None,
+                           secondary_workspace_id: Optional[str] = None) -> Dict[str, str]:
     """
     Build a combined mapping dict from all mapping CSV files.
     Merges reference_mapping, artifact_mapping, and connection_mapping.
-    
+
+    When both workspace IDs are given, SQL analytics endpoint hostnames are
+    discovered and mapped automatically. They are per workspace and are not
+    GUIDs, so without this, Import / DirectQuery / DirectLake-on-SQL models and
+    pipelines keep pointing at the primary endpoint. Explicit CSV rows win.
+
     Returns:
         Combined dict of primary→secondary ID/ref mappings
     """
     combined = {}
+    if primary_workspace_id and secondary_workspace_id:
+        combined.update(build_sql_host_mapping(primary_workspace_id, secondary_workspace_id))
     combined.update(load_reference_mapping())
     combined.update(load_artifact_mapping())
     combined.update(load_connection_mapping())
     return combined
+
+
+_SQL_HOST_RE = None
+
+
+def sql_host_from(value: str) -> str:
+    """Bare *.datawarehouse/database.fabric.microsoft.com host from a connection string."""
+    global _SQL_HOST_RE
+    if _SQL_HOST_RE is None:
+        import re
+        _SQL_HOST_RE = re.compile(r"([a-z0-9-]+\.(?:[a-z0-9]+-)?(?:datawarehouse|database)\.fabric\.microsoft\.com)", re.I)
+    m = _SQL_HOST_RE.search(value or "")
+    return m.group(1).lower() if m else ""
+
+
+def build_sql_host_mapping(primary_workspace_id: str, secondary_workspace_id: str) -> Dict[str, str]:
+    """Map primary SQL endpoint hosts to secondary hosts for same-named Lakehouses/Warehouses."""
+    mapping: Dict[str, str] = {}
+
+    def host(ws: str, item: Dict[str, Any]) -> str:
+        kind = {"Lakehouse": "lakehouses", "Warehouse": "warehouses"}[item["type"]]
+        try:
+            props = api_call("GET", f"/workspaces/{ws}/{kind}/{item['id']}").get("properties", {})
+        except Exception as e:
+            logger.warning(f"SQL endpoint lookup failed for {item.get('displayName')}: {e}")
+            return ""
+        conn = (props.get("sqlEndpointProperties") or {}).get("connectionString") if kind == "lakehouses" else props.get("connectionString")
+        return sql_host_from(conn or "")
+
+    s_items = {(i["type"], i["displayName"]): i for i in get_items(secondary_workspace_id)
+               if i.get("type") in ("Lakehouse", "Warehouse")}
+    for p in get_items(primary_workspace_id):
+        if p.get("type") not in ("Lakehouse", "Warehouse"):
+            continue
+        s = s_items.get((p["type"], p["displayName"]))
+        if not s:
+            continue
+        ph, sh = host(primary_workspace_id, p), host(secondary_workspace_id, s)
+        if ph and sh and ph != sh:
+            mapping[ph] = sh
+    if mapping:
+        logger.info(f"Mapped {len(mapping)} SQL endpoint host(s) primary -> secondary")
+    return mapping
 
 
 # ============================================================================

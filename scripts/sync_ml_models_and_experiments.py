@@ -79,7 +79,7 @@ def sync_spark_jobs(
         secondary_by_name = {job["displayName"]: job for job in secondary_jobs}
         
         # Load combined mapping for remapping
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_job in primary_jobs:
             job_name = primary_job["displayName"]
@@ -277,7 +277,7 @@ def sync_ml_models(
         secondary_by_name = {m["displayName"]: m for m in secondary_models}
         
         # Build combined mapping (includes MLExperiment ID mapping)
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_model in primary_models:
             model_name = primary_model["displayName"]
@@ -390,7 +390,7 @@ def sync_ml_experiments(
         )
         secondary_by_name = {e["displayName"]: e for e in secondary_experiments}
         
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_exp in primary_experiments:
             exp_name = primary_exp["displayName"]
@@ -505,7 +505,7 @@ def sync_data_agents(
         secondary_by_name = {a["displayName"]: a for a in secondary_agents}
         
         # Build combined mapping (workspace IDs, SM IDs, LH IDs, etc.)
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_agent in primary_agents:
             agent_name = primary_agent["displayName"]

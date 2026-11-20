@@ -4,18 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Workspaces - Fabric Resiliency & Recovery</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/fabric/product_fabric.svg">
+    <link rel="stylesheet" href="/static/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-            background: #f5f7fa;
+            background: transparent;
             min-height: 100vh;
         }
         .top-bar {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: white;
-            padding: 15px 30px;
+            background: var(--surface);
+            -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+            border: 1px solid var(--glass-edge);
+            box-shadow: var(--shadow);
+            color: var(--text);
+            margin: 12px; border-radius: var(--r-lg);
+            padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -27,7 +33,7 @@
             font-size: 18px;
             font-weight: 700;
         }
-        .top-bar .brand i { color: #64B5F6; }
+        .top-bar .brand img { width: 28px; height: 28px; }
         .top-bar .user-info {
             display: flex;
             align-items: center;
@@ -36,7 +42,7 @@
         }
         .top-bar .user-info .avatar {
             width: 34px; height: 34px;
-            background: #64B5F6;
+            background: linear-gradient(135deg, var(--brand-500), var(--accent)); color: #fff;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -44,8 +50,8 @@
             font-weight: 600;
             font-size: 14px;
         }
-        .top-bar a { color: #90CAF9; text-decoration: none; font-size: 12px; }
-        .top-bar a:hover { color: white; }
+        .top-bar a { color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 600; }
+        .top-bar a:hover { text-decoration: underline; }
 
         .container {
             max-width: 900px;
@@ -73,24 +79,24 @@
             flex: 1;
             text-align: center;
             padding: 12px;
-            background: #e0e0e0;
-            color: #999;
+            background: var(--surface-2);
+            color: var(--text-3);
             font-size: 13px;
             font-weight: 600;
             position: relative;
         }
         .step:first-child { border-radius: 6px 0 0 6px; }
         .step:last-child { border-radius: 0 6px 6px 0; }
-        .step.active { background: #2196F3; color: white; }
-        .step.done { background: #4CAF50; color: white; }
+        .step.active { background: linear-gradient(180deg, #1478CF, var(--accent)); color: #fff; }
+        .step.done { background: var(--ok-bg); color: var(--ok); }
 
         .workspace-section {
-            background: white;
+            background: var(--surface);
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             padding: 25px;
             margin-bottom: 20px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid var(--line);
         }
         .workspace-section h2 {
             font-size: 18px;
@@ -108,7 +114,7 @@
         .badge-primary { background: #e3f2fd; color: #1565C0; }
         .badge-secondary { background: #fff3e0; color: #E65100; }
         .workspace-section .hint {
-            color: #999;
+            color: var(--text-3);
             font-size: 13px;
             margin-bottom: 15px;
         }
@@ -120,7 +126,7 @@
         .search-box input {
             width: 100%;
             padding: 10px 12px 10px 38px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--line);
             border-radius: 6px;
             font-size: 14px;
             outline: none;
@@ -132,13 +138,13 @@
             left: 12px;
             top: 50%;
             transform: translateY(-50%);
-            color: #aaa;
+            color: var(--text-3);
         }
 
         .ws-list {
             max-height: 250px;
             overflow-y: auto;
-            border: 1px solid #e0e0e0;
+            border: 1px solid var(--line);
             border-radius: 6px;
         }
         .ws-item {
@@ -158,7 +164,7 @@
         }
         .ws-item .ws-icon {
             width: 36px; height: 36px;
-            background: #f0f0f0;
+            background: var(--surface-2);
             border-radius: 6px;
             display: flex;
             align-items: center;
@@ -166,7 +172,7 @@
             color: #666;
             flex-shrink: 0;
         }
-        .ws-item.selected .ws-icon { background: #BBDEFB; color: #1565C0; }
+        .ws-item.selected .ws-icon { background: var(--info-bg); box-shadow: inset 0 0 0 2px var(--accent); }
         .ws-item .ws-details { flex: 1; min-width: 0; }
         .ws-item .ws-name {
             font-weight: 600;
@@ -178,7 +184,7 @@
         }
         .ws-item .ws-id {
             font-size: 11px;
-            color: #aaa;
+            color: var(--text-3);
             font-family: 'Consolas', monospace;
         }
         .ws-item .ws-check {
@@ -191,10 +197,10 @@
         .loading {
             text-align: center;
             padding: 40px;
-            color: #999;
+            color: var(--text-3);
         }
         .loading .spinner {
-            border: 3px solid #e0e0e0;
+            border: 3px solid var(--line);
             border-top: 3px solid #2196F3;
             border-radius: 50%;
             width: 40px; height: 40px;
@@ -206,7 +212,7 @@
         .empty-state {
             text-align: center;
             padding: 30px;
-            color: #999;
+            color: var(--text-3);
             font-size: 14px;
         }
 
@@ -231,20 +237,21 @@
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-primary { background: #2196F3; color: white; }
         .btn-primary:hover:not(:disabled) { background: #1976D2; transform: translateY(-1px); }
-        .btn-outline { background: white; color: #666; border: 1px solid #ddd; }
-        .btn-outline:hover { background: #f5f5f5; }
+        .btn-outline { background: var(--surface); color: #666; border: 1px solid var(--line); }
+        .btn-outline:hover { background: var(--surface-2); }
     </style>
 </head>
 <body>
+    <div class="aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="grain"></span></div>
     <div class="top-bar">
         <div class="brand">
-            <i class="fas fa-shield-halved"></i> Fabric Resiliency & Recovery
+            <img src="/static/img/fabric/product_fabric.svg" alt="" width="28" height="28"> Fabric Resiliency & Recovery
         </div>
         <div class="user-info">
             <div class="avatar">{{ user_name[0] | upper if user_name else 'U' }}</div>
             <div>
                 <div style="font-weight:600;">{{ user_name }}</div>
-                <div style="color:#90CAF9; font-size:11px;">{{ user_email }}</div>
+                <div style="color:var(--text-3); font-size:11px;">{{ user_email }}</div>
             </div>
             <a href="/logout"><i class="fas fa-sign-out-alt"></i> Sign out</a>
         </div>
@@ -278,13 +285,13 @@
                 <span class="badge" style="background:#f3e5f5;color:#7B1FA2;">OPTIONAL</span>
             </h2>
             <p class="hint">A friendly name for this workspace pair (e.g. "Claims Processing").</p>
-            <input type="text" id="pair-label" placeholder="e.g. Claims Processing" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;outline:none;">
+            <input type="text" id="pair-label" placeholder="e.g. Claims Processing" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font-size:14px;outline:none;">
         </div>
 
         <!-- Primary Workspace -->
         <div class="workspace-section">
             <h2>
-                <i class="fas fa-cube" style="color:#2196F3"></i>
+                <img src="/static/img/fabric/workspace.svg" alt="" width="22" height="22" style="vertical-align:middle">
                 Primary Workspace
                 <span class="badge badge-primary">REQUIRED</span>
             </h2>
@@ -304,7 +311,7 @@
         <!-- Secondary Workspace -->
         <div class="workspace-section">
             <h2>
-                <i class="fas fa-cube" style="color:#FF9800"></i>
+                <img src="/static/img/fabric/workspace.svg" alt="" width="22" height="22" style="vertical-align:middle">
                 Secondary Workspace
                 <span class="badge badge-secondary">OPTIONAL</span>
             </h2>
@@ -362,14 +369,14 @@
     function renderExistingPairs() {
         const container = document.getElementById('pairs-list');
         container.innerHTML = existingPairs.map((p, i) => `
-            <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;background:${p.active?'#e3f2fd':'#fafafa'};">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:${p.active?'#e3f2fd':'#fafafa'};">
                 <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:${p.active?'#2196F3':'#ccc'};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;">${i+1}</div>
                 <div style="flex:1;min-width:0;">
                     <div style="font-weight:600;font-size:14px;">${escapeHtml(p.label || 'Pair '+(i+1))}</div>
                     <div style="font-size:12px;color:#666;">
-                        <i class="fas fa-cube" style="color:#2196F3"></i> ${escapeHtml(p.primary_name||'')}
+                        <img src="/static/img/fabric/workspace.svg" alt="" width="14" height="14" style="vertical-align:middle"> ${escapeHtml(p.primary_name||'')}
                         &nbsp;↔&nbsp;
-                        <i class="fas fa-cube" style="color:#FF9800"></i> ${escapeHtml(p.secondary_name||'(none)')}
+                        <img src="/static/img/fabric/workspace.svg" alt="" width="14" height="14" style="vertical-align:middle"> ${escapeHtml(p.secondary_name||'(none)')}
                     </div>
                 </div>
                 ${p.active ? '<span style="font-size:11px;background:#4CAF50;color:white;padding:2px 8px;border-radius:10px;">ACTIVE</span>' : `<button class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="switchPair('${p.id}')">Activate</button>`}
@@ -420,7 +427,7 @@
         container.innerHTML = workspaces.map(ws => `
             <div class="ws-item ${selected[role]?.id === ws.id ? 'selected' : ''}"
                  onclick="selectWorkspace('${role}', '${ws.id}', '${escapeHtml(ws.name)}')">
-                <div class="ws-icon"><i class="fas fa-cube"></i></div>
+                <div class="ws-icon"><img src="/static/img/fabric/workspace.svg" alt="" width="22" height="22" style="vertical-align:middle"></div>
                 <div class="ws-details">
                     <div class="ws-name">${escapeHtml(ws.name)}</div>
                     <div class="ws-id">${ws.id}</div>

@@ -760,5 +760,81 @@ class TestConnectionPagination(unittest.TestCase):
         self.assertIn("continuationToken=tok-1", api.call_args_list[1][0][1])
 
 
+class TestRetryAfter(unittest.TestCase):
+    """429/503 must honour the server's Retry-After (capped), not only fixed backoff."""
+
+    def _resp(self, status, headers=None, body=b'{"ok": true}'):
+        r = MagicMock()
+        r.status_code = status
+        r.headers = headers or {}
+        r.content = body
+        r.text = body.decode()
+        r.json.return_value = {"ok": True}
+        return r
+
+    def test_uses_retry_after_when_longer_than_backoff(self):
+        seq = [self._resp(429, {"Retry-After": "17"}), self._resp(200)]
+        with patch.object(common.requests, "get", side_effect=seq), \
+             patch.object(common, "get_headers", return_value={}), \
+             patch.object(common.time, "sleep") as sleep:
+            common.api_call("GET", "/x")
+        sleep.assert_called_once_with(17)
+
+    def test_retry_after_is_capped(self):
+        seq = [self._resp(503, {"Retry-After": "9999"}), self._resp(200)]
+        with patch.object(common.requests, "get", side_effect=seq), \
+             patch.object(common, "get_headers", return_value={}), \
+             patch.object(common.time, "sleep") as sleep:
+            common.api_call("GET", "/x")
+        sleep.assert_called_once_with(120)
+
+    def test_missing_or_bad_header_falls_back_to_backoff(self):
+        seq = [self._resp(429, {"Retry-After": "soon"}), self._resp(200)]
+        with patch.object(common.requests, "get", side_effect=seq), \
+             patch.object(common, "get_headers", return_value={}), \
+             patch.object(common.time, "sleep") as sleep:
+            common.api_call("GET", "/x")
+        sleep.assert_called_once_with(common.RESPONSE_BACKOFF)
+
+
+class TestRefreshSemanticModels(unittest.TestCase):
+    """Failover step 5b: replicated models have no data until refreshed/framed."""
+
+    def setUp(self):
+        self.logger = _make_logger()
+
+    def test_requests_refresh_for_every_model(self):
+        with patch.object(fo.common, "get_items", return_value=FAKE_MODELS), \
+             patch.object(fo.common, "powerbi_api_call", return_value={}) as pbi:
+            r = fo.refresh_semantic_models(SECONDARY_WS, self.logger)
+        self.assertEqual(r["refresh_requested"], 2)
+        self.assertEqual([c[0][1] for c in pbi.call_args_list],
+                         [f"/groups/{SECONDARY_WS}/datasets/sm-id-001/refreshes",
+                          f"/groups/{SECONDARY_WS}/datasets/sm-id-002/refreshes"])
+        self.assertTrue(all(c[0][0] == "POST" for c in pbi.call_args_list))
+
+    def test_failures_are_counted(self):
+        with patch.object(fo.common, "get_items", return_value=FAKE_MODELS), \
+             patch.object(fo.common, "powerbi_api_call", side_effect=[{}, Exception("403 Forbidden")]):
+            r = fo.refresh_semantic_models(SECONDARY_WS, self.logger)
+        self.assertEqual(r["refresh_requested"], 1)
+        self.assertEqual(r["refresh_failed"], 1)
+        self.assertIn("403", r["failures"][0]["error"])
+
+    def test_dry_run_sends_nothing(self):
+        with patch.object(fo.common, "get_items", return_value=FAKE_MODELS), \
+             patch.object(fo.common, "powerbi_api_call") as pbi:
+            r = fo.refresh_semantic_models(SECONDARY_WS, self.logger, dry_run=True)
+        pbi.assert_not_called()
+        self.assertEqual(r["refresh_requested"], 2)
+
+    def test_system_models_skipped(self):
+        models = FAKE_MODELS + [{"id": "sys", "displayName": "BCDR_Internal", "type": "SemanticModel"}]
+        with patch.object(fo.common, "get_items", return_value=models), \
+             patch.object(fo.common, "powerbi_api_call", return_value={}) as pbi:
+            fo.refresh_semantic_models(SECONDARY_WS, self.logger)
+        self.assertEqual(pbi.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

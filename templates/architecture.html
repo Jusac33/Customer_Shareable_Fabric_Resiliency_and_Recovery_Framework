@@ -1,281 +1,301 @@
 {% extends "base.html" %}
 
-{% block title %}Architecture - Fabric Resiliency & Recovery Dashboard{% endblock %}
+{% block title %}Architecture{% endblock %}
+{% block page_title %}Recovery Architecture{% endblock %}
 
-{% block page_title %}Architecture{% endblock %}
-
-{% block content %}
-<section class="card">
-    <h2 class="section-title">
-        <i class="fas fa-sitemap"></i> Resiliency & Recovery ARCHITECTURE
-    </h2>
-    <p class="section-description">Business Continuity & Recovery deployment topology</p>
-
-    <div class="architecture-diagram">
-        <div class="region-container">
-            <div class="region-box primary">
-                <h3>PRIMARY REGION</h3>
-                <p class="region-label">East US 2</p>
-                <div class="workspace-box">
-                    <i class="fas fa-cube"></i>
-                    <h4>Primary Workspace</h4>
-                    <p class="workspace-id">WS-PRIMARY-001</p>
-                    <div class="artifact-list">
-                        <div class="artifact">🏪 Lakehouses (3)</div>
-                        <div class="artifact">📊 Warehouses (2)</div>
-                        <div class="artifact">📓 Notebooks (12)</div>
-                        <div class="artifact">📈 Reports (8)</div>
-                    </div>
-                </div>
-                <div class="capacity-box">
-                    <strong>Capacity SKU: F4</strong>
-                    <p>256 Compute Units</p>
-                </div>
-            </div>
-
-            <div class="divider-arrow">
-                <div class="sync-box">
-                    <strong>ACTIVE REPLICATION</strong>
-                    <p>RPO: 15 min</p>
-                    <p>RTO: 30 min</p>
-                </div>
-                <i class="fas fa-arrow-right"></i>
-            </div>
-
-            <div class="region-box secondary">
-                <h3>SECONDARY REGION</h3>
-                <p class="region-label">Central US</p>
-                <div class="workspace-box">
-                    <i class="fas fa-cube"></i>
-                    <h4>Secondary Workspace</h4>
-                    <p class="workspace-id">WS-SECONDARY-001</p>
-                    <div class="artifact-list">
-                        <div class="artifact">🏪 Lakehouses (3)</div>
-                        <div class="artifact">📊 Warehouses (2)</div>
-                        <div class="artifact">📓 Notebooks (12)</div>
-                        <div class="artifact">📈 Reports (8)</div>
-                    </div>
-                </div>
-                <div class="capacity-box">
-                    <strong>Capacity SKU: F2</strong>
-                    <p>96 Compute Units (Standby)</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="architecture-details">
-        <div class="detail-card">
-            <h4><i class="fas fa-info-circle"></i> Replication Strategy</h4>
-            <p><strong>Method:</strong> OneLake Shortcuts (Zero-Copy)</p>
-            <p><strong>Data Path:</strong> Primary OneLake → Shortcut Reference → Secondary OneLake</p>
-            <p><strong>RPO:</strong> Near-zero (instant read-only access)</p>
-            <p><strong>RTO:</strong> Seconds (artifact remapping)</p>
-        </div>
-
-        <div class="detail-card">
-            <h4><i class="fas fa-cogs"></i> Sync Components</h4>
-            <ul>
-                <li>Workspace Metadata Sync</li>
-                <li>Lakehouse Data Replication</li>
-                <li>Warehouse Schema & Data</li>
-                <li>Notebook & Pipeline Code</li>
-                <li>Semantic Model & Report Definition</li>
-                <li>Permission & RBAC Sync</li>
-            </ul>
-        </div>
-
-        <div class="detail-card">
-            <h4><i class="fas fa-shield-alt"></i> Failover Process</h4>
-            <ol>
-                <li>Pause Primary workspace</li>
-                <li>Validate Secondary data consistency</li>
-                <li>Update artifact mappings</li>
-                <li>Activate Secondary as Primary</li>
-                <li>Perform smoke tests</li>
-                <li>Redirect client traffic</li>
-            </ol>
-        </div>
-    </div>
-</section>
-
+{% block extra_css %}
 <style>
-.architecture-diagram {
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    padding: 40px;
-    border-radius: 8px;
-    margin: 20px 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
+    .arch-intro { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .arch-intro p { color: var(--text-2); max-width: 760px; }
+    .arch-grid { display: grid; grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr); gap: 16px; align-items: stretch; }
+    .ws-panel { border-radius: var(--r-lg); padding: 18px; }
+    .ws-panel header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .ws-panel header img { width: 36px; height: 36px; }
+    .ws-role { font-size: 10.5px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .ws-panel.primary .ws-role { color: var(--accent-strong); }
+    .ws-panel.secondary .ws-role { color: var(--brand-700); }
+    .ws-name { font-size: 15px; font-weight: 650; color: var(--text); word-break: break-word; }
+    .ws-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .fact { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; min-width: 0; }
+    .fact .k { font-size: 11px; color: var(--text-3); font-weight: 600; }
+    .fact .v { font-size: 13px; font-weight: 650; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .inv { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+    .inv-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-sm); font-size: 12.5px; color: var(--text-2); }
+    .inv-row:hover { background: rgba(15, 108, 189, 0.06); }
+    .inv-row b { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; }
+    .inv-row.gap b { color: var(--bad); }
 
-.region-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    gap: 20px;
-}
+    .link-col { display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+    .link-card { border-radius: var(--r-lg); padding: 16px; text-align: center; }
+    .link-card .k { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+    .rpo-value { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 4px 0; }
+    .rpo-value.ok { color: var(--ok); } .rpo-value.warn { color: var(--warn); } .rpo-value.bad { color: var(--bad); }
+    .link-card small { color: var(--text-3); display: block; }
+    .flow { position: relative; height: 4px; border-radius: 4px; background: linear-gradient(90deg, rgba(15,108,189,.25), rgba(17,120,101,.25)); overflow: hidden; }
+    .flow::after { content: ""; position: absolute; top: 0; left: -30%; width: 30%; height: 100%;
+        background: linear-gradient(90deg, transparent, var(--brand-500), transparent); animation: flow 2.4s var(--ease-out) infinite; }
+    .flow.stalled::after { animation: none; }
+    @keyframes flow { to { left: 100%; } }
 
-.region-box {
-    flex: 1;
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
+    .risks { display: grid; gap: 10px; margin-top: 16px; }
+    .risk { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r); border: 1px solid; }
+    .risk i { margin-top: 3px; }
+    .risk.bad { background: var(--bad-bg); border-color: rgba(177,14,28,.25); color: var(--bad); }
+    .risk.warn { background: var(--warn-bg); border-color: rgba(188,75,9,.25); color: var(--warn); }
+    .risk.ok { background: var(--ok-bg); border-color: rgba(16,124,65,.25); color: var(--ok); }
+    .risk strong { display: block; color: var(--text); }
+    .risk span { color: var(--text-2); font-size: 13px; }
 
-.region-box.primary {
-    border-left: 5px solid #2196F3;
-}
+    .protect-table td:first-child { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .muted-note { color: var(--text-3); font-size: 12px; margin-top: 8px; }
+    .err { color: var(--bad); }
 
-.region-box.secondary {
-    border-left: 5px solid #FF9800;
-}
-
-.region-box h3 {
-    margin: 0 0 5px 0;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-.region-label {
-    margin: 0;
-    color: #666;
-    font-size: 14px;
-}
-
-.workspace-box {
-    background: #f9f9f9;
-    padding: 15px;
-    margin: 15px 0;
-    border-radius: 6px;
-    border: 1px solid #e0e0e0;
-}
-
-.workspace-box h4 {
-    margin: 0 0 5px 0;
-    font-size: 14px;
-}
-
-.workspace-id {
-    margin: 0;
-    font-size: 12px;
-    color: #999;
-}
-
-.artifact-list {
-    margin-top: 10px;
-    font-size: 12px;
-}
-
-.artifact {
-    padding: 4px 0;
-    color: #555;
-}
-
-.capacity-box {
-    background: #e8f5e9;
-    padding: 10px;
-    border-radius: 4px;
-    text-align: center;
-    font-size: 12px;
-    margin-top: 10px;
-}
-
-.divider-arrow {
-    flex: 0 0 120px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-}
-
-.divider-arrow i {
-    font-size: 32px;
-    color: #2196F3;
-}
-
-.sync-box {
-    background: white;
-    padding: 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.sync-box strong {
-    display: block;
-    margin-bottom: 5px;
-    color: #2196F3;
-}
-
-.sync-box p {
-    margin: 3px 0;
-    color: #666;
-}
-
-.architecture-details {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-    margin-top: 30px;
-}
-
-.detail-card {
-    background: #f9f9f9;
-    padding: 15px;
-    border-radius: 6px;
-    border-left: 4px solid #2196F3;
-}
-
-.detail-card h4 {
-    margin: 0 0 10px 0;
-    color: #333;
-}
-
-.detail-card p {
-    margin: 5px 0;
-    font-size: 14px;
-    color: #666;
-}
-
-.detail-card ul {
-    margin: 0;
-    padding-left: 20px;
-}
-
-.detail-card li {
-    padding: 5px 0;
-    font-size: 14px;
-    color: #666;
-}
-
-.detail-card ol {
-    margin: 0;
-    padding-left: 20px;
-}
-
-.detail-card li {
-    padding: 5px 0;
-    font-size: 14px;
-    color: #666;
-}
-
-@media (max-width: 768px) {
-    .region-container {
-        flex-direction: column;
-    }
-    
-    .divider-arrow {
-        transform: rotate(90deg);
-        flex: 0 0 60px;
-        height: 60px;
-    }
-}
+    @media (max-width: 1100px) { .arch-grid { grid-template-columns: 1fr; } .link-col { flex-direction: row; } .link-card { flex: 1; } }
+    @media (max-width: 600px) { .ws-facts { grid-template-columns: 1fr 1fr; } .link-col { flex-direction: column; } }
 </style>
 {% endblock %}
 
+{% block content %}
+<div class="arch-intro">
+    <p>Live view of the active workspace pair: where each side runs, what it contains, and how far the
+       secondary's data actually lags the primary. Nothing on this page is static.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary" id="model-refresh" hidden><i class="fas fa-bolt" aria-hidden="true"></i> Refresh secondary models</button>
+        <button type="button" class="btn btn-secondary" id="arch-refresh"><i class="fas fa-rotate" aria-hidden="true"></i> Re-measure</button>
+    </div>
+</div>
 
+<div class="arch-grid">
+    <section class="ws-panel glass primary" aria-labelledby="p-name">
+        <header>
+            <img src="{{ url_for('static', filename='img/fabric/workspace.svg') }}" alt="">
+            <div><div class="ws-role">Primary</div><div class="ws-name" id="p-name"><span class="fx-skeleton">loading workspace</span></div></div>
+        </header>
+        <div class="ws-facts" id="p-facts"></div>
+        <div class="inv" id="p-inv" aria-label="Primary items by type"></div>
+    </section>
+
+    <div class="link-col">
+        <section class="link-card glass" aria-live="polite">
+            <div class="k">Measured RPO</div>
+            <div class="rpo-value" id="rpo"><span class="fx-skeleton">00.0 h</span></div>
+            <small id="rpo-detail">measuring OneLake commits…</small>
+            <div class="flow" id="flow" style="margin-top:12px" aria-hidden="true"></div>
+        </section>
+        <section class="link-card glass">
+            <div class="k">Item coverage</div>
+            <div class="rpo-value" id="coverage"><span class="fx-skeleton">00%</span></div>
+            <small id="coverage-detail">matching items by type and name</small>
+        </section>
+    </div>
+
+    <section class="ws-panel glass secondary" aria-labelledby="s-name">
+        <header>
+            <img src="{{ url_for('static', filename='img/fabric/workspace.svg') }}" alt="">
+            <div><div class="ws-role">Secondary</div><div class="ws-name" id="s-name"><span class="fx-skeleton">loading workspace</span></div></div>
+        </header>
+        <div class="ws-facts" id="s-facts"></div>
+        <div class="inv" id="s-inv" aria-label="Secondary items by type"></div>
+    </section>
+</div>
+
+<section class="card" style="margin-top:16px" aria-labelledby="risk-title">
+    <div class="card-header"><div class="card-title" id="risk-title">Recovery readiness</div><span class="text-muted" id="risk-when"></span></div>
+    <div class="risks" id="risks"><div class="fx-skeleton" style="height:48px"></div></div>
+</section>
+
+<section class="card" aria-labelledby="protect-title">
+    <div class="card-header"><div class="card-title" id="protect-title">How each item type in this pair is protected</div></div>
+    <table class="table protect-table">
+        <thead><tr><th scope="col">Item type</th><th scope="col">Primary</th><th scope="col">Secondary</th><th scope="col">Replication method</th><th scope="col">After failover</th></tr></thead>
+        <tbody id="protect-body"><tr><td colspan="5"><div class="fx-skeleton" style="height:20px"></div></td></tr></tbody>
+    </table>
+    <p class="muted-note">Rows are generated from the item types that actually exist in this pair.</p>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    const esc = FabricUI.esc;
+
+    // What this framework does for each type. Describes the tool's behaviour, not tenant data.
+    const METHOD = {
+        Lakehouse:        ['Delta table sync (notebook / AzCopy) + definition', 'Data current only up to the last sync'],
+        Warehouse:        ['Not replicable via API', 'Rebuild from source or re-ingest'],
+        SQLEndpoint:      ['Created automatically with its lakehouse', 'New connection string - update clients'],
+        SemanticModel:    ['Definition copy with ID remap', 'Must be refreshed / framed before reports show data'],
+        Report:           ['Definition copy + rebind to secondary model', 'Bookmarks and shared links change (new IDs)'],
+        Notebook:         ['Definition copy with lakehouse/environment remap', 'Schedules re-enabled from manifest'],
+        DataPipeline:     ['Definition copy with connection remap', 'Schedules re-enabled from manifest'],
+        Environment:      ['Definition copy + publish', 'Library publish can take minutes'],
+        Eventhouse:       ['Definition copy', 'KQL data is outside OneLake - needs continuous export'],
+        KQLDatabase:      ['Definition + schema copy', 'Data needs continuous export / follower'],
+        KQLQueryset:      ['Definition copy', 'Re-point to secondary database'],
+        Eventstream:      ['Definition copy', 'Sources must be reachable from DR'],
+        MLModel:          ['Re-registered from replicated experiment', 'Endpoints re-created'],
+        MLExperiment:     ['Definition copy', 'Run history limited to what was synced'],
+        DataAgent:        ['Definition copy with source remap', 'Validate answers against secondary data'],
+        GraphModel:       ['Definition copy', 'Validate graph source bindings'],
+        Ontology:         ['Definition copy', 'Validate bindings'],
+        SparkJobDefinition:['Definition copy', 'Re-point default lakehouse'],
+        Dataflow:         ['Definition copy; connections checked', 'Connections must exist in DR'],
+        CopyJob:          ['Definition copy', 'Validate connections'],
+    };
+
+    const fmtHours = (h) => h === null || h === undefined ? '—' : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} days`;
+
+    function facts(info, role) {
+        const st = (info[`${role}_capacity_state`] || '').toLowerCase();
+        const chip = st ? `<span class="status-badge ${st === 'active' ? 'success' : 'danger'}">${esc(info[`${role}_capacity_state`])}</span>` : '<span class="text-muted">unknown</span>';
+        return `<div class="fact"><div class="k">Region</div><div class="v" title="${esc(info[`${role}_region`])}">${esc(info[`${role}_region`] || '—')}</div></div>
+                <div class="fact"><div class="k">Capacity</div><div class="v" title="${esc(info[`${role}_capacity`])}">${esc(info[`${role}_capacity`] || '—')} ${info[`${role}_capacity_sku`] ? '· ' + esc(info[`${role}_capacity_sku`]) : ''}</div></div>
+                <div class="fact"><div class="k">State</div><div class="v">${chip}</div></div>`;
+    }
+
+    function inventory(cards, side) {
+        return cards.filter(c => (side === 'p' ? c.primary_count : c.secondary_count) > 0 || (side === 's' && c.primary_count > 0))
+            .map(c => {
+                const n = side === 'p' ? c.primary_count : c.secondary_count;
+                const gap = side === 's' && c.mirrored_count < c.primary_count;
+                return `<div class="inv-row${gap ? ' gap' : ''}" title="${gap ? esc(`${c.primary_count - c.mirrored_count} missing in secondary`) : ''}">
+                    ${FabricUI.icon(c.type, 'sm')}<span>${esc(c.type)}</span><b>${n}${gap ? ` / ${c.primary_count}` : ''}</b></div>`;
+            }).join('') || '<span class="text-muted">No items</span>';
+    }
+
+    function risk(kind, icon, title, detail) {
+        return `<div class="risk ${kind}"><i class="fas ${icon}" aria-hidden="true"></i><div><strong>${esc(title)}</strong><span>${esc(detail)}</span></div></div>`;
+    }
+
+    async function load(force) {
+        const q = force ? '?refresh=1' : '';
+        const settle = (pr) => pr.then(value => ({ status: 'fulfilled', value }), reason => ({ status: 'rejected', reason }));
+        const groups = { info: [], status: [], fresh: [], model: [], perm: [] };
+        let pending = 5;
+        const order = { bad: 0, warn: 1, ok: 2 };
+        const renderRisks = () => {
+            const all = [].concat(...Object.values(groups));
+            all.sort((a, b) => order[a.match(/risk (\w+)/)[1]] - order[b.match(/risk (\w+)/)[1]]);
+            if (!all.length && pending === 0) all.push(risk('ok', 'fa-circle-check', 'No recovery risks detected', 'All measured checks passed.'));
+            document.getElementById('risks').innerHTML = all.join('') +
+                (pending ? `<div class="fx-skeleton" style="height:44px" aria-label="${pending} check(s) still running"></div>` : '');
+        };
+        // Each source renders as soon as it arrives; a slow scan never blocks the rest.
+        const section = (url, key, render) => settle(FabricUI.fetchJSON(url)).then(r => {
+            const risks = groups[key] = [];
+            try { render(r, risks); } catch (e) { console.error(key, e); }
+            finally { pending--; renderRisks(); }
+        });
+        await Promise.all([
+            section('/api/active-pair-info', 'info', (infoR, risks) => {
+            if (infoR.status === 'fulfilled' && infoR.value.configured) {
+                const info = infoR.value;
+                document.getElementById('p-name').textContent = info.primary_name;
+                document.getElementById('s-name').textContent = info.secondary_name;
+                document.getElementById('p-facts').innerHTML = facts(info, 'primary');
+                document.getElementById('s-facts').innerHTML = facts(info, 'secondary');
+                if (info.primary_region && info.primary_region === info.secondary_region) {
+                    risks.push(risk('bad', 'fa-earth-americas', `Both workspaces are in ${info.primary_region}`,
+                        'A regional outage takes primary and secondary down together. Move the secondary capacity to a different region.'));
+                }
+                ['primary', 'secondary'].forEach(r => {
+                    const st = (info[`${r}_capacity_state`] || '').toLowerCase();
+                    if (st && st !== 'active') risks.push(risk('bad', 'fa-power-off', `${r[0].toUpperCase() + r.slice(1)} capacity is ${info[`${r}_capacity_state`]}`, 'Jobs, refreshes and replication fail until the capacity is resumed.'));
+                });
+            } else {
+                risks.push(risk('bad', 'fa-circle-xmark', 'Workspace pair unavailable', infoR.reason ? infoR.reason.message : 'Not configured'));
+            }
+            }),
+            section('/api/bcdr/status' + q, 'status', (statusR, risks) => {
+            if (statusR.status === 'fulfilled') {
+                const s = statusR.value;
+                document.getElementById('p-inv').innerHTML = inventory(s.type_cards, 'p');
+                document.getElementById('s-inv').innerHTML = inventory(s.type_cards, 's');
+                const cov = document.getElementById('coverage');
+                cov.textContent = `${s.overall_percentage}%`;
+                cov.className = 'rpo-value ' + (s.overall_percentage === 100 ? 'ok' : s.overall_percentage >= 80 ? 'warn' : 'bad');
+                document.getElementById('coverage-detail').textContent = `${s.total_mirrored} of ${s.total_primary} items exist in secondary (by name)`;
+                const missing = s.type_cards.flatMap(c => {
+                    const sn = new Set(c.secondary_items.map(i => i.name));
+                    return c.primary_items.filter(i => !sn.has(i.name)).map(i => `${c.type}: ${i.name}`);
+                });
+                if (missing.length) risks.push(risk('warn', 'fa-layer-group', `${missing.length} item${missing.length > 1 ? 's' : ''} missing in secondary`, missing.slice(0, 6).join(' · ') + (missing.length > 6 ? ' …' : '')));
+                const unsupported = s.type_cards.filter(c => !c.supported && c.primary_count > 0 && c.type !== 'SQLEndpoint');
+                unsupported.forEach(c => risks.push(risk('warn', 'fa-ban', `${c.type} can't be replicated via API`, `${c.primary_count} item(s) need a manual or source-based recovery plan.`)));
+
+                document.getElementById('protect-body').innerHTML = s.type_cards.map(c => {
+                    const m = METHOD[c.type] || ['Definition copy (generic)', 'Validate after failover'];
+                    return `<tr><td>${FabricUI.icon(c.type, 'sm')}${esc(c.type)}</td><td>${c.primary_count}</td>
+                            <td>${c.secondary_count}${c.mirrored_count < c.primary_count ? ` <span class="status-badge danger">${c.primary_count - c.mirrored_count} missing</span>` : ''}</td>
+                            <td>${esc(m[0])}</td><td>${esc(m[1])}</td></tr>`;
+                }).join('');
+            } else {
+                document.getElementById('protect-body').innerHTML = `<tr><td colspan="5" class="err">${esc(statusR.reason.message)}</td></tr>`;
+            }
+            }),
+            section('/api/bcdr/data-freshness' + q, 'fresh', (freshR, risks) => {
+            const rpo = document.getElementById('rpo');
+            const flow = document.getElementById('flow');
+            if (freshR.status === 'fulfilled') {
+                const sm = freshR.value.summary;
+                const h = sm.measured_rpo_hours;
+                rpo.textContent = fmtHours(h);
+                rpo.className = 'rpo-value ' + (h === null ? '' : h <= 1 ? 'ok' : h <= 24 ? 'warn' : 'bad');
+                const st = sm.states || {};
+                document.getElementById('rpo-detail').textContent =
+                    `${st.in_sync || 0} in sync · ${st.behind || 0} behind · ${st.missing_in_secondary || 0} missing — ${sm.tables_compared} tables`;
+                flow.classList.toggle('stalled', h !== null && h > 24);
+                if (h !== null && h > 24) risks.push(risk('bad', 'fa-hourglass-half', `Secondary data is ${fmtHours(h)} behind`, 'Measured from OneLake Delta commits. Your effective RPO right now is this lag, not the configured schedule.'));
+                if ((st.missing_in_secondary || 0) > 0) risks.push(risk('warn', 'fa-table', `${st.missing_in_secondary} table(s) missing in secondary`, 'Tables exist in primary lakehouses but not in their secondary counterparts.'));
+                if (!sm.complete) risks.push(risk('warn', 'fa-circle-question', 'Freshness measurement incomplete', (sm.errors || []).join(' · ') || 'Some tables could not be compared.'));
+                document.getElementById('risk-when').textContent = 'Measured ' + new Date(freshR.value.measured_at).toLocaleString();
+            } else {
+                rpo.textContent = '—';
+                document.getElementById('rpo-detail').textContent = freshR.reason.message;
+                risks.push(risk('warn', 'fa-circle-question', 'RPO could not be measured', freshR.reason.message));
+            }
+            }),
+            section('/api/bcdr/model-readiness' + q, 'model', (modelR, risks) => {
+            if (modelR.status === 'fulfilled') {
+            const notReady = modelR.value.models.filter(m => !m.ready);
+            document.getElementById('model-refresh').hidden = notReady.length === 0;
+            window._notReadyModels = notReady.map(m => m.id);
+                modelR.value.models.filter(m => !m.ready).forEach(m =>
+                    risks.push(risk('bad', 'fa-chart-column', `Semantic model "${m.name}" is not ready in secondary`,
+                        (m.issues || []).join(' · ') + ` (modes: ${Object.keys(m.modes || {}).join(', ') || 'unknown'})`)));
+            }
+            }),
+            section('/api/security/item-permissions' + q, 'perm', (permR, risks) => {
+            if (permR.status === 'fulfilled') {
+                const p = permR.value, cov = p.coverage || {};
+                const manual = (p.counts || {}).manual_portal_share || 0;
+                const grant = ((p.counts || {}).grant_dataset_user || 0) + ((p.counts || {}).upgrade_dataset_user || 0);
+                if (grant) risks.push(risk('warn', 'fa-user-shield', `${grant} semantic-model share(s) to replicate`, 'Apply from OneLake Security → Item permissions (supported Power BI API).'));
+                if (manual) risks.push(risk('warn', 'fa-user-lock', `${manual} item share(s) need manual re-share`, 'No public API can write these; re-share in the portal and re-verify.'));
+                if (cov.not_scanned) risks.push(risk('warn', 'fa-eye-slash', `${cov.not_scanned} item(s) not scanned for direct shares`, cov.admin_api_denied ? 'Fabric Admin API was denied. Run as a Fabric administrator for full coverage.' : 'See OneLake Security.'));
+            }
+            }),
+        ]);
+    }
+
+    document.getElementById('model-refresh').addEventListener('click', async (e) => {
+        const ids = window._notReadyModels || [];
+        if (!ids.length || !confirm(`Refresh ${ids.length} semantic model(s) in the secondary workspace? This frames DirectLake models and loads Import models.`)) return;
+        const b = e.currentTarget; b.disabled = true;
+        try {
+            const r = await FabricUI.fetchJSON('/api/bcdr/model-refresh', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_ids: ids }),
+            });
+            FabricUI.toast(r.failed ? `${r.failed} refresh request(s) failed` : `Refresh requested for ${r.results.length} model(s). Re-measure in a minute.`, r.failed ? 'bad' : 'ok');
+        } catch (err) { FabricUI.toast('Refresh failed: ' + err.message, 'bad'); }
+        finally { b.disabled = false; }
+    });
+
+    document.getElementById('arch-refresh').addEventListener('click', async (e) => {
+        const b = e.currentTarget; b.disabled = true;
+        try { await load(true); FabricUI.toast('Re-measured from live tenant data', 'ok'); } finally { b.disabled = false; }
+    });
+    load(false);
+})();
+</script>
+{% endblock %}

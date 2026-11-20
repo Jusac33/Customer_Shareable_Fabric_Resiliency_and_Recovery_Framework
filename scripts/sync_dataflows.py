@@ -113,7 +113,7 @@ def sync_dataflows(
         secondary_by_name = {df["displayName"]: df for df in secondary_dataflows}
         
         # Build combined mapping for base64-aware remapping
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_df in primary_dataflows:
             df_name = primary_df["displayName"]

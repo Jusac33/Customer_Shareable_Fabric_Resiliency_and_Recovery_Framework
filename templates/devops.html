@@ -127,7 +127,7 @@
 
 <style>
     .devops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-    .devops-card { border: 1px solid #e0e0e0; border-radius: 10px; padding: 18px 20px; background: #fff; }
+    .devops-card { border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; background: var(--surface); }
     .devops-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
     .devops-card-title { font-size: 14px; font-weight: 700; color: #333; }
     .devops-badge {
@@ -139,17 +139,17 @@
     .devops-badge.disconnected { background: #ffebee; color: #c62828; }
     .devops-card-body { display: flex; flex-direction: column; gap: 8px; }
     .devops-field { display: flex; justify-content: space-between; align-items: center; }
-    .field-label { font-size: 12px; color: #888; }
+    .field-label { font-size: 12px; color: var(--text-3); }
     .field-value { font-size: 13px; font-weight: 600; color: #333; }
     .field-value.mono { font-family: monospace; font-size: 12px; }
 
-    .section-divider { border-top: 1px solid #e0e0e0; margin: 28px 0 20px; }
+    .section-divider { border-top: 1px solid var(--line); margin: 28px 0 20px; }
     .sub-title { font-size: 14px; font-weight: 700; color: #555; letter-spacing: 1px; margin: 0 0 14px; }
 
     .devops-pipeline-bar {
         display: flex; align-items: center; justify-content: space-between;
         padding: 16px 20px; background: #f8fafb; border-radius: 10px;
-        border: 1px solid #e0e0e0;
+        border: 1px solid var(--line);
     }
     .pipeline-name { font-size: 15px; font-weight: 700; color: #333; }
     .pipeline-status {
@@ -172,25 +172,25 @@
     .devops-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .devops-table th {
         padding: 10px 12px; text-align: left; font-weight: 700; color: #555;
-        background: #fafafa; border-bottom: 2px solid #e0e0e0;
+        background: var(--surface-2); border-bottom: 2px solid var(--line);
     }
-    .devops-table td { padding: 10px 12px; border-bottom: 1px solid #eee; }
-    .devops-table tr:hover { background: #f8f9fa; }
+    .devops-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .devops-table tr:hover { background: var(--surface-2); }
     .run-badge {
         padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
     }
     .run-badge.succeeded { background: #e8f5e9; color: #2e7d32; }
     .run-badge.failed { background: #ffebee; color: #c62828; }
     .run-badge.inProgress, .run-badge.running { background: #fff3e0; color: #e65100; }
-    .run-badge.canceled { background: #f5f5f5; color: #999; }
+    .run-badge.canceled { background: var(--surface-2); color: var(--text-3); }
 
-    .devops-config { background: #fafafa; border-radius: 10px; padding: 20px; border: 1px solid #e0e0e0; }
+    .devops-config { background: var(--surface-2); border-radius: 10px; padding: 20px; border: 1px solid var(--line); }
     .config-grid {
         display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0;
     }
     .config-field label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; font-weight: 600; }
     .config-field input {
-        width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 5px;
+        width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px;
         font-size: 13px; box-sizing: border-box;
     }
     .config-row { margin: 8px 0; }

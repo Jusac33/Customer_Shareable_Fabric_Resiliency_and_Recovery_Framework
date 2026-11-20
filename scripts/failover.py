@@ -471,6 +471,39 @@ def takeover_semantic_models(
     return result
 
 
+def refresh_semantic_models(workspace_id: str, logger, dry_run: bool = False) -> Dict[str, Any]:
+    """
+    Trigger a refresh of every semantic model in the DR workspace.
+
+    Replicated models carry definitions, not data: Import models are empty and
+    DirectLake models are unframed until refreshed, so reports render nothing.
+    Uses the GA Power BI API (Datasets - Refresh Dataset In Group); for
+    DirectLake this performs framing. Run after ownership takeover so the
+    refresh executes as the DR principal.
+    https://learn.microsoft.com/en-us/rest/api/power-bi/datasets/refresh-dataset-in-group
+    """
+    result = {"models_found": 0, "refresh_requested": 0, "refresh_failed": 0, "failures": []}
+    models = [i for i in common.get_items(workspace_id, "SemanticModel")
+              if not i.get("displayName", "").startswith("BCDR_")]
+    result["models_found"] = len(models)
+    for m in models:
+        name = m.get("displayName", m.get("id"))
+        if dry_run:
+            logger.info(f"[DRY RUN] Would refresh semantic model '{name}'")
+            result["refresh_requested"] += 1
+            continue
+        try:
+            common.powerbi_api_call("POST", f"/groups/{workspace_id}/datasets/{m['id']}/refreshes",
+                                    {"notifyOption": "NoNotification"})
+            logger.info(f"✓ Refresh requested for '{name}'")
+            result["refresh_requested"] += 1
+        except Exception as e:
+            logger.error(f"Refresh request failed for '{name}': {str(e)[:200]}")
+            result["refresh_failed"] += 1
+            result["failures"].append({"model": name, "error": str(e)[:200]})
+    return result
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description="Orchestrate Fabric DR failover")
@@ -570,6 +603,13 @@ def main():
             "result": takeover_result,
         })
 
+        # Step 5b: Refresh / frame semantic models so reports serve data in DR
+        logger.info("\n=== STEP 5b: SEMANTIC MODEL REFRESH (IMPORT / DIRECTLAKE FRAMING) ===")
+        refresh_result = refresh_semantic_models(args.secondary_workspace, logger, dry_run=args.dry_run)
+        failover_log["steps"].append({"step": "refresh_semantic_models", "result": refresh_result})
+        if refresh_result["refresh_failed"] and failover_log["status"] == "SUCCESS":
+            failover_log["status"] = "PARTIAL_FAILURE"
+
         # Step 6: Validate secondary (smoke tests)
         logger.info("\n=== STEP 6: VALIDATING SECONDARY RESOURCES ===")
         validation_result = validate_secondary(args.secondary_workspace, logger)
@@ -597,6 +637,8 @@ def main():
         print(f"Semantic Models Found:      {takeover_result['models_found']}")
         print(f"Ownership Taken Over:       {takeover_result['models_taken_over']}")
         print(f"Takeover Failures:          {takeover_result['models_failed']}")
+        print(f"Model Refresh Requested:    {refresh_result['refresh_requested']}")
+        print(f"Model Refresh Failures:     {refresh_result['refresh_failed']}")
         print(f"Secondary Resources:")
         for key, val in validation_result.items():
             if key.endswith("_accessible"):

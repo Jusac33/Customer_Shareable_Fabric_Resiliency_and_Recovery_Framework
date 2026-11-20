@@ -1898,7 +1898,7 @@ All sync operations now compare primary vs secondary state **before** making cha
 
 **Key design decision:** Removed principals are **detected but not auto-deleted** to prevent accidental permission loss. The delta report includes `permissions_removed_detected` count so operators can review and manually remove if intended.
 
-### 28.2 Item Permissions — ⚠️ Known DR Limitation (Not Synced)
+### 28.2 Item Permissions — ⚠️ Known DR Limitation (Partially Synced)
 
 **Item-level permissions are not replicated to the secondary workspace.**
 
@@ -1923,10 +1923,10 @@ been removed so the gap is explicit rather than silent.
 | Workspace roles | `GET/POST/PATCH/DELETE /workspaces/{id}/roleAssignments` | ✅ Synced — section 28.1 |
 | Connection roles | `GET/POST /connections/{id}/roleAssignments` | ✅ Synced — see "Closed Gap: Connection Role Assignments" |
 | OneLake data access roles (RLS/CLS) | `GET/PUT /items/{id}/dataAccessRoles` | ✅ Synced — section 28.3 |
-| Power BI semantic model sharing | `GET/POST/PUT /groups/{ws}/datasets/{id}/users` (Power BI base URL) | ⬜ Not implemented — real and GA |
+| Power BI semantic model sharing | `GET/POST/PUT /groups/{ws}/datasets/{id}/users` (Power BI base URL, GA) | ✅ Replicated — section 28.2.1 (Write and service-principal grants flagged for manual action) |
 | Power BI report / dashboard sharing | **None** — the `Reports` and `Dashboards` operation groups have no user operations | ❌ Not possible via API |
-| Generic item sharing | **None — portal UI only** | ⚠️ Accelerator available — section 28.2.1 |
-| Item access audit | `GET /admin/workspaces/{ws}/items/{item}/users` (admin-only, `Tenant.Read.All`, 200 req/hr) | ⬜ Not implemented |
+| Generic item sharing (write) | **None — portal UI only** | ⚠️ Detected and listed for manual re-share, then verified — section 28.2.1 |
+| Item access audit | `GET /admin/workspaces/{ws}/items/{item}/users` (Fabric admin or admin-enabled SP, `Tenant.Read.All`, preview, 200 req/hr) | ✅ Used for detection — section 28.2.1 |
 | Item access audit, bulk | `POST /v1.0/myorg/admin/workspaces/getInfo?getArtifactUsers=true` (Scanner API, 500 req/hr) | ⬜ Not implemented — best read option |
 
 **Operational impact:** in most deployments workspace-level roles carry the
@@ -1939,144 +1939,48 @@ grant access via workspace roles or Entra groups instead. Where direct shares ar
 unavoidable, record them in the runbook and re-apply them manually in the secondary
 workspace via the Fabric portal (**Item → Share**) after failover.
 
-### 28.2.1 Item Permissions Accelerator — ⚠️ Unsupported Internal API
+### 28.2.1 Item Permissions — Supported-API Replication
 
-**File:** `scripts/item_permissions_accelerator.py`
+**Files:** `item_permissions.py` (logic), `scripts/sync_item_permissions.py` (CLI),
+phase in `scripts/sync_permissions.py`. Tests: `scripts/test_item_permissions_supported.py`.
 
-Where manual re-application is impractical, this operator-run accelerator drives
-the **Fabric/Power BI internal portal backend** — the same endpoints the portal's
-own Share dialog calls:
+Only documented APIs are used. An earlier accelerator that called the internal
+portal backend (`*.analysis.windows.net/metadata/access`) has been removed.
 
-```
-POST  {cluster}/metadata/access                                    (grant)
-GET   {cluster}/metadata/access/artifacts/{id}  or  /m/access/...  (read; both tried)
-```
+| Step | API | Item types | Caller |
+|------|-----|-----------|--------|
+| Detect | Fabric Admin `GET /v1/admin/workspaces/{ws}/items/{item}/users` (preview, 200 req/hr) | All | Fabric administrator, or service principal with *Service principals can access read-only admin APIs* |
+| Detect | Power BI `GET /groups/{ws}/datasets/{id}/users` (GA) | Semantic models | Workspace member |
+| Replicate | Power BI `POST` / `PUT /groups/{ws}/datasets/{id}/users` (GA) | Semantic models | Needs ReadReshare on the model |
+| Everything else | No public write API | All other types | Listed as `manual_portal_share`, re-checked by `--verify` |
 
-`{cluster}` is the tenant's backend host (e.g.
-`https://wabi-us-east2-a-primary-redirect.analysis.windows.net`), resolved at
-runtime or pinned with `FABRIC_INTERNAL_CLUSTER`. Tokens use the Power BI
-audience (`POWERBI_API_SCOPE`), **not** the Fabric audience.
+Rules:
 
-> **These endpoints are undocumented, unversioned, carry no deprecation policy,
-> and Microsoft Support will not assist with them.** They may change or disappear
-> without notice.
-
-**Sanctioned use:** operator-run accelerator producing a reviewed plan, applied
-with a human verifying the result in the portal afterwards.
-
-**Not sanctioned:** wiring this into automated failover or treating it as a DR
-control the recovery plan silently depends on. The module is deliberately not
-imported by `sync_permissions.py`, `failover.py`, or `failback.py`, and
-`test_item_permissions_accelerator.py` asserts that this stays true.
-
-#### Workflow
+- Principals holding a **workspace role** are excluded from direct shares; roles
+  replicate through `roleAssignments` (28.1). A principal with a role in the
+  secondary counts as covered.
+- Users are matched by UPN *and* object ID, so a share found by one API matches
+  the same person found by the other.
+- `Write` can't be granted through the Datasets users API, and service principals
+  (`App`) can't be granted at all. These rows are flagged with an explanation, not
+  silently dropped.
+- If the admin API returns 401/403, the affected items are reported as
+  **NOT SCANNED** and the run exits non-zero. They are never reported as
+  "no shares".
 
 ```bash
-# 1. Read-only probe: are the endpoints reachable, and what shape do they return?
-python scripts/item_permissions_accelerator.py --verify-contract
-
-# 2. Read-only diff: what would be granted on secondary?
-python scripts/item_permissions_accelerator.py --plan
-
-# 3. Review data/item_permissions_plan.csv (delete rows you do not want), then apply
-python scripts/item_permissions_accelerator.py --apply \
-    --i-understand-this-is-unsupported --contract-file contract.json
+python scripts/sync_item_permissions.py --plan     # read-only; writes data/item_permissions_plan.csv
+python scripts/sync_item_permissions.py --apply    # applies the reviewed CSV (semantic models only)
+python scripts/sync_item_permissions.py --verify   # re-detects; non-zero exit while anything is open
 ```
 
-`--apply` is refused without the acknowledgement flag, and executes the reviewed
-CSV **exactly as written** — it does not re-plan, so the review is a real
-control. The three modes are mutually exclusive. Steps 1 and 2 write nothing to
-Fabric. The plan CSV contains principal IDs and is gitignored.
+`--apply` executes the reviewed CSV exactly as written and never re-plans. The
+CSV contains principal identifiers and is gitignored.
 
-`--plan` does **not** guess when state is ambiguous. Items whose primary or
-secondary access cannot be read, principals the response gives no type for, and
-access entries the parser cannot interpret are left out of the plan, counted in
-the summary, and make the run exit non-zero so they get handled manually.
-
-#### Live test results (read side, 2026-09-26)
-
-The read side was tested against a real workspace using an interactive **user**
-token (no service principal credentials were available, so SPN support is still
-untested). Findings:
-
-| Item type | `/metadata/access/artifacts/{id}` | `/m/access/artifacts/{id}` |
-|-----------|-----------------------------------|----------------------------|
-| Lakehouse, Warehouse, Notebook | ✅ 200 | ❌ 404 |
-| Report, SemanticModel | ❌ 404 | ❌ 404 |
-
-Reports and semantic models cannot be handled by this tool. Semantic models have
-a supported alternative (`/groups/{ws}/datasets/{id}/users`); Reports have none.
-
-The live response differs from the community-reported shape, and the first
-version of the parser recognised **none** of its entries:
-
-- Entries are under `detail`, not `permissions`/`value`.
-- The principal is `objectId`. In this shape `id` is the item's numeric ID and
-  is never used as a principal.
-- Permissions are **integer bitmasks** (`permissions`, `artifactPermissions`),
-  not role names. They are carried as `{role}` and `{artifact_permissions}` and
-  sent as JSON numbers.
-- Groups carry `groupId`; users carry `userType: 0`. Anything else is left
-  untyped and skipped.
-- **Most listed access is inherited.** Entries with `accessSource.folderRole`
-  (Administrator / Member / Contributor / Viewer) come from workspace roles. In
-  the test, 8 of 12 entries were inherited. These are counted and **skipped**:
-  workspace roles already sync via `roleAssignments`, and copying them as direct
-  shares would leave grants behind if the role were later removed. Only direct
-  shares (no `accessSource`) are planned.
-
-#### The write payload is UNVERIFIED
-
-`DEFAULT_WRITE_CONTRACT` holds a best-guess request shape, updated to carry the
-bitmasks observed on the read side. The grant body itself has **not** been
-verified against a captured request. Unlike the removed dead code, this
-matters: the endpoint genuinely exists, so a wrong body yields HTTP 400, or a
-partial success that silently grants the wrong permission level. It was not
-live-tested, because a test grant would change real permissions.
-
-Capture ground truth from the portal (F12 → Network → share a test item →
-filter `access` → copy the request JSON), then supply it via `--contract-file`:
-
-```json
-{
-  "path": "/metadata/access",
-  "body_template": {
-    "artifactObjectIds": ["{item_id}"],
-    "permissions": [{
-      "principalId": "{principal_id}",
-      "principalType": "{principal_type}",
-      "permissionType": "{role}",
-      "artifactPermissions": "{artifact_permissions}",
-      "grant": true
-    }]
-  },
-  "role_map": {}
-}
-```
-
-Placeholders `{item_id}`, `{principal_id}`, `{principal_type}`, `{role}`, and
-`{artifact_permissions}` are substituted at call time. A value that is exactly
-one placeholder is sent with its type (digits become JSON numbers, blank becomes
-`null`); placeholders inside longer strings are replaced as text. `role_map`
-optionally translates a read-side value to what the grant expects; unmapped
-values pass through unchanged.
-
-#### Failure behaviour
-
-The module is built to fail **loudly**, inverting the pattern that made the
-removed code dangerous:
-
-| Condition | Behaviour |
-|-----------|-----------|
-| Any non-2xx | Raises `InternalApiError` with status and full response body |
-| HTTP 400 with unverified contract | Logs a payload-shape diagnostic and **halts** the run |
-| HTTP 401 / 403 | Logs that SPN tokens may be rejected outright and **halts** |
-| Read path 404 | Tries the next known path variant, then warns |
-| Isolated failure, verified contract | Records it and continues |
-
-**Service principal caveat:** these endpoints are built around interactive user
-sessions. A service principal token may be rejected outright. Run
-`--verify-contract` before investing in this path — it reports exactly that.
+**Live result (crestshield pair, user token, 2026-11-19):** the semantic model
+was scanned; its only principals were workspace-role holders, so nothing needed
+replicating. The other 22 items were reported NOT SCANNED because the caller is
+not a Fabric administrator. A run as a Fabric admin is required for full coverage.
 
 ### 28.3 OneLake Data Access Roles — Delta Sync
 
@@ -2229,7 +2133,7 @@ When replicating artifacts using `getDefinition` / `updateDefinition`, only the 
 | **Job Schedules** | P0 | `GET/POST /items/{id}/jobs/{jobType}/schedules` | Failover script handles (pause/resume). Full sync not yet implemented. |
 | **Item Ownership** | P0 | `POST /groups/{ws}/datasets/{id}/Default.TakeOver` | ✅ **Closed for SemanticModel** — `failover.py` step 5 takes over every model in the secondary workspace. No GA takeover API exists for other item types. |
 | **Connection Role Assignments** | P0 | `GET /items/{id}/connections`, `GET/POST /connections/{id}/roleAssignments` | ✅ **Closed** — `sync_permissions.py` grants the DR principal a role on every connection actually in use. |
-| **Item-Level Permissions** | P1 | *No public Fabric API* | ⚠️ **Partially mitigated.** No REST route exists (`/items/{id}/permissions` returns 404). `scripts/item_permissions_accelerator.py` drives the unsupported internal portal backend as an operator-run accelerator; not wired into automated failover. See sections 28.2 and 28.2.1. |
+| **Item-Level Permissions** | P1 | Fabric Admin item-access API (read), Power BI Datasets users API (write, semantic models) | ⚠️ **Partially closed.** Semantic-model shares replicate automatically. Other item types are detected (Fabric admin required) and listed for manual re-share because no public write API exists. See 28.2.1. |
 | **Sensitivity Labels** | P1 | `GET /items/{id}` (read), Admin API (write) | Detection in drift page. Applying requires Admin API or MIP SDK. |
 | **Item Description** | P2 | `PATCH /items/{id}` with `{description}` | Not yet synced. |
 | **Tags** | P2 | Fabric Tags API | Not yet synced. |
@@ -2415,10 +2319,10 @@ from rti.sync_rti import sync_all_rti
 The project has three pytest test suites covering the lakehouse sync, failback, and DR ownership/connection implementations. Run with:
 
 ```bash
-python -m pytest scripts/test_failback_sync.py scripts/test_forward_sync_notebook.py scripts/test_dr_ownership_and_connections.py -v
+python -m pytest scripts/ -v
 ```
 
-**Latest result: 120/120 tests passing.**
+**Latest result: 167/167 tests passing** (adds `test_item_permissions_supported.py`, `test_bcdr_freshness.py`, `test_connection_mapping.py`, and `TestRefreshSemanticModels`).
 
 ### `scripts/test_failback_sync.py` — 33 tests
 
@@ -2463,4 +2367,94 @@ Covers the two out-of-definition gaps closed in section 30. All HTTP is mocked �
 | `TestFabricApiError` | 4 | `FabricApiError` subclasses `Exception`, exposes `status_code`/`detail`, and renders the unchanged `API error {status}: {detail}` message so existing bare-`Exception` callers and substring checks still work |
 | `TestConnectionPagination` | 1 | `_paged_get()` follows `continuationToken` |
 
+---
+
+## 33. Recovery Readiness — Measured, Not Inferred
+
+The Command Center's **Item coverage** percentage only says that an item with the
+same type and name exists in the secondary. It says nothing about data currency or
+whether reports work. The readiness checks below measure those directly. All are
+read-only and use documented APIs. The Command Center readiness strip and the
+Architecture page are built entirely from them, with no static values.
+
+### 33.1 Measured RPO — OneLake data plane
+
+**Files:** `bcdr_freshness.py`, `GET /api/bcdr/data-freshness` (`?refresh=1` bypasses the 5-minute cache).
+
+Compares the latest Delta commit (`_delta_log/NNNNNNNNNNNNNNNNNNNN.json`) of every
+table on both sides through the OneLake DFS endpoint
+(`GET https://onelake.dfs.fabric.microsoft.com/{ws}?resource=filesystem&directory=...`).
+Measured RPO is the worst lag across all compared tables.
+
+- Works for **schema-enabled** lakehouses (`Tables/<schema>/<table>`), where the Fabric
+  *List Tables* API returns `UnsupportedOperationForSchemasEnabledLakehouse`.
+- Uses the **data plane** only, so it keeps working when Fabric item APIs (control
+  plane) are degraded.
+- A listing failure is reported as an error and marks the result incomplete. It is
+  never reported as "in sync".
+
+### 33.2 Semantic model readiness and DR refresh
+
+**Endpoints:** `GET /api/bcdr/model-readiness`, `POST /api/bcdr/model-refresh`.
+**Failover:** `scripts/failover.py` step **5b**, `refresh_semantic_models()`.
+
+Replicated models carry definitions, not data. Import models are empty and
+DirectLake models are unframed until refreshed, so reports render nothing. Readiness
+reads each secondary model's storage modes from its definition (TMDL/BIM) and its
+last refresh (`GET /groups/{ws}/datasets/{id}/refreshes?$top=1`). Failover now runs
+`POST /groups/{ws}/datasets/{id}/refreshes` after ownership takeover, and a refresh
+failure downgrades the run to `PARTIAL_FAILURE`.
+
+### 33.3 Connection remapping fixes
+
+`app._build_connection_map()` and `common.build_combined_mapping()` now:
+
+1. **Match items by type and name.** A lakehouse and its SQL analytics endpoint share a
+   display name, so name-only matching mapped endpoint IDs to lakehouse IDs. On the
+   crestshield pair this mis-mapped 4 items (3 SQL endpoints and 1 Eventhouse).
+2. **Map SQL analytics endpoint hostnames.** Hosts are per workspace and are not GUIDs,
+   for example `<id>.datawarehouse.fabric.microsoft.com`, or the `msit-` prefixed form in
+   MSIT. They are discovered with `GET /workspaces/{ws}/lakehouses|warehouses/{id}`.
+   Without this, Import, DirectQuery and DirectLake-on-SQL models, pipelines and notebooks
+   kept pointing at the **primary** endpoint after replication. Explicit CSV rows still win.
+
+---
+
+## 34. Failure Scenarios — Control Plane vs Data Plane
+
+Fabric has two planes:
+
+- **Control plane:** metadata and APIs. Workspaces, items, definitions, schedules,
+  permissions, Power BI publish and refresh. Hosted in the tenant's **home region**.
+- **Data plane:** OneLake storage, SQL endpoints, Spark, KQL. Runs in each **capacity region**.
+
+Microsoft's guidance ([Reliability in Microsoft Fabric](https://learn.microsoft.com/en-us/fabric/security/reliability-fabric))
+says that in a regional disaster Microsoft performs a platform failover (portal
+unavailable, typically under an hour). Afterwards the affected region is
+**read-only**: no workspace or item writes, no Power BI refresh or publish, while data
+stays reachable through the OneLake APIs. This framework's failover is made of
+control-plane **writes** (enable schedules, take over, refresh, rebind), so it only
+works where the control plane accepts writes.
+
+| # | Scenario | Plane affected | What still works | What this framework does today | Gap / how to close it |
+|---|----------|----------------|------------------|--------------------------------|------------------------|
+| 1 | Availability-zone failure | Either (zonal) | Everything after self-heal | Nothing needed | Retry in-flight jobs; 429/503 backoff exists |
+| 2 | **Primary capacity region** outage, home region healthy | Data plane (primary) | Control plane; secondary capacity in another region | Full failover: pause primary, final sync, activate, takeover, refresh (5b), validate | Primary reads fail, so final sync and pause can't complete. Add a forced mode that skips primary steps and accepts measured RPO (33.1). **Requires the secondary in a different region**; crestshield is not |
+| 3 | **Home region (control plane)** outage | Control plane | OneLake data plane; Power BI read-only after Microsoft failover | Cannot run: every activation step is a write | Keep the secondary **warm and pre-activated** (models framed, reports rebound, permissions applied) so no writes are needed at disaster time. Publish secondary links in advance. Keep an offline runbook with OneLake paths and SQL endpoints |
+| 4 | Both regions down / no paired region | Both | Nothing in Fabric | Nothing | Out-of-Fabric copies of critical data (ADLS GRS or immutable storage) via the data plane |
+| 5 | Capacity paused, throttled or expired (billing) | Data plane (one capacity) | Control plane | Detects inactive capacity (dashboard banner, health score) | Add a supported "reassign workspace to standby capacity" action (Fabric *Assign To Capacity* API), faster than full failover |
+| 6 | Accidental item or workspace deletion | Control plane (logical) | Secondary copy | Secondary may still have it; auto-sync can **propagate deletes or overwrites** | Pause sync on detected mass deletion; workspace restore (admin); keep primary definition exports |
+| 7 | Data corruption or bad pipeline write | Data plane (logical) | Delta history | Sync **copies the corruption** to secondary | Delta time travel / RESTORE; pause sync on anomaly; retain secondary versions longer than primary |
+| 8 | Bad deployment (definition regression) | Control plane (logical) | Git history | Definition drift detection | Restore from Git / deployment pipeline; gate sync on drift review |
+| 9 | Ransomware or malicious admin | Both (same tenant) | Nothing the same admin can't reach | Nothing (same tenant, same admins) | Separate admin boundary or tenant for DR; immutable backups |
+| 10 | On-premises / VNet gateway outage | Connectivity | Cloud sources | Lists gateways only; no binding | Gateway clusters with ≥2 members; *Bind To Gateway In Group* for DR models |
+| 11 | Credential or secret expiry (SPN, connections) | Identity | Interactive users | Plaintext SP secret on disk; no expiry monitoring | Key Vault / certificate auth; expiry alerts |
+| 12 | Entra ID outage | Identity (global) | Already-issued tokens until expiry | Nothing | Platform dependency; document only |
+| 13 | API throttling during mass failover | Control plane | Slower progress | Exponential backoff; `Retry-After` ignored in `common.py` | Honour `Retry-After`; parallelism caps |
+| 14 | DR tool host lost (laptop or VM running the app) | Tooling | Fabric itself | State in local JSON files; failover needs this host | Run as CLI from a runbook host; state in Git or storage; idempotent steps |
+
+**Key takeaway:** the framework covers scenario 2 well, but only when the secondary
+capacity is in a **different region**. For scenario 3, which is control-plane loss,
+anything that needs a write must already be done before the disaster. Readiness
+(section 33) is how that is verified continuously.
 

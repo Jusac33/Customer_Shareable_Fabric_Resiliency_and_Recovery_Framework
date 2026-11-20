@@ -32,7 +32,7 @@
     <div class="rti-validation-banner" id="rti-validation-banner" style="display:none;">
         <div class="rti-validation-header" id="rti-validation-header"></div>
         <div class="rti-validation-body" id="rti-validation-body"></div>
-        <button class="btn-close-banner" onclick="document.getElementById('rti-validation-banner').style.display='none'">✕</button>
+        <button type="button" class="btn-close-banner" aria-label="Dismiss validation banner" onclick="document.getElementById('rti-validation-banner').style.display='none'">✕</button>
     </div>
 
     <!-- RTI Summary Cards -->
@@ -237,7 +237,7 @@
     </div>
 
     <div id="kql-data-content">
-        <p style="color:#999; font-size:13px;">Click "Refresh Data View" to load KQL table data.</p>
+        <p style="color:var(--text-3); font-size:13px;">Click "Refresh Data View" to load KQL table data.</p>
     </div>
 </section>
 
@@ -256,7 +256,7 @@
         </button>
     </div>
     <div id="conn-audit-content">
-        <p style="color:#999; font-size:13px;">Click "Audit Connections" to scan secondary artifacts for stale primary references.</p>
+        <p style="color:var(--text-3); font-size:13px;">Click "Audit Connections" to scan secondary artifacts for stale primary references.</p>
     </div>
 </section>
 
@@ -323,8 +323,8 @@
         gap: 16px; margin-bottom: 8px;
     }
     .rti-summary-card {
-        border: 1px solid #e0e0e0; border-radius: 10px; padding: 18px 20px;
-        background: #fff; display: flex; align-items: center; gap: 14px;
+        border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px;
+        background: var(--surface); display: flex; align-items: center; gap: 14px;
         transition: box-shadow 0.2s;
     }
     .rti-summary-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
@@ -339,7 +339,7 @@
     .rti-summary-icon.eventstream { background: #fff3e0; color: #e65100; }
     .rti-summary-info { flex: 1; }
     .rti-summary-count { font-size: 24px; font-weight: 800; color: #1a1a2e; line-height: 1; }
-    .rti-summary-label { font-size: 12px; color: #888; margin-top: 2px; }
+    .rti-summary-label { font-size: 12px; color: var(--text-3); margin-top: 2px; }
     .rti-summary-sync {
         padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;
         white-space: nowrap;
@@ -347,7 +347,7 @@
     .rti-summary-sync.synced { background: #e8f5e9; color: #2e7d32; }
     .rti-summary-sync.partial { background: #fff3e0; color: #e65100; }
     .rti-summary-sync.missing { background: #ffebee; color: #c62828; }
-    .rti-summary-sync.empty  { background: #f5f5f5; color: #999; }
+    .rti-summary-sync.empty  { background: var(--surface-2); color: var(--text-3); }
 
     /* Type blocks */
     .rti-type-block { margin-bottom: 24px; }
@@ -377,14 +377,14 @@
         width: 100%; border-collapse: collapse; font-size: 13px;
     }
     .rti-table th {
-        text-align: left; padding: 10px 12px; background: #f5f5f5;
-        color: #666; font-weight: 600; border-bottom: 2px solid #e0e0e0;
+        text-align: left; padding: 10px 12px; background: var(--surface-2);
+        color: #666; font-weight: 600; border-bottom: 2px solid var(--line);
     }
     .rti-table td {
         padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: #333;
     }
     .rti-table tr:last-child td { border-bottom: none; }
-    .rti-table tr:hover { background: #fafafa; }
+    .rti-table tr:hover { background: var(--surface-2); }
 
     .status-badge {
         padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
@@ -416,8 +416,8 @@
         gap: 16px;
     }
     .rti-guidance-card {
-        border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px;
-        background: #fafafa;
+        border: 1px solid var(--line); border-radius: 10px; padding: 20px;
+        background: var(--surface-2);
     }
     .rti-guidance-card h3 { font-size: 15px; font-weight: 700; color: #333; margin: 10px 0 8px; }
     .rti-guidance-card p { font-size: 13px; color: #555; line-height: 1.5; margin-bottom: 8px; }
@@ -462,7 +462,7 @@
     .rti-schedule-header i { color: #1565c0; }
     .rti-schedule-badge {
         font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
-        background: #eee; color: #888; text-transform: uppercase; letter-spacing: 0.5px;
+        background: #eee; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px;
     }
     .rti-schedule-badge.active { background: #e8f5e9; color: #2e7d32; }
     .rti-schedule-controls {
@@ -471,7 +471,7 @@
     .rti-schedule-label { font-size: 13px; color: #555; font-weight: 500; }
     .rti-schedule-select {
         padding: 5px 10px; border-radius: 6px; border: 1.5px solid #ccc; font-size: 13px;
-        background: #fff; color: #333; cursor: pointer; min-width: 140px;
+        background: var(--surface); color: #333; cursor: pointer; min-width: 140px;
     }
     .rti-schedule-select:focus { border-color: #1565c0; outline: none; }
     .btn-schedule-toggle {
@@ -485,7 +485,7 @@
     }
     .btn-schedule-toggle.active:hover { background: #c62828; color: #fff; }
     .rti-schedule-status {
-        margin-top: 10px; font-size: 12px; color: #666; padding-top: 8px; border-top: 1px solid #e8e8e8;
+        margin-top: 10px; font-size: 12px; color: #666; padding-top: 8px; border-top: 1px solid var(--line);
     }
 
     /* Connection Audit Styles */
@@ -497,7 +497,7 @@
     .conn-stale { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
     .conn-audit-list { display: flex; flex-direction: column; gap: 8px; }
     .conn-audit-item {
-        border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 14px; font-size: 13px;
+        border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 13px;
     }
     .conn-item-stale { border-color: #ffcc80; background: #fffaf0; }
     .conn-item-clean { border-color: #a5d6a7; background: #f9fcf9; }
@@ -507,17 +507,17 @@
     .conn-item-clean .conn-art-header i { color: #2e7d32; }
     .conn-issues-list { margin: 6px 0 0 24px; padding: 0; font-size: 12px; color: #555; }
     .conn-issues-list li { margin-bottom: 3px; }
-    .conn-issues-list code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+    .conn-issues-list code { background: var(--surface-2); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
     .conn-uri-map { margin-top: 12px; font-size: 12px; color: #666; }
     .conn-uri-map summary { cursor: pointer; font-weight: 600; }
     .conn-uri-map ul { margin: 6px 0 0 16px; padding: 0; }
     .conn-uri-map li { margin-bottom: 4px; }
-    .conn-uri-map code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 11px; word-break: break-all; }
+    .conn-uri-map code { background: var(--surface-2); padding: 1px 4px; border-radius: 3px; font-size: 11px; word-break: break-all; }
 
     /* Validation banner */
     .rti-validation-banner {
-        border: 1.5px solid #e0e0e0; border-radius: 10px; padding: 16px 20px;
-        background: #fafafa; margin-bottom: 16px; position: relative;
+        border: 1.5px solid var(--line); border-radius: 10px; padding: 16px 20px;
+        background: var(--surface-2); margin-bottom: 16px; position: relative;
     }
     .rti-validation-header { margin-bottom: 8px; }
     .rti-validation-body { font-size: 13px; color: #444; }
@@ -527,7 +527,7 @@
     .rti-val-conn li, .rti-val-issues li { margin-bottom: 3px; font-size: 12px; }
     .btn-close-banner {
         position: absolute; top: 10px; right: 12px; border: none; background: transparent;
-        font-size: 16px; color: #999; cursor: pointer;
+        font-size: 16px; color: var(--text-3); cursor: pointer;
     }
     .btn-close-banner:hover { color: #333; }
 
@@ -859,7 +859,7 @@ async function loadKqlData() {
         const data = await resp.json();
 
         if (!data.databases || data.databases.length === 0) {
-            content.innerHTML = '<p style="color:#999;">No paired KQL Databases found. Sync RTI artifacts first.</p>';
+            content.innerHTML = '<p style="color:var(--text-3);">No paired KQL Databases found. Sync RTI artifacts first.</p>';
             return;
         }
 
@@ -869,7 +869,7 @@ async function loadKqlData() {
             html += `<div class="kql-db-header"><i class="fas fa-database"></i> <strong>${escapeHtml(db.name)}</strong></div>`;
 
             if (!db.tables || db.tables.length === 0) {
-                html += '<p style="color:#999;font-size:13px;margin:8px 0;">No tables found. Ingest sample data first.</p>';
+                html += '<p style="color:var(--text-3);font-size:13px;margin:8px 0;">No tables found. Ingest sample data first.</p>';
             } else {
                 html += '<table class="rti-table"><thead><tr>';
                 html += '<th>Table</th><th>Primary</th><th>Rows (Primary)</th><th>Secondary</th><th>Rows (Secondary)</th><th>Status</th>';

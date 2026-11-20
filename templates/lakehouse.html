@@ -35,7 +35,7 @@
 
     .btn-primary-action {
         padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700;
-        border: 2px solid #1565c0; color: #1565c0; background: #fff;
+        border: 2px solid #1565c0; color: #1565c0; background: var(--surface);
         cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
         transition: all 0.2s;
     }
@@ -44,7 +44,7 @@
 
     .btn-success-action {
         padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700;
-        border: 2px solid #2e7d32; color: #2e7d32; background: #fff;
+        border: 2px solid #2e7d32; color: #2e7d32; background: var(--surface);
         cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
         transition: all 0.2s;
     }
@@ -53,21 +53,21 @@
 
     .btn-danger-action {
         padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
-        border: 1px solid #ef9a9a; color: #c62828; background: #fff;
+        border: 1px solid #ef9a9a; color: #c62828; background: var(--surface);
         cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
     }
     .btn-danger-action:hover { background: #ffebee; }
 
     .btn-secondary {
         padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
-        background: #f5f5f5; color: #333; border: 1px solid #ddd; cursor: pointer;
+        background: var(--surface-2); color: #333; border: 1px solid var(--line); cursor: pointer;
         display: inline-flex; align-items: center; gap: 6px;
     }
     .btn-secondary:hover { background: #e0e0e0; }
 
     .sync-status-pill {
         font-size: 12px; color: #666; padding: 4px 12px;
-        background: #fff; border-radius: 16px; border: 1px solid #ddd;
+        background: var(--surface); border-radius: 16px; border: 1px solid var(--line);
     }
     .sync-status-pill.success { color: #2e7d32; border-color: #4caf50; background: #e8f5e9; }
     .sync-status-pill.running { color: #1565c0; border-color: #42a5f5; background: #e3f2fd; }
@@ -76,13 +76,13 @@
     /* Schedule rows */
     .schedule-row {
         display: flex; align-items: center; gap: 10px; margin-top: 14px;
-        padding: 12px 16px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;
+        padding: 12px 16px; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--line);
         flex-wrap: wrap;
     }
     .schedule-row label { font-size: 13px; font-weight: 600; color: #444; white-space: nowrap; }
     .schedule-row select {
         padding: 5px 10px; border-radius: 6px; border: 1px solid #ccc;
-        font-size: 13px; background: #fff;
+        font-size: 13px; background: var(--surface);
     }
     .schedule-toggle {
         position: relative; display: inline-block; width: 44px; height: 24px;
@@ -94,21 +94,21 @@
     }
     .schedule-toggle .slider:before {
         position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
-        background: #fff; border-radius: 50%; transition: .3s;
+        background: var(--surface); border-radius: 50%; transition: .3s;
     }
     .schedule-toggle input:checked + .slider { background: #2e7d32; }
     .schedule-toggle input:checked + .slider:before { transform: translateX(20px); }
-    .schedule-info { font-size: 11px; color: #888; margin-left: auto; }
+    .schedule-info { font-size: 11px; color: var(--text-3); margin-left: auto; }
     .schedule-info .active { color: #2e7d32; font-weight: 600; }
-    .schedule-info .inactive { color: #999; }
+    .schedule-info .inactive { color: var(--text-3); }
 
     /* Table comparison */
     .table-comparison { margin-top: 16px; font-size: 12px; }
     .table-comparison table { width: 100%; border-collapse: collapse; }
     .table-comparison th, .table-comparison td {
-        padding: 6px 12px; text-align: left; border-bottom: 1px solid #e0e0e0;
+        padding: 6px 12px; text-align: left; border-bottom: 1px solid var(--line);
     }
-    .table-comparison th { font-weight: 700; color: #666; background: #fafafa; }
+    .table-comparison th { font-weight: 700; color: #666; background: var(--surface-2); }
     .table-comparison .synced { color: #2e7d32; }
     .table-comparison .missing { color: #c62828; }
 
@@ -146,11 +146,11 @@
         gap: 14px; margin-bottom: 24px;
     }
     .summary-card {
-        background: #fff; border: 2px solid #e0e0e0; border-radius: 10px;
+        background: var(--surface); border: 2px solid var(--line); border-radius: 10px;
         padding: 16px 20px; text-align: center;
     }
     .summary-card .value { font-size: 28px; font-weight: 800; color: #1a1a2e; }
-    .summary-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+    .summary-card .label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
     .summary-card.ok { border-color: #4caf50; }
     .summary-card.warn { border-color: #ff9800; }
 </style>
@@ -286,7 +286,7 @@
     </div>
 
     <!-- Azcopy Scheduled Incremental Sync -->
-    <div style="margin-top:14px;padding:10px 14px;background:#f8f9fa;border-radius:8px;border:1px solid #e0e0e0;">
+    <div style="margin-top:14px;padding:10px 14px;background:var(--surface-2);border-radius:8px;border:1px solid var(--line);">
         <div class="schedule-row" id="azcopy-schedule-row" style="margin-bottom:0;">
             <label><i class="fas fa-clock" style="color:#7b1fa2;"></i> Scheduled azcopy Sync:</label>
             <label class="schedule-toggle">
@@ -512,7 +512,7 @@
             html += '<tr><th>Lakehouse</th><th>Table</th><th>Primary</th><th>Secondary</th></tr>';
             const allLH = new Set([...Object.keys(data.primary || {}), ...Object.keys(data.secondary || {})]);
             if (allLH.size === 0) {
-                div.innerHTML = '<p style="color:#999;">No lakehouses found.</p>';
+                div.innerHTML = '<p style="color:var(--text-3);">No lakehouses found.</p>';
                 return;
             }
             allLH.forEach(lhName => {
@@ -529,7 +529,7 @@
                         const which = pCapErr ? 'Primary' : 'Secondary';
                         note = `<em style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> ${which} capacity is not active</em>`;
                     } else {
-                        note = '<em style="color:#999;">No tables found</em>';
+                        note = '<em style="color:var(--text-3);">No tables found</em>';
                     }
                     html += `<tr><td><strong>${escapeHtml(lhName)}</strong></td><td colspan="3">${note}</td></tr>`;
                 } else {
@@ -837,7 +837,7 @@
                 let text = '<span class="active"><i class="fas fa-check-circle"></i> Watching</span>';
                 if (data.check_count > 0) text += ` &middot; ${data.check_count} checks`;
                 if (data.replicated_count > 0) text += ` &middot; ${data.replicated_count} auto-replicated`;
-                if (data.last_status) text += ` <br><small style="color:#888;">${escapeHtml(data.last_status)}</small>`;
+                if (data.last_status) text += ` <br><small style="color:var(--text-3);">${escapeHtml(data.last_status)}</small>`;
                 info.innerHTML = text;
             } else {
                 info.innerHTML = '<span class="inactive">Off</span>';
@@ -936,14 +936,14 @@
             const select = document.getElementById('ml-item-select');
 
             if (!data.ml_pairs || data.ml_pairs.length === 0) {
-                info.innerHTML = '<em style="color:#999;">No ML Model/Experiment items found in primary workspace.</em>';
+                info.innerHTML = '<em style="color:var(--text-3);">No ML Model/Experiment items found in primary workspace.</em>';
                 return;
             }
 
             // Populate dropdown
             select.innerHTML = '<option value="ALL">All ML Items</option>';
             let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-            html += '<tr style="background:#f5f5f5;"><th style="padding:6px 10px;text-align:left;">Type</th><th style="padding:6px 10px;text-align:left;">Name</th><th style="padding:6px 10px;text-align:right;">Primary Files</th><th style="padding:6px 10px;text-align:right;">Secondary Files</th><th style="padding:6px 10px;text-align:center;">Status</th></tr>';
+            html += '<tr style="background:var(--surface-2);"><th style="padding:6px 10px;text-align:left;">Type</th><th style="padding:6px 10px;text-align:left;">Name</th><th style="padding:6px 10px;text-align:right;">Primary Files</th><th style="padding:6px 10px;text-align:right;">Secondary Files</th><th style="padding:6px 10px;text-align:center;">Status</th></tr>';
 
             let missingCount = 0;
             for (const m of data.ml_pairs) {
@@ -962,7 +962,7 @@
                 } else {
                     statusCell = '<span style="color:#c62828;">\u2717 Drift (' + m.primary_files + ' vs ' + m.secondary_files + ')</span>';
                 }
-                html += `<tr style="border-bottom:1px solid #eee;">`;
+                html += `<tr style="border-bottom:1px solid var(--line);">`;
                 html += `<td style="padding:5px 10px;"><span style="background:${m.type === 'MLModel' ? '#e8eaf6' : '#fce4ec'};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">${m.type}</span></td>`;
                 html += `<td style="padding:5px 10px;font-weight:600;">${escapeHtml(m.name)}</td>`;
                 html += `<td style="padding:5px 10px;text-align:right;">${isDefOnly ? '—' : m.primary_files}</td>`;

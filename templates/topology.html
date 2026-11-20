@@ -108,7 +108,7 @@
             <div class="topo-link-label" id="topo-lag">Lag: —</div>
             <div class="topo-link-arrow">- - - - - - - - - - - &rarr;</div>
             <div class="topo-link-rpo">RPO Target: 15 min</div>
-            <div class="topo-link-source" id="topo-lag-source" style="font-size:11px;color:#888;margin-top:2px;"></div>
+            <div class="topo-link-source" id="topo-lag-source" style="font-size:11px;color:var(--text-3);margin-top:2px;"></div>
         </div>
         <div class="topo-node standby-node">
             <div class="topo-node-region" id="topo-secondary-region"></div>
@@ -139,7 +139,7 @@
         <div class="repl-stat">
             <span class="repl-label">Replication Lag</span>
             <span class="repl-value" id="repl-lag">—</span>
-            <span class="repl-sub" id="repl-lag-source" style="font-size:11px;color:#888;"></span>
+            <span class="repl-sub" id="repl-lag-source" style="font-size:11px;color:var(--text-3);"></span>
         </div>
         <div class="repl-stat">
             <span class="repl-label">Artifact Drift</span>
@@ -161,12 +161,12 @@
     <div id="all-pairs-section" style="display:none;">
         <div class="pairs-search-bar" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
             <input type="text" id="pairs-search" placeholder="Search pairs..." oninput="searchPairsTable(this.value)"
-                   style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-            <span id="pairs-count" style="font-size:12px;color:#888;white-space:nowrap;"></span>
+                   style="flex:1;padding:8px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
+            <span id="pairs-count" style="font-size:12px;color:var(--text-3);white-space:nowrap;"></span>
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;" id="all-pairs-table">
             <thead>
-                <tr style="background:#f5f7fa;text-align:left;">
+                <tr style="background:var(--surface-2);text-align:left;">
                     <th style="padding:10px 12px;font-weight:700;color:#555;">Pair</th>
                     <th style="padding:10px 12px;font-weight:700;color:#555;">Primary</th>
                     <th style="padding:10px 12px;font-weight:700;color:#555;">Region</th>
@@ -182,7 +182,7 @@
         <div class="pairs-pagination" id="pairs-pagination" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;font-size:13px;">
         </div>
     </div>
-    <div id="all-pairs-single" style="color:#888;font-size:13px;">
+    <div id="all-pairs-single" style="color:var(--text-3);font-size:13px;">
         <i class="fas fa-info-circle"></i> Only one workspace pair configured.
         <a href="/setup" style="color:#2196F3;">Add another pair</a> to see multi-workspace topology.
     </div>
@@ -287,9 +287,9 @@
             <i class="fas fa-sync-alt"></i> Rescan
         </button>
         <span class="lin-spinner" id="conn-spinner" style="display:none;"></span>
-        <span id="conn-cache-info" style="font-size:11px;color:#999;margin-left:12px;vertical-align:middle;"></span>
+        <span id="conn-cache-info" style="font-size:11px;color:var(--text-3);margin-left:12px;vertical-align:middle;"></span>
     </h3>
-    <p style="font-size:12px;color:#888;margin:-8px 0 12px;">
+    <p style="font-size:12px;color:var(--text-3);margin:-8px 0 12px;">
         Shows which artifacts reference which inside secondary definitions.
         Stale connections (still pointing to primary IDs) are flagged red.
         <strong>Auto-loads from cache</strong> — click Rescan for a fresh definition inspection.
@@ -341,7 +341,7 @@
         </div>
         <div id="conn-grouped"></div>
         <details class="lin-details" style="margin-top:12px;">
-            <summary class="lin-details-summary" style="cursor:pointer;font-size:12px;color:#888;">
+            <summary class="lin-details-summary" style="cursor:pointer;font-size:12px;color:var(--text-3);">
                 <i class="fas fa-list"></i> Show raw connection details
             </summary>
             <table class="lin-table" id="conn-table" style="margin-top:8px;">
@@ -363,7 +363,7 @@
         </details>
     </div>
 
-    <div id="conn-placeholder" style="text-align:center;color:#aaa;padding:24px 0;font-size:13px;">
+    <div id="conn-placeholder" style="text-align:center;color:var(--text-3);padding:24px 0;font-size:13px;">
         <span class="lin-spinner"></span> Scanning secondary definitions&hellip; this may take 30–60 seconds on first load.
     </div>
 
@@ -414,7 +414,7 @@
     /* Region cards */
     .region-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
     .region-card {
-        border: 1px solid #e0e0e0; border-radius: 10px; padding: 18px 20px; background: #fff;
+        border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; background: var(--surface);
     }
     .region-card-header {
         display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
@@ -424,7 +424,7 @@
     .region-dot.red { background: #e53935; }
     .region-dot.grey { background: #bdbdbd; }
     .region-name { font-size: 16px; font-weight: 700; color: #333; }
-    .region-meta { font-size: 12px; color: #888; margin: -8px 0 10px 20px; }
+    .region-meta { font-size: 12px; color: var(--text-3); margin: -8px 0 10px 20px; }
     .region-role-badge {
         margin-left: auto; padding: 3px 12px; border-radius: 4px;
         font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
@@ -434,7 +434,7 @@
 
     .region-stats { display: flex; gap: 24px; flex-wrap: wrap; }
     .region-stat { flex: 1; min-width: 80px; }
-    .stat-label { display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.4px; }
+    .stat-label { display: block; font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.4px; }
     .stat-value { display: block; font-size: 18px; font-weight: 700; color: #333; margin: 2px 0 4px; }
     .health-bar { height: 4px; background: #eee; border-radius: 2px; overflow: hidden; }
     .health-fill { height: 100%; border-radius: 2px; transition: width 0.5s; background: #4caf50; }
@@ -451,7 +451,7 @@
     .primary-node { border-color: #2196f3; background: #e3f2fd; }
     .standby-node { border-color: #78909c; background: #eceff1; }
     .topo-node-name { font-size: 20px; font-weight: 700; color: #333; }
-    .topo-node-region { font-size: 11px; font-weight: 600; color: #888; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
+    .topo-node-region { font-size: 11px; font-weight: 600; color: var(--text-3); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
     .topo-node-role { font-size: 13px; font-weight: 700; color: #1565c0; margin: 4px 0; }
     .standby-node .topo-node-role { color: #546e7a; }
     .topo-node-cap { font-size: 14px; color: #666; }
@@ -465,10 +465,10 @@
     .topo-link-label {
         display: inline-block; padding: 6px 18px; border: 1px solid #bdbdbd;
         border-radius: 20px; font-size: 13px; font-weight: 600; color: #333;
-        background: #fff; margin-bottom: 6px;
+        background: var(--surface); margin-bottom: 6px;
     }
     .topo-link-arrow { font-size: 16px; color: #388e3c; letter-spacing: 2px; font-weight: 700; }
-    .topo-link-rpo { font-size: 12px; color: #888; margin-top: 4px; }
+    .topo-link-rpo { font-size: 12px; color: var(--text-3); margin-top: 4px; }
 
     .topo-footer {
         display: flex; justify-content: space-between; font-size: 13px; color: #666;
@@ -476,14 +476,14 @@
     }
 
     /* Replication summary */
-    .section-divider { border-top: 1px solid #e0e0e0; margin: 28px 0 20px; }
+    .section-divider { border-top: 1px solid var(--line); margin: 28px 0 20px; }
     .sub-title { font-size: 14px; font-weight: 700; color: #555; letter-spacing: 1px; margin: 0 0 14px; }
     .repl-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
     .repl-stat {
-        text-align: center; padding: 16px; background: #fff;
-        border: 1px solid #e0e0e0; border-radius: 8px;
+        text-align: center; padding: 16px; background: var(--surface);
+        border: 1px solid var(--line); border-radius: 8px;
     }
-    .repl-label { display: block; font-size: 12px; color: #888; margin-bottom: 6px; }
+    .repl-label { display: block; font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
     .repl-value { display: block; font-size: 22px; font-weight: 700; color: #333; }
 
     @media (max-width: 768px) {
@@ -501,36 +501,36 @@
     }
     .lin-stat {
         text-align: center; padding: 16px 12px; background: #f8fafb;
-        border: 1px solid #e0e0e0; border-radius: 8px;
+        border: 1px solid var(--line); border-radius: 8px;
     }
     .lin-stat-green { border-left: 4px solid #4caf50; }
     .lin-stat-orange { border-left: 4px solid #ff9800; }
     .lin-stat-red { border-left: 4px solid #e53935; }
     .lin-stat-value { display: block; font-size: 28px; font-weight: 700; color: #333; }
-    .lin-stat-label { display: block; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+    .lin-stat-label { display: block; font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 
     .lin-filter-bar {
         display: flex; gap: 10px; margin-bottom: 16px; align-items: center;
     }
     .lin-filter-input {
-        flex: 1; padding: 8px 14px; border: 1px solid #ddd; border-radius: 6px;
+        flex: 1; padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px;
         font-size: 13px; outline: none;
     }
     .lin-filter-input:focus { border-color: #2196F3; }
     .lin-filter-select {
-        padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
-        font-size: 13px; background: #fff; cursor: pointer;
+        padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px;
+        font-size: 13px; background: var(--surface); cursor: pointer;
     }
 
     .lin-table {
         width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px;
     }
     .lin-table th {
-        padding: 10px 12px; background: #f5f7fa; font-weight: 700; color: #555;
-        text-align: left; border-bottom: 2px solid #e0e0e0;
+        padding: 10px 12px; background: var(--surface-2); font-weight: 700; color: #555;
+        text-align: left; border-bottom: 2px solid var(--line);
     }
     .lin-table td {
-        padding: 10px 12px; border-bottom: 1px solid #eee; vertical-align: middle;
+        padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle;
     }
     .lin-table tr:hover td { background: #f0f7ff; }
     .lin-arrow-col { width: 36px; text-align: center !important; }
@@ -553,14 +553,15 @@
     .lin-badge-red { background: #e53935; }
 
     .lin-type-icon {
-        display: inline-block; width: 24px; height: 24px; border-radius: 4px;
-        text-align: center; line-height: 24px; font-size: 12px; color: #fff;
-        margin-right: 6px; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 24px; height: 24px; margin-right: 6px; flex-shrink: 0; vertical-align: middle;
     }
+    .lf-node-icon, .conn-type-icon { background: transparent !important; display: inline-flex; align-items: center; justify-content: center; }
+    .conn-chip .fx-icon { margin-right: 4px; }
 
     .lin-btn {
-        padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px;
-        background: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+        padding: 6px 14px; border: 1px solid var(--line); border-radius: 6px;
+        background: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer;
         transition: all 0.2s;
     }
     .lin-btn:hover { background: #f0f7ff; border-color: #2196F3; }
@@ -569,7 +570,7 @@
     .lin-btn-deep:hover { background: #fff3e0; }
 
     .lin-details {
-        margin-top: 16px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;
+        margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
     }
     .lin-details-summary {
         padding: 12px 16px; background: #f8fafb; font-weight: 600; font-size: 13px;
@@ -578,11 +579,11 @@
     .lin-details-summary:hover { background: #eef3f8; }
     .lin-details-warn { color: #e65100; }
     .lin-details-danger { color: #c62828; }
-    .lin-stale-desc { padding: 8px 16px; font-size: 12px; color: #888; margin: 0; }
+    .lin-stale-desc { padding: 8px 16px; font-size: 12px; color: var(--text-3); margin: 0; }
 
     .lin-row-stale td { background: #fff8f0 !important; }
     .lin-spinner {
-        display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd;
+        display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
         border-top-color: #2196F3; border-radius: 50%; animation: lin-spin 0.6s linear infinite;
         margin-right: 6px; vertical-align: middle;
     }
@@ -596,16 +597,16 @@
     }
     .conn-stat {
         flex: 1; text-align: center; padding: 10px 8px; background: #f8fafb;
-        border: 1px solid #e0e0e0; border-radius: 6px;
+        border: 1px solid var(--line); border-radius: 6px;
     }
     .conn-stat-blue { border-left: 4px solid #1565c0; }
     .conn-stat-green { border-left: 4px solid #4caf50; }
     .conn-stat-red { border-left: 4px solid #e53935; }
     .conn-stat-val { display: block; font-size: 22px; font-weight: 700; color: #333; }
-    .conn-stat-lbl { display: block; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+    .conn-stat-lbl { display: block; font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
 
     .lineage-flow-container {
-        background: #faf9f8; border: 1px solid #e0e0e0; border-radius: 10px;
+        background: #faf9f8; border: 1px solid var(--line); border-radius: 10px;
         padding: 24px; margin-bottom: 16px; overflow: auto; position: relative;
     }
     .lineage-flow-canvas {
@@ -620,7 +621,7 @@
     /* Flow card nodes */
     .lf-node {
         position: absolute; width: 200px;
-        background: #fff; border: 1.5px solid #e0e0e0; border-radius: 10px;
+        background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 10px 14px;
         transition: box-shadow 0.15s, border-color 0.15s;
         cursor: default;
@@ -637,7 +638,7 @@
         font-size: 12px; font-weight: 600; color: #333; line-height: 1.3;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .lf-node-type { font-size: 10px; color: #888; }
+    .lf-node-type { font-size: 10px; color: var(--text-3); }
     /* Flow edges */
     .lf-edge { fill: none; stroke-width: 1.5; }
     .lf-edge-healthy { stroke: #c8c6c4; }
@@ -665,7 +666,7 @@
     .conn-type-header {
         display: flex; align-items: center; gap: 8px; cursor: pointer;
         padding: 8px 12px; background: #f7f8fa; border-radius: 6px;
-        border: 1px solid #e8e8e8; user-select: none; margin-bottom: 4px;
+        border: 1px solid var(--line); user-select: none; margin-bottom: 4px;
     }
     .conn-type-header:hover { background: #eef1f5; }
     .conn-type-section[open] > .conn-type-header { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; }
@@ -682,11 +683,11 @@
     /* ── Grouped connection cards ── */
     .conn-group-grid {
         display: grid; grid-template-columns: 1fr; gap: 0;
-        border: 1px solid #e8e8e8; border-top: none; border-radius: 0 0 6px 6px;
+        border: 1px solid var(--line); border-top: none; border-radius: 0 0 6px 6px;
         overflow: hidden; margin-bottom: 8px;
     }
     .conn-group-card {
-        padding: 0; background: #fff; border-bottom: 1px solid #f0f0f0;
+        padding: 0; background: var(--surface); border-bottom: 1px solid #f0f0f0;
         transition: background 0.15s;
     }
     .conn-group-card:last-child { border-bottom: none; }
@@ -696,13 +697,13 @@
     }
     .conn-grp-header:hover { background: #fafbfc; }
     .conn-card-chevron {
-        font-size: 10px; color: #aaa; transition: transform 0.15s; flex-shrink: 0; width: 12px;
+        font-size: 10px; color: var(--text-3); transition: transform 0.15s; flex-shrink: 0; width: 12px;
     }
     .conn-card-open > .conn-grp-header .conn-card-chevron { transform: rotate(90deg); }
     .conn-grp-info { display: flex; flex-direction: column; flex: 1; }
     .conn-grp-name { font-size: 13px; font-weight: 600; color: #333; line-height: 1.2; }
     .conn-grp-target-count {
-        font-size: 11px; color: #888; margin-left: auto; flex-shrink: 0;
+        font-size: 11px; color: var(--text-3); margin-left: auto; flex-shrink: 0;
     }
     .conn-grp-stale-flag { color: #e53935; font-size: 13px; margin-left: 4px; flex-shrink: 0; }
     .conn-grp-body {
@@ -713,10 +714,10 @@
     .conn-chip {
         display: inline-flex; align-items: center; gap: 2px;
         padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
-        background: #f0f4f8; color: #333; border: 1px solid #e0e0e0;
+        background: #f0f4f8; color: #333; border: 1px solid var(--line);
     }
     .conn-chip-stale { background: #ffebee; color: #c62828; border-color: #ef9a9a; }
-    .conn-chip-type { font-size: 9px; color: #999; margin-left: 4px; text-transform: uppercase; }
+    .conn-chip-type { font-size: 9px; color: var(--text-3); margin-left: 4px; text-transform: uppercase; }
 </style>
 
 {% endblock %}
@@ -838,7 +839,7 @@
                 tbody.innerHTML = allPairs.map(ap => {
                     const syncColor = ap.sync_pct >= 90 ? '#2e7d32' : (ap.sync_pct >= 50 ? '#e65100' : '#c62828');
                     const crossRegion = ap.primary_region && ap.secondary_region && ap.primary_region !== ap.secondary_region;
-                    return `<tr style="border-bottom:1px solid #eee;${ap.active?'background:#e3f2fd;':''}" class="pair-row" data-pair-id="${esc(ap.id)}">
+                    return `<tr style="border-bottom:1px solid var(--line);${ap.active?'background:#e3f2fd;':''}" class="pair-row" data-pair-id="${esc(ap.id)}">
                         <td style="padding:10px 12px;font-weight:600;">${esc(ap.label || '—')} ${ap.active ? '<span style="font-size:10px;background:#2196F3;color:#fff;padding:1px 6px;border-radius:8px;">ACTIVE</span>':''}</td>
                         <td style="padding:10px 12px;">${esc(ap.primary_name || '—')}</td>
                         <td style="padding:10px 12px;font-size:12px;color:#666;">${esc(ap.primary_region || '—')}</td>
@@ -854,9 +855,9 @@
                 const pagDiv = document.getElementById('pairs-pagination');
                 if (pp.total_pages > 1) {
                     let html = '';
-                    html += `<button onclick="loadTopology(${Math.max(1, pp.page-1)})" ${pp.page <= 1 ? 'disabled' : ''} style="padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;">&laquo; Prev</button>`;
+                    html += `<button onclick="loadTopology(${Math.max(1, pp.page-1)})" ${pp.page <= 1 ? 'disabled' : ''} style="padding:4px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);cursor:pointer;font-size:12px;">&laquo; Prev</button>`;
                     html += `<span style="color:#666;">Page ${pp.page} of ${pp.total_pages}</span>`;
-                    html += `<button onclick="loadTopology(${Math.min(pp.total_pages, pp.page+1)})" ${pp.page >= pp.total_pages ? 'disabled' : ''} style="padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;">Next &raquo;</button>`;
+                    html += `<button onclick="loadTopology(${Math.min(pp.total_pages, pp.page+1)})" ${pp.page >= pp.total_pages ? 'disabled' : ''} style="padding:4px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);cursor:pointer;font-size:12px;">Next &raquo;</button>`;
                     pagDiv.innerHTML = html;
                     pagDiv.style.display = 'flex';
                 } else {
@@ -917,27 +918,9 @@
         loadConnections(false);  // auto-load (uses cache if available)
     });
 
-    const TYPE_ICONS = {
-        Lakehouse:        { icon: 'fa-database',       bg: '#1565c0' },
-        SemanticModel:    { icon: 'fa-chart-bar',      bg: '#7b1fa2' },
-        Report:           { icon: 'fa-file-alt',       bg: '#00838f' },
-        Notebook:         { icon: 'fa-book',           bg: '#2e7d32' },
-        DataPipeline:     { icon: 'fa-cogs',           bg: '#ef6c00' },
-        MLModel:          { icon: 'fa-brain',          bg: '#ad1457' },
-        MLExperiment:     { icon: 'fa-flask',          bg: '#6a1b9a' },
-        GraphQLApi:       { icon: 'fa-robot',          bg: '#00695c' },
-        DataAgent:        { icon: 'fa-robot',          bg: '#00695c' },
-        SparkJobDefinition:{ icon: 'fa-fire',          bg: '#d84315' },
-        Environment:      { icon: 'fa-leaf',           bg: '#33691e' },
-        Eventstream:      { icon: 'fa-bolt',           bg: '#f9a825' },
-        KQLQueryset:      { icon: 'fa-search',         bg: '#4527a0' },
-        Eventhouse:       { icon: 'fa-warehouse',      bg: '#283593' },
-        KQLDatabase:      { icon: 'fa-database',       bg: '#1a237e' },
-    };
-
+    // Item-type icons: shared FabricUI helper (official Microsoft Fabric icons).
     function typeIcon(type) {
-        const t = TYPE_ICONS[type] || { icon: 'fa-cube', bg: '#616161' };
-        return `<span class="lin-type-icon" style="background:${t.bg};"><i class="fas ${t.icon}"></i></span>`;
+        return `<span class="lin-type-icon">${FabricUI.icon(type)}</span>`;
     }
 
     function shortId(id) {
@@ -962,7 +945,7 @@
                     badge.className = 'topo-status-badge warning';
                     const tbody = document.getElementById('lineage-body');
                     if (tbody) {
-                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:20px;">'
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:20px;">'
                             + 'No primary/secondary workspace pair is configured. '
                             + '<a href="/setup" style="color:#1976d2;font-weight:600;">Go to Setup &raquo;</a> '
                             + 'to attach a workspace pair — topology will update automatically.'
@@ -1022,7 +1005,7 @@
     function renderRefMapping(refs) {
         const tbody = document.getElementById('ref-mapping-body');
         if (!refs.length) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">No reference mapping found. Populate data/reference_mapping.csv</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-3);">No reference mapping found. Populate data/reference_mapping.csv</td></tr>';
             return;
         }
         tbody.innerHTML = refs.map(r => `
@@ -1038,7 +1021,7 @@
     function renderLineageTable(pairs) {
         const tbody = document.getElementById('lineage-body');
         if (!pairs.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">No artifact pairs mapped. Populate data/artifact_mapping.csv</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);">No artifact pairs mapped. Populate data/artifact_mapping.csv</td></tr>';
             return;
         }
         tbody.innerHTML = pairs.map(p => {
@@ -1204,7 +1187,7 @@
                 renderConnectionGraph(d.connections || [], d.nodes || {});
             } catch (graphErr) {
                 console.error('Graph render error:', graphErr);
-                document.getElementById('lineage-nodes').innerHTML = '<div style="color:#c62828;padding:12px;">Graph render error: ' + (graphErr.message || graphErr) + '</div>';
+                document.getElementById('lineage-nodes').innerHTML = '<div style="color:#c62828;padding:12px;">Graph render error: ' + esc(graphErr.message || String(graphErr)) + '</div>';
             }
             renderConnectionTable(d.connections || []);
 
@@ -1218,7 +1201,7 @@
             spinner.style.display = 'none';
             if (placeholder) {
                 placeholder.style.display = '';
-                placeholder.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> Error loading graph: ' + (e.message || e) + '</span>';
+                placeholder.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-triangle"></i> Error loading graph: ' + esc(e.message || String(e)) + '</span>';
             }
         }
     }
@@ -1227,7 +1210,7 @@
         const nodesDiv = document.getElementById('lineage-nodes');
         const svg = document.getElementById('lineage-svg');
         if (!connections.length) {
-            nodesDiv.innerHTML = '<div style="text-align:center;color:#999;padding:32px;">No connections found</div>';
+            nodesDiv.innerHTML = '<div style="text-align:center;color:var(--text-3);padding:32px;">No connections found</div>';
             svg.innerHTML = '';
             return;
         }
@@ -1313,11 +1296,10 @@
         // ── Render HTML card nodes ──
         let nodesHtml = '';
         Object.values(nodeInfo).forEach(n => {
-            const icon = TYPE_ICONS[n.type] || { icon: 'fa-cube', bg: '#616161' };
             const colors = getTypeColor(n.type);
             nodesHtml += `<div class="lf-node" style="left:${n.x}px;top:${n.y}px;border-color:${colors.stroke};" data-nid="${n.id}">
                 <div class="lf-node-head">
-                    <span class="lf-node-icon" style="background:${icon.bg};"><i class="fas ${icon.icon}"></i></span>
+                    <span class="lf-node-icon">${FabricUI.icon(n.type)}</span>
                     <div class="lf-node-info">
                         <div class="lf-node-name" title="${esc(n.name)}">${esc(n.name)}</div>
                         <div class="lf-node-type">${esc(n.type)}</div>
@@ -1402,7 +1384,7 @@
         // ── Raw detail table (inside collapsible) ──
         const tbody = document.getElementById('conn-body');
         if (!connections.length) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">No connections discovered</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);">No connections discovered</td></tr>';
             return;
         }
         tbody.innerHTML = connections.map(c => {
@@ -1427,7 +1409,7 @@
     function renderGroupedView(connections) {
         const container = document.getElementById('conn-grouped');
         if (!connections.length) {
-            container.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">No connections discovered</div>';
+            container.innerHTML = '<div style="text-align:center;color:var(--text-3);padding:20px;">No connections discovered</div>';
             return;
         }
 
@@ -1462,7 +1444,6 @@
         typeOrder.forEach(typeName => {
             const keys = typeGroups[typeName];
             keys.sort((a, b) => artifactGroups[a].name.localeCompare(artifactGroups[b].name));
-            const typeIcon = TYPE_ICONS[typeName] || { icon: 'fa-cube', bg: '#616161' };
             const hasAnyStale = keys.some(k => artifactGroups[k].hasStale);
             const staleIndicator = hasAnyStale ? ' <span style="color:#e53935;font-size:11px;"><i class="fas fa-exclamation-triangle"></i></span>' : '';
             // Non-notebook types expanded by default, notebooks collapsed
@@ -1470,7 +1451,7 @@
 
             html += `<details class="conn-type-section" ${isOpen} data-conn-type="${esc(typeName)}">
                 <summary class="conn-type-header">
-                    <span class="conn-type-icon" style="background:${typeIcon.bg};"><i class="fas ${typeIcon.icon}"></i></span>
+                    <span class="conn-type-icon">${FabricUI.icon(typeName)}</span>
                     <span class="conn-type-label">${esc(typeName)}</span>
                     <span class="conn-type-count">${keys.length}</span>
                     ${staleIndicator}
@@ -1495,9 +1476,8 @@
 
                 let targetsHtml = Object.values(uniqueTargets).map(t => {
                     const chipClass = t.status === 'stale' ? 'conn-chip conn-chip-stale' : 'conn-chip';
-                    const icon = TYPE_ICONS[t.type] || { icon: 'fa-cube', bg: '#616161' };
                     return `<span class="${chipClass}" title="${esc(t.parts.join(', '))}">
-                        <i class="fas ${icon.icon}" style="color:${icon.bg};margin-right:4px;font-size:10px;"></i>${esc(t.name)}
+                        ${FabricUI.icon(t.type, 'sm')} ${esc(t.name)}
                         <span class="conn-chip-type">${esc(t.type)}</span>
                     </span>`;
                 }).join('');

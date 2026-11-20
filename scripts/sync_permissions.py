@@ -6,8 +6,11 @@ Purpose:
   assignments, OneLake data access controls, and connection role
   assignments for the DR executing service principal.
 
-  Item-level permissions are NOT synced: Fabric exposes no public REST API for
-  per-item permissions. See IMPLEMENTATION_GUIDE.md section 28.2.
+  Item-level permissions use supported APIs only (item_permissions.py):
+  semantic-model shares are replicated via the Power BI Datasets users API;
+  other item types are detected via the Fabric Admin item-access API (Fabric
+  admin or admin-enabled service principal) and listed for manual re-share,
+  because no public write API exists for them. See IMPLEMENTATION_GUIDE.md 28.2.
 
 Artifact Types Covered:
   All (permissions apply to all artifact types)
@@ -35,6 +38,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import common
+import item_permissions
 
 
 # Fabric connections are tenant-scoped, so connection GUIDs embedded in copied
@@ -745,10 +749,21 @@ def main():
         )
         sync_summary["workspace_permissions"] = ws_perm_result
         
-        # NOTE: Item-level permissions are intentionally not synced. Fabric has no
-        # public REST API to read or write per-item permissions, so item-level shares
-        # must be re-applied manually in the secondary workspace after failover.
-        # See IMPLEMENTATION_GUIDE.md section 28.2.
+        # Item-level permissions via supported APIs only (item_permissions.py):
+        # semantic-model shares are replicated (Power BI Datasets users API, GA);
+        # other item types are detected via the Fabric Admin API when the caller
+        # is allowed, and written to a manual remediation list (no public write API).
+        logger.info("\n=== SYNCING ITEM PERMISSIONS (SUPPORTED APIs) ===")
+        item_plan = item_permissions.build_plan(
+            common.api_call, common.powerbi_api_call,
+            args.primary_workspace, args.secondary_workspace,
+            common.get_items(args.primary_workspace), common.get_items(args.secondary_workspace),
+            logger=logger,
+        )
+        item_apply = {"applied": 0, "failed": 0, "skipped_manual": item_plan["counts"].get(item_permissions.ACTION_MANUAL, 0), "failures": []}
+        if not args.dry_run:
+            item_apply = item_permissions.apply_rows(common.powerbi_api_call, args.secondary_workspace, item_plan["rows"], logger)
+        sync_summary["item_permissions"] = {"plan": item_plan, "apply": item_apply}
 
         # Grant the DR executing principal a role on every connection in use
         logger.info("\n=== SYNCING CONNECTION ROLE ASSIGNMENTS ===")
@@ -779,8 +794,13 @@ def main():
         print(f"  Unchanged:                 {ws_perm_result['permissions_unchanged']}")
         print(f"  Removed (detected only):   {ws_perm_result['permissions_removed_detected']}")
         print(f"  Failed:                    {len(ws_perm_result['permissions_failed'])}")
-        print(f"--- Item Permissions ---")
-        print(f"  Not synced (no Fabric API) - re-apply item shares manually")
+        print(f"--- Item Permissions (supported APIs) ---")
+        cov = item_plan["coverage"]
+        print(f"  Semantic-model shares applied: {item_apply['applied']}{' (dry run)' if args.dry_run else ''}")
+        print(f"  Semantic-model grants failed:  {item_apply['failed']}")
+        print(f"  Manual portal shares needed:   {item_plan['counts'].get(item_permissions.ACTION_MANUAL, 0)}")
+        print(f"  Items NOT scanned:             {cov['not_scanned']}"
+              f"{'  (Fabric Admin API denied - run as Fabric admin for full coverage)' if cov.get('admin_api_denied') else ''}")
         print(f"--- Connection Role Assignments ---")
         print(f"  Items Scanned:             {conn_role_result['items_scanned']}")
         print(f"  Items Using No Connection: {conn_role_result['items_without_connections']}")

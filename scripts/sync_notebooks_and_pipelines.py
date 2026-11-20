@@ -111,7 +111,7 @@ def sync_notebooks(
         secondary_by_name = {nb["displayName"]: nb for nb in secondary_notebooks}
         
         # Build combined mapping for base64-aware remapping
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_nb in primary_notebooks:
             nb_name = primary_nb["displayName"]
@@ -249,7 +249,7 @@ def sync_pipelines(
         secondary_by_name = {p["displayName"]: p for p in secondary_pipelines}
         
         # Build combined mapping for base64-aware remapping
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_pipeline in primary_pipelines:
             pipeline_name = primary_pipeline["displayName"]

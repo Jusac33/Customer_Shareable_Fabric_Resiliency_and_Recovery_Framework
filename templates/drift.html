@@ -72,7 +72,7 @@
                 <option value="720">12 hours</option>
                 <option value="1440">24 hours</option>
             </select>
-            <span id="defcheck-info" style="font-size:11px;color:#888;"></span>
+            <span id="defcheck-info" style="font-size:11px;color:var(--text-3);"></span>
         </div>
     </div>
 
@@ -93,7 +93,7 @@
 <style>
     .drift-stats { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
     .drift-stat {
-        padding: 12px 20px; border-radius: 8px; background: #f5f5f5;
+        padding: 12px 20px; border-radius: 8px; background: var(--surface-2);
         border-left: 4px solid #ccc; min-width: 130px; text-align: center;
     }
     .drift-stat .label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
@@ -108,14 +108,14 @@
     .drift-stat.error .value { color: #c62828; }
 
     /* Collapsible type groups */
-    .type-group { margin-top: 12px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+    .type-group { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
     .type-group-header {
         display: flex; align-items: center; justify-content: space-between;
-        padding: 12px 16px; background: #fafafa; cursor: pointer; user-select: none;
+        padding: 12px 16px; background: var(--surface-2); cursor: pointer; user-select: none;
         border-bottom: 1px solid transparent; transition: background 0.15s;
     }
-    .type-group-header:hover { background: #f0f0f0; }
-    .type-group-header.expanded { border-bottom-color: #e0e0e0; }
+    .type-group-header:hover { background: var(--surface-2); }
+    .type-group-header.expanded { border-bottom-color: var(--line); }
     .type-group-header .group-left { display: flex; align-items: center; gap: 10px; }
     .type-group-header .group-name { font-weight: 700; font-size: 14px; color: #333; }
     .type-group-header .group-counts { display: flex; gap: 8px; }
@@ -128,7 +128,7 @@
     .mini-badge.ext  { background: #e3f2fd; color: #1565c0; }
     .mini-badge.defchg { background: #f3e5f5; color: #6a1b9a; }
     .type-group-header .chevron {
-        font-size: 12px; color: #999; transition: transform 0.2s;
+        font-size: 12px; color: var(--text-3); transition: transform 0.2s;
     }
     .type-group-header.expanded .chevron { transform: rotate(90deg); }
 
@@ -138,11 +138,11 @@
     .drift-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .drift-table th {
         padding: 8px 14px; text-align: left; font-weight: 600; color: #777;
-        background: #f5f5f5; border-bottom: 1px solid #e0e0e0; font-size: 11px;
+        background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 11px;
         text-transform: uppercase; letter-spacing: 0.5px;
     }
     .drift-table td { padding: 8px 14px; border-bottom: 1px solid #f0f0f0; }
-    .drift-table tr:hover { background: #f8f9fa; }
+    .drift-table tr:hover { background: var(--surface-2); }
 
     .badge {
         display: inline-block; padding: 3px 10px; border-radius: 12px;
@@ -154,8 +154,8 @@
     .badge.info { background: #e3f2fd; color: #1565c0; }
     .badge.defchg { background: #f3e5f5; color: #6a1b9a; }
 
-    .id-cell { font-family: monospace; font-size: 11px; color: #888; }
-    .no-data { color: #999; text-align: center; padding: 24px; }
+    .id-cell { font-family: monospace; font-size: 11px; color: var(--text-3); }
+    .no-data { color: var(--text-3); text-align: center; padding: 24px; }
 
     .btn-sync-item, .btn-check-item {
         padding: 3px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
@@ -163,12 +163,12 @@
     }
     .btn-sync-item { border-color: #9c27b0; color: #7b1fa2; background: #f3e5f5; }
     .btn-sync-item:hover { background: #e1bee7; }
-    .btn-check-item { border-color: #bbb; color: #666; background: #f5f5f5; }
+    .btn-check-item { border-color: #bbb; color: #666; background: var(--surface-2); }
     .btn-check-item:hover { background: #e0e0e0; }
 
     .defcheck-slider:before {
         position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px;
-        background: white; border-radius: 50%; transition: .3s;
+        background: var(--surface); border-radius: 50%; transition: .3s;
     }
     #defcheck-toggle:checked + .defcheck-slider { background: #9c27b0; }
     #defcheck-toggle:checked + .defcheck-slider:before { transform: translateX(16px); }
@@ -259,7 +259,7 @@
                     <div class="group-left">
                         <i class="fas fa-chevron-right chevron"></i>
                         <span class="group-name">${esc(typeName)}</span>
-                        <span style="color:#999;font-size:12px;">(${items.length})</span>
+                        <span style="color:var(--text-3);font-size:12px;">(${items.length})</span>
                     </div>
                     <div class="group-counts">${countBadges.join('')}</div>
                 </div>
@@ -333,7 +333,7 @@
             document.getElementById('system-artifacts-section').style.display = '';
             document.getElementById('system-artifacts-count').textContent = sysArtifacts.length + ' items in secondary';
             document.getElementById('system-artifacts-list').innerHTML = sysArtifacts.map(a =>
-                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 10px;background:#e3f2fd;border-radius:4px;font-size:11px;">${esc(a.name)} <span style="color:#888;">(${esc(a.type)})</span></span>`
+                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 10px;background:#e3f2fd;border-radius:4px;font-size:11px;">${esc(a.name)} <span style="color:var(--text-3);">(${esc(a.type)})</span></span>`
             ).join('');
         }
     }
@@ -365,7 +365,7 @@
             const opt = document.createElement('option');
             opt.value = i.displayName;
             opt.textContent = `${i.displayName} (${i.type})`;
-            if (i.definition_changed === true) opt.textContent += ' ⚠ changed';
+            if (i.definition_changed === true) opt.textContent += ' (changed)';
             select.appendChild(opt);
         });
     }
@@ -483,7 +483,7 @@
                 }
                 info.innerHTML = text;
             } else {
-                info.innerHTML = '<span style="color:#999;">Off</span>';
+                info.innerHTML = '<span style="color:var(--text-3);">Off</span>';
             }
         } catch (e) { /* ignore */ }
     }
@@ -528,16 +528,16 @@
                 body: JSON.stringify({ name }),
             });
             const data = await resp.json();
-            if (data.error) { status.textContent = '❌ ' + data.error; status.style.color = '#c62828'; return; }
+            if (data.error) { status.textContent = 'Error: ' + data.error; status.style.color = '#c62828'; return; }
 
             if (data.action === 'synced') {
-                status.innerHTML = `✅ <strong>${esc(name)}</strong> — definition changed, synced to secondary`;
+                status.innerHTML = `<i class="fas fa-circle-check" style="color:var(--ok)" aria-hidden="true"></i> <strong>${esc(name)}</strong> — definition changed, synced to secondary`;
                 status.style.color = '#2e7d32';
             } else if (data.action === 'unchanged') {
-                status.innerHTML = `✅ <strong>${esc(name)}</strong> — definitions match (hash: ${data.primary_hash || '—'})`;
+                status.innerHTML = `<i class="fas fa-circle-check" style="color:var(--ok)" aria-hidden="true"></i> <strong>${esc(name)}</strong> — definitions match (hash: ${data.primary_hash || '—'})`;
                 status.style.color = '#2e7d32';
             } else if (data.action === 'sync_failed') {
-                status.innerHTML = `⚠️ <strong>${esc(name)}</strong> — changed but sync failed: ${esc(data.error)}`;
+                status.innerHTML = `<i class="fas fa-triangle-exclamation" style="color:var(--warn)" aria-hidden="true"></i> <strong>${esc(name)}</strong> — changed but sync failed: ${esc(data.error)}`;
                 status.style.color = '#e65100';
             } else if (data.action === 'not_supported') {
                 status.innerHTML = `ℹ️ <strong>${esc(name)}</strong> — type doesn't support definition export`;
@@ -551,7 +551,7 @@
                 setTimeout(() => location.reload(), 2000);
             }
         } catch (e) {
-            status.textContent = '❌ Error: ' + e.message;
+            status.textContent = 'Error: ' + e.message;
             status.style.color = '#c62828';
         } finally {
             btn.disabled = false;
@@ -574,7 +574,7 @@
                 body: JSON.stringify({}),
             });
             const data = await resp.json();
-            if (data.error) { status.textContent = '❌ ' + data.error; status.style.color = '#c62828'; return; }
+            if (data.error) { status.textContent = 'Error: ' + data.error; status.style.color = '#c62828'; return; }
 
             const parts = [`${data.total_checked} checked`];
             if (data.synced > 0) parts.push(`${data.synced} synced`);
@@ -589,7 +589,7 @@
                 setTimeout(() => location.reload(), 2000);
             }
         } catch (e) {
-            status.textContent = '❌ Error: ' + e.message;
+            status.textContent = 'Error: ' + e.message;
             status.style.color = '#c62828';
         } finally {
             btn.disabled = false;

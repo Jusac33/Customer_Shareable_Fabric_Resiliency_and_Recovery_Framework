@@ -17,7 +17,7 @@
     </div>
 
     <div class="gw-grid" id="gw-grid">
-        <p style="color:#999; text-align:center; padding:30px;">Loading gateways...</p>
+        <p style="color:var(--text-3); text-align:center; padding:30px;">Loading gateways...</p>
     </div>
 </section>
 
@@ -40,8 +40,8 @@
         display: grid; grid-template-columns: 1fr; gap: 18px;
     }
     .gw-card {
-        border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px 24px;
-        background: #fff; transition: box-shadow 0.2s;
+        border: 1px solid var(--line); border-radius: 10px; padding: 20px 24px;
+        background: var(--surface); transition: box-shadow 0.2s;
     }
     .gw-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 
@@ -61,15 +61,15 @@
     .gw-type-onpremises { background: #fff3e0; color: #e65100; border: 1px solid #ff9800; }
     .gw-type-personal { background: #e8f5e9; color: #2e7d32; border: 1px solid #4caf50; }
     .gw-type-vnet { background: #e3f2fd; color: #1565c0; border: 1px solid #42a5f5; }
-    .gw-type-default { background: #f5f5f5; color: #616161; border: 1px solid #bdbdbd; }
+    .gw-type-default { background: var(--surface-2); color: #616161; border: 1px solid #bdbdbd; }
 
     .gw-meta {
         display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 14px;
         font-size: 12px; color: #666;
     }
     .gw-meta-item { display: flex; align-items: center; gap: 5px; }
-    .gw-meta-item i { color: #999; font-size: 11px; }
-    .gw-meta-label { color: #999; }
+    .gw-meta-item i { color: var(--text-3); font-size: 11px; }
+    .gw-meta-label { color: var(--text-3); }
     .gw-meta-value { color: #333; font-weight: 600; }
 
     .gw-ds-header {
@@ -85,8 +85,8 @@
         width: 100%; border-collapse: collapse; font-size: 12px;
     }
     .gw-ds-table th {
-        text-align: left; padding: 8px 10px; background: #f5f5f5;
-        color: #666; font-weight: 600; border-bottom: 1px solid #e0e0e0;
+        text-align: left; padding: 8px 10px; background: var(--surface-2);
+        color: #666; font-weight: 600; border-bottom: 1px solid var(--line);
     }
     .gw-ds-table td {
         padding: 8px 10px; border-bottom: 1px solid #f0f0f0; color: #333;
@@ -101,10 +101,10 @@
         background: #f3e5f5; color: #7b1fa2;
     }
     .gw-no-ds {
-        font-size: 12px; color: #999; font-style: italic; padding: 8px 0;
+        font-size: 12px; color: var(--text-3); font-style: italic; padding: 8px 0;
     }
     .gw-empty {
-        text-align: center; color: #999; padding: 40px 20px;
+        text-align: center; color: var(--text-3); padding: 40px 20px;
     }
     .gw-empty i { font-size: 40px; color: #ddd; margin-bottom: 12px; display: block; }
 
@@ -131,7 +131,7 @@
             const resp = await fetch('/api/gateways');
             const d = await resp.json();
             if (d.error) {
-                grid.innerHTML = `<p style="color:#c62828;">Error: ${d.error}</p>`;
+                grid.innerHTML = `<div class="alert alert-danger">Error: ${esc(d.error)}</div>`;
                 totalBadge.textContent = 'ERROR';
                 return;
             }
@@ -161,7 +161,7 @@
                     Dataflow, and SemanticModel connection references.
                 </div>`;
         } catch (err) {
-            grid.innerHTML = `<p style="color:#c62828;">Failed to load gateways: ${err.message}</p>`;
+            grid.innerHTML = `<div class="alert alert-danger">Failed to load gateways: ${esc(err.message)}</div>`;
             totalBadge.textContent = 'ERROR';
         }
     }
@@ -203,7 +203,7 @@
                     }
                 }
                 return `<tr>
-                    <td>${ds.datasourceName ? esc(ds.datasourceName) : '<span style="color:#999">—</span>'}</td>
+                    <td>${ds.datasourceName ? esc(ds.datasourceName) : '<span style="color:var(--text-3)">—</span>'}</td>
                     <td><span class="gw-ds-type-badge">${esc(ds.datasourceType)}</span></td>
                     <td class="gw-conn-detail">${connStr ? esc(connStr) : '—'}</td>
                     <td><span class="gw-ds-cred">${esc(ds.credentialType || '—')}</span></td>
@@ -229,9 +229,9 @@
         return `
             <div class="gw-card">
                 <div class="gw-card-header">
-                    <div class="gw-icon"><i class="fas fa-server"></i></div>
+                    <div class="gw-icon">${FabricUI.productIcon('datafactory', 'lg')}</div>
                     <span class="gw-name">${esc(gw.name)}</span>
-                    <span class="gw-type-badge ${typeClass}">${typeLabel}</span>
+                    <span class="gw-type-badge ${typeClass}">${esc(typeLabel)}</span>
                 </div>
                 <div class="gw-meta">${metaItems}</div>
                 ${dsHtml}

@@ -19,7 +19,7 @@
     .page-header p { font-size: 13px; color: #666; margin: 2px 0 0; }
 
     .sec-panel {
-        background: #fff; border-radius: 12px; border: 1px solid #e0e0e0;
+        background: var(--surface); border-radius: 12px; border: 1px solid var(--line);
         padding: 24px 28px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.04);
     }
     .sec-panel h4 {
@@ -30,7 +30,7 @@
 
     .btn-action {
         padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700;
-        border: 2px solid #5c6bc0; color: #5c6bc0; background: #fff;
+        border: 2px solid #5c6bc0; color: #5c6bc0; background: var(--surface);
         cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
         transition: all 0.2s;
     }
@@ -58,24 +58,24 @@
     .form-group label { font-size: 12px; font-weight: 600; color: #555; }
     .form-group input, .form-group select, .form-group textarea {
         padding: 7px 10px; border-radius: 6px; border: 1px solid #ccc;
-        font-size: 13px; background: #fafafa;
+        font-size: 13px; background: var(--surface-2);
     }
     .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-        outline: none; border-color: #5c6bc0; background: #fff;
+        outline: none; border-color: #5c6bc0; background: var(--surface);
     }
     .form-group textarea { resize: vertical; min-height: 60px; font-family: monospace; }
-    .form-group .help { font-size: 11px; color: #888; margin-top: 2px; }
+    .form-group .help { font-size: 11px; color: var(--text-3); margin-top: 2px; }
 
     /* Status table */
     .status-table {
         width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px;
     }
     .status-table th {
-        padding: 8px 12px; text-align: left; background: #f5f5f5; color: #444;
-        font-weight: 600; border-bottom: 2px solid #e0e0e0; font-size: 12px;
+        padding: 8px 12px; text-align: left; background: var(--surface-2); color: #444;
+        font-weight: 600; border-bottom: 2px solid var(--line); font-size: 12px;
     }
     .status-table td {
-        padding: 8px 12px; border-bottom: 1px solid #eee; color: #333;
+        padding: 8px 12px; border-bottom: 1px solid var(--line); color: #333;
     }
     .status-table tr:hover td { background: #f8f9ff; }
 
@@ -101,7 +101,7 @@
 
     /* Tabs */
     .tab-bar {
-        display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 20px;
+        display: flex; gap: 0; border-bottom: 2px solid var(--line); margin-bottom: 20px;
     }
     .tab-bar .tab {
         padding: 10px 20px; font-size: 13px; font-weight: 600; color: #666;
@@ -158,6 +158,9 @@
     <button class="tab" data-tab="replicate">
         <i class="fas fa-sync-alt"></i>&nbsp; Replicate to Secondary
     </button>
+    <button class="tab" data-tab="itemperms">
+        <i class="fas fa-user-shield"></i>&nbsp; Item permissions
+    </button>
 </div>
 
 <!-- ============ TAB: Data Access Roles ============ -->
@@ -189,6 +192,23 @@
         </div>
         <div id="replicate-log" class="log-output"></div>
         <div id="replicate-results" style="margin-top:16px;"></div>
+    </div>
+</div>
+
+<!-- ============ TAB: Item permissions (supported APIs only) ============ -->
+<div class="tab-content" id="tab-itemperms">
+    <div class="sec-panel">
+        <h4><i class="fas fa-user-shield" aria-hidden="true"></i> Direct item shares, primary → secondary</h4>
+        <p class="desc">Uses documented APIs only. Semantic-model shares are replicated with the Power BI Datasets users API.
+            Other item types are detected with the Fabric Admin item-access API (Fabric administrator required) and listed
+            for manual re-share, because no public API can write them. Principals with a workspace role are excluded.</p>
+        <div class="actions-row">
+            <button type="button" class="btn-action" id="ip-scan"><i class="fas fa-magnifying-glass" aria-hidden="true"></i> Scan</button>
+            <button type="button" class="btn-action green" id="ip-apply" disabled><i class="fas fa-user-check" aria-hidden="true"></i> Apply selected</button>
+            <span id="ip-status" class="text-muted" role="status"></span>
+        </div>
+        <div id="ip-coverage" style="margin:12px 0"></div>
+        <div id="ip-table"></div>
     </div>
 </div>
 
@@ -309,7 +329,7 @@ async function loadRolesStatus() {
 
             let statusBadge, statusDetail = '';
             if (pDisabled || pRoles.length === 0) {
-                statusBadge = `<span class="badge" style="background:#f5f5f5;color:#999;">No Roles</span>`;
+                statusBadge = `<span class="badge" style="background:var(--surface-2);color:var(--text-3);">No Roles</span>`;
                 totalNoRoles++;
             } else {
                 const missing = [...pNames].filter(n => !sNames.has(n));
@@ -322,7 +342,7 @@ async function loadRolesStatus() {
                     if (missing.length > 0) parts.push(missing.length + ' missing');
                     if (extra.length > 0) parts.push(extra.length + ' extra');
                     statusBadge = `<span class="badge warn"><i class="fas fa-exclamation-triangle"></i> Drift</span>`;
-                    statusDetail = `<div style="font-size:11px;color:#888;margin-top:2px;">${parts.join(', ')}</div>`;
+                    statusDetail = `<div style="font-size:11px;color:var(--text-3);margin-top:2px;">${parts.join(', ')}</div>`;
                     totalDrift++;
                 }
             }
@@ -332,13 +352,13 @@ async function loadRolesStatus() {
             if (pDisabled) {
                 pCol = `<span class="badge warn" style="font-size:11px;">Security not enabled</span>`;
             } else if (pRoles.length === 0) {
-                pCol = `<span style="color:#999;">—</span>`;
+                pCol = `<span style="color:var(--text-3);">—</span>`;
             } else {
                 pCol = pRoles.map(r => {
                     const cls = (r.cls_columns || []).length;
                     const tCount = (r.tables || []).length;
                     return `<span style="font-weight:600;">${r.name}</span>` +
-                        `<span style="color:#888;font-size:11px;margin-left:4px;">(${tCount} tables${cls > 0 ? ', ' + cls + ' CLS' : ''})</span>`;
+                        `<span style="color:var(--text-3);font-size:11px;margin-left:4px;">(${tCount} tables${cls > 0 ? ', ' + cls + ' CLS' : ''})</span>`;
                 }).join('<br>');
             }
 
@@ -350,13 +370,13 @@ async function loadRolesStatus() {
             } else if (sRoles.length === 0 && pRoles.length > 0) {
                 sCol = `<span style="color:#c62828;">Not replicated</span>`;
             } else if (sRoles.length === 0) {
-                sCol = `<span style="color:#999;">—</span>`;
+                sCol = `<span style="color:var(--text-3);">—</span>`;
             } else {
                 sCol = sRoles.map(r => {
                     const cls = (r.cls_columns || []).length;
                     const tCount = (r.tables || []).length;
                     return `<span style="font-weight:600;">${r.name}</span>` +
-                        `<span style="color:#888;font-size:11px;margin-left:4px;">(${tCount} tables${cls > 0 ? ', ' + cls + ' CLS' : ''})</span>`;
+                        `<span style="color:var(--text-3);font-size:11px;margin-left:4px;">(${tCount} tables${cls > 0 ? ', ' + cls + ' CLS' : ''})</span>`;
                 }).join('<br>');
             }
 
@@ -386,9 +406,9 @@ async function loadRolesStatus() {
                     const memberCount = (role.members?.microsoftEntraMembers?.length || 0) +
                                         (role.members?.fabricItemMembers?.length || 0);
 
-                    html += `<div style="background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;padding:14px 18px;margin:10px 0;">`;
+                    html += `<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:10px 0;">`;
                     html += `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">`;
-                    html += `<div><strong>${role.name}</strong> <span class="badge info">${ws}</span> <span class="badge" style="background:#f5f5f5;color:#666;">${lh.name}</span></div>`;
+                    html += `<div><strong>${role.name}</strong> <span class="badge info">${ws}</span> <span class="badge" style="background:var(--surface-2);color:#666;">${lh.name}</span></div>`;
                     html += `<div style="font-size:12px;color:#666;">${memberCount} member(s) · ${(role.tables||[]).length} table path(s)</div>`;
                     html += `</div>`;
                     html += `<div style="margin-top:8px;font-size:12px;"><strong>Tables:</strong> ${tables}</div>`;
@@ -399,7 +419,7 @@ async function loadRolesStatus() {
                             html += `<div style="margin-top:6px;font-size:12px;">`;
                             html += `<span class="badge warn">CLS</span> <strong>${tbl}</strong>: `;
                             html += `<span style="color:#555;">${cc.effect} ${(cc.action||[]).join(',')} on ${(cc.columns||[]).length} column(s)</span>`;
-                            html += `<div style="margin-left:16px;color:#888;font-size:11px;">${(cc.columns||[]).slice(0,10).join(', ')}${(cc.columns||[]).length > 10 ? '...' : ''}</div>`;
+                            html += `<div style="margin-left:16px;color:var(--text-3);font-size:11px;">${(cc.columns||[]).slice(0,10).join(', ')}${(cc.columns||[]).length > 10 ? '...' : ''}</div>`;
                             html += `</div>`;
                         });
                     }
@@ -409,7 +429,7 @@ async function loadRolesStatus() {
         });
 
         if (totalRoles === 0 && totalNoRoles === (data.lakehouses || []).length) {
-            html += '<div style="text-align:center;color:#888;padding:20px;">No Data Access Roles found on any lakehouse</div>';
+            html += '<div style="text-align:center;color:var(--text-3);padding:20px;">No Data Access Roles found on any lakehouse</div>';
         }
         document.getElementById('roles-status-table').innerHTML = html;
 
@@ -480,6 +500,68 @@ async function replicateAll() {
     }
     btn.disabled = false;
 }
+
+// ───── Item permissions (supported APIs) ─────
+const IP_LABEL = {
+    grant_dataset_user: ['Will grant', 'info'], upgrade_dataset_user: ['Will upgrade', 'info'],
+    manual_portal_share: ['Manual re-share', 'warning'], already_present: ['In place', 'success'],
+};
+async function scanItemPerms() {
+    const esc = FabricUI.esc, status = document.getElementById('ip-status');
+    status.textContent = 'Scanning…';
+    document.getElementById('ip-apply').disabled = true;
+    try {
+        const p = await FabricUI.fetchJSON('/api/security/item-permissions');
+        const cov = p.coverage || {};
+        const notScanned = Object.entries(cov.not_scanned_by_type || {}).map(([t, n]) => `${FabricUI.icon(t, 'sm')} ${esc(t)} ×${n}`).join(' &nbsp; ');
+        document.getElementById('ip-coverage').innerHTML = `
+            <div class="grid-4">
+                <div class="metric-card"><h3>Scanned (admin API)</h3><div class="metric-value">${cov.scanned_admin_api || 0}</div></div>
+                <div class="metric-card"><h3>Scanned (dataset API)</h3><div class="metric-value">${cov.scanned_dataset_api || 0}</div></div>
+                <div class="metric-card"><h3>Not scanned</h3><div class="metric-value" style="color:${cov.not_scanned ? 'var(--warn)' : 'var(--ok)'}">${cov.not_scanned || 0}</div></div>
+                <div class="metric-card"><h3>Open actions</h3><div class="metric-value">${(p.counts.grant_dataset_user || 0) + (p.counts.upgrade_dataset_user || 0) + (p.counts.manual_portal_share || 0)}</div></div>
+            </div>
+            ${cov.admin_api_denied ? `<div class="alert alert-warning" style="margin-top:12px"><i class="fas fa-eye-slash" aria-hidden="true"></i>
+                The Fabric Admin item-access API was denied, so these items were <strong>not scanned</strong> (not "no shares"): ${notScanned}.
+                Sign in as a Fabric administrator, or a service principal with <em>Service principals can access read-only admin APIs</em>.</div>` : ''}
+            ${(cov.errors || []).map(e => `<div class="alert alert-danger">${esc(e)}</div>`).join('')}`;
+        const rows = p.rows || [];
+        document.getElementById('ip-table').innerHTML = rows.length ? `<table class="table"><thead><tr>
+                <th scope="col"><span class="sr-only">Select</span></th><th scope="col">Item</th><th scope="col">Principal</th>
+                <th scope="col">Rights</th><th scope="col">Action</th><th scope="col">Note</th></tr></thead><tbody>
+            ${rows.map((r, i) => {
+                const [label, cls] = IP_LABEL[r.action] || [r.action, 'info'];
+                const can = r.action === 'grant_dataset_user' || r.action === 'upgrade_dataset_user';
+                return `<tr><td>${can ? `<input type="checkbox" class="ip-pick" data-i="${i}" checked aria-label="Apply ${esc(r.principal)} on ${esc(r.item_name)}">` : ''}</td>
+                    <td>${FabricUI.icon(r.item_type, 'sm')} ${esc(r.item_name)}</td><td>${esc(r.principal)} <span class="text-muted">(${esc(r.principal_type)})</span></td>
+                    <td>${esc(r.rights)}</td><td><span class="status-badge ${cls}">${esc(label)}</span></td><td class="text-muted">${esc(r.note)}</td></tr>`;
+            }).join('')}</tbody></table>`
+            : `<p class="text-muted">No direct item shares found on scanned items${cov.not_scanned ? ' (some items were not scanned — see above)' : ''}.</p>`;
+        window._ipRows = rows;
+        document.getElementById('ip-apply').disabled = !document.querySelector('.ip-pick');
+        status.textContent = 'Scanned ' + new Date(p.measured_at).toLocaleTimeString();
+    } catch (e) {
+        status.textContent = '';
+        document.getElementById('ip-table').innerHTML = `<div class="alert alert-danger">${FabricUI.esc(e.message)}</div>`;
+    }
+}
+async function applyItemPerms() {
+    const picks = [...document.querySelectorAll('.ip-pick:checked')].map(c => window._ipRows[+c.dataset.i]);
+    if (!picks.length) return;
+    if (!confirm(`Grant ${picks.length} semantic-model permission(s) in the secondary workspace?`)) return;
+    const btn = document.getElementById('ip-apply'); btn.disabled = true;
+    try {
+        const r = await FabricUI.fetchJSON('/api/security/item-permissions/apply', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows: picks.map(p => ({ secondary_item_id: p.secondary_item_id, principal: p.principal })) }),
+        });
+        FabricUI.toast(`Applied ${r.applied}, failed ${r.failed}${r.rejected ? `, rejected ${r.rejected} (not in current plan)` : ''}`, r.failed ? 'bad' : 'ok');
+    } catch (e) { FabricUI.toast('Apply failed: ' + e.message, 'bad'); }
+    await scanItemPerms();
+}
+document.getElementById('ip-scan').addEventListener('click', scanItemPerms);
+document.getElementById('ip-apply').addEventListener('click', applyItemPerms);
+document.querySelector('.tab[data-tab="itemperms"]').addEventListener('click', () => { if (!window._ipRows) scanItemPerms(); });
 
 // ───── Init ─────
 document.addEventListener('DOMContentLoaded', () => {

@@ -28,6 +28,9 @@ import requests
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, make_response
 from flask_cors import CORS
 
+import bcdr_freshness
+import item_permissions
+
 # Initialize Flask app
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.urandom(24)  # Session encryption key
@@ -746,29 +749,52 @@ def _update_artifact_csv(item_name: str, item_type: str,
         logger.warning(f"Could not update artifact_mapping.csv for {item_name}: {e}")
 
 
+def _sql_host(conn: str) -> str:
+    """Bare SQL endpoint hostname from a connection string or server value."""
+    m = _re.search(r"([a-z0-9-]+\.(?:[a-z0-9]+-)?(?:datawarehouse|database)\.fabric\.microsoft\.com)", conn or "", _re.I)
+    return m.group(1).lower() if m else ""
+
+
+def _item_sql_host(workspace_id: str, item: Dict[str, Any]) -> str:
+    """SQL endpoint host for a Lakehouse / Warehouse via the documented item APIs."""
+    kind = {"Lakehouse": "lakehouses", "Warehouse": "warehouses"}.get(item.get("type", ""))
+    if not kind:
+        return ""
+    try:
+        props = fabric_api("GET", f"/workspaces/{workspace_id}/{kind}/{item['id']}").get("properties", {})
+    except Exception as e:
+        logger.warning(f"SQL endpoint lookup failed for {item.get('displayName')}: {e}")
+        return ""
+    conn = (props.get("sqlEndpointProperties") or {}).get("connectionString") if kind == "lakehouses" else props.get("connectionString")
+    return _sql_host(conn or "")
+
+
 def _build_connection_map(primary_ws_id: str, secondary_ws_id: str) -> Dict[str, str]:
     """Build a string replacement map: primary references → secondary references.
-    Maps primary workspace ID, lakehouse IDs, and SQL endpoint server names
-    to their secondary equivalents."""
-    replacements = {}
-    # Map workspace IDs
-    replacements[primary_ws_id] = secondary_ws_id
 
-    # Map item IDs (by matching displayName)
+    Maps the workspace ID, item IDs (matched by type AND display name — a lakehouse
+    and its SQL analytics endpoint share a display name), and SQL analytics endpoint
+    hostnames. Hostnames are per workspace and are not GUIDs, so ID remapping alone
+    would leave Import / DirectQuery / DirectLake-on-SQL connection strings pointing
+    at the primary."""
+    replacements = {primary_ws_id: secondary_ws_id}
+
     p_items = get_workspace_items(primary_ws_id)
     s_items = get_workspace_items(secondary_ws_id)
-    s_by_name: Dict[str, Dict] = {}
-    for s in s_items:
-        s_by_name[s.get("displayName", "")] = s
+    s_by_key: Dict[tuple, Dict] = {(s.get("type", ""), s.get("displayName", "")): s for s in s_items}
 
     for p_item in p_items:
-        p_name = p_item.get("displayName", "")
+        key = (p_item.get("type", ""), p_item.get("displayName", ""))
+        s_item = s_by_key.get(key)
         p_id = p_item.get("id", "")
-        s_item = s_by_name.get(p_name)
         if s_item and p_id:
             s_id = s_item.get("id", "")
             if s_id and p_id != s_id:
                 replacements[p_id] = s_id
+            if key[0] in ("Lakehouse", "Warehouse"):
+                p_host, s_host = _item_sql_host(primary_ws_id, p_item), _item_sql_host(secondary_ws_id, s_item)
+                if p_host and s_host and p_host != s_host:
+                    replacements[p_host] = s_host
 
     return replacements
 
@@ -2285,14 +2311,29 @@ def get_workspace_health(workspace_id: str) -> Dict[str, Any]:
     try:
         items = _filter_business_items(get_workspace_items(workspace_id))
         item_count = len(items)
+        cap = _get_workspace_region(workspace_id)
+        cap_state = (cap.get("capacity_state") or "").lower()
+        # Health reflects real reachability signals: the workspace API answered,
+        # and its capacity reports Active. An empty workspace is reachable but EMPTY.
+        if cap_state and cap_state != "active":
+            health, status = 25, f"CAPACITY_{cap_state.upper()}"
+        elif item_count == 0:
+            health, status = 50, "EMPTY"
+        elif not cap_state:
+            health, status = 75, "CAPACITY_UNKNOWN"
+        else:
+            health, status = 100, "HEALTHY"
         return {
             'workspace_id': workspace_id,
             'name': _ws_name(role),
-            'health': 100 if item_count > 0 else 0,
+            'health': health,
             'item_count': item_count,
             'last_heartbeat': datetime.now().isoformat(),
             'capacity_used': item_count,
-            'status': 'HEALTHY' if item_count > 0 else 'EMPTY',
+            'capacity_state': cap.get("capacity_state", ""),
+            'capacity_sku': cap.get("capacity_sku", ""),
+            'region': cap.get("region", ""),
+            'status': status,
         }
     except Exception as e:
         logger.warning(f"Health check failed: {e}")
@@ -3709,6 +3750,8 @@ def api_workspace_pairs_delete(pair_id):
 @app.route('/api/active-pair-info', methods=['GET'])
 def api_active_pair_info():
     """Return enriched info about the active workspace pair for the context banner."""
+    if not is_authenticated():
+        return jsonify({"configured": False, "error": "Not authenticated"}), 401
     pair = _active_pair()
     if not pair:
         return jsonify({"configured": False})
@@ -3727,7 +3770,219 @@ def api_active_pair_info():
         "secondary_region": s_region.get("region", ""),
         "primary_capacity": p_region.get("capacity_name", ""),
         "secondary_capacity": s_region.get("capacity_name", ""),
+        "primary_capacity_sku": p_region.get("capacity_sku", ""),
+        "secondary_capacity_sku": s_region.get("capacity_sku", ""),
+        "primary_capacity_state": p_region.get("capacity_state", ""),
+        "secondary_capacity_state": s_region.get("capacity_state", ""),
     })
+
+
+# ============================================================================
+# SUPPORTED-API ADAPTERS (expose HTTP status for permission/coverage decisions)
+# ============================================================================
+
+class _ApiStatusError(RuntimeError):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _fabric_call(method: str, endpoint: str, payload: dict = None) -> Any:
+    try:
+        return fabric_api(method, endpoint, payload=payload)
+    except RuntimeError as e:
+        m = _re.match(r"Fabric API (\d{3})", str(e))
+        if m:
+            raise _ApiStatusError(int(m.group(1)), str(e)) from e
+        raise
+
+
+def _pbi_call(method: str, endpoint: str, payload: dict = None) -> Any:
+    token = _ensure_token()
+    if not token:
+        raise _ApiStatusError(401, "Not authenticated")
+    resp = requests.request(method, f"https://api.powerbi.com/v1.0/myorg{endpoint}",
+                            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                            json=payload, timeout=60)
+    if resp.status_code >= 400:
+        raise _ApiStatusError(resp.status_code, f"Power BI API {resp.status_code}: {resp.text[:400]}")
+    if not (resp.content or b"").strip():
+        return {}
+    try:
+        return resp.json()
+    except ValueError:
+        return {}
+
+
+@app.route('/api/bcdr/data-freshness', methods=['GET'])
+def api_data_freshness():
+    """Measured RPO: latest Delta commit per table, primary vs secondary (OneLake data plane)."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    p_id, s_id = _ws_id("primary"), _ws_id("secondary")
+    if not p_id or not s_id:
+        return jsonify({"error": "Workspace pair not configured"}), 400
+    cache_key = f"freshness:{p_id}:{s_id}"
+    if request.args.get("refresh") != "1" and cache_key in _cache and time.time() < _cache_ttl.get(cache_key, 0):
+        return jsonify({**_cache[cache_key], "cached": True})
+    token = _get_onelake_token()
+    if not token:
+        return jsonify({"error": "Could not acquire a OneLake (storage) token; data freshness cannot be measured."}), 503
+    lh = lambda ws: {i["displayName"]: i["id"] for i in get_workspace_items(ws) if i.get("type") == "Lakehouse"}
+    try:
+        result = bcdr_freshness.measure_pair(token, p_id, s_id, lh(p_id), lh(s_id))
+    except Exception as e:
+        logger.exception("Data freshness measurement failed")
+        return jsonify({"error": f"Data freshness measurement failed: {e}"}), 502
+    _cache[cache_key] = result
+    _cache_ttl[cache_key] = time.time() + 300
+    return jsonify(result)
+
+
+def _cached_json(cache_key: str, ttl: int, build):
+    """Cache a JSON-able result; ?refresh=1 forces a rebuild. Errors are never cached."""
+    if request.args.get("refresh") != "1" and cache_key in _cache and time.time() < _cache_ttl.get(cache_key, 0):
+        return {**_cache[cache_key], "cached": True}
+    result = build()
+    _cache[cache_key] = result
+    _cache_ttl[cache_key] = time.time() + ttl
+    return result
+
+
+@app.route('/api/security/item-permissions', methods=['GET'])
+def api_item_permissions_supported():
+    """Item-level permission delta using supported APIs only (read-only)."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    p_id, s_id = _ws_id("primary"), _ws_id("secondary")
+    if not p_id or not s_id:
+        return jsonify({"error": "Workspace pair not configured"}), 400
+
+    def build():
+        plan = item_permissions.build_plan(_fabric_call, _pbi_call, p_id, s_id,
+                                           get_workspace_items(p_id), get_workspace_items(s_id), logger=logger)
+        for r in plan["rows"]:
+            r.pop("keys", None)
+        return {**plan, "measured_at": datetime.utcnow().isoformat() + "Z"}
+    try:
+        return jsonify(_cached_json(f"itemperms:{p_id}:{s_id}", 120, build))
+    except Exception as e:
+        logger.exception("Item permission plan failed")
+        return jsonify({"error": f"Item permission scan failed: {e}"}), 502
+
+
+@app.route('/api/security/item-permissions/apply', methods=['POST'])
+def api_item_permissions_apply():
+    """Apply selected semantic-model grants. Re-plans server-side and only applies
+    rows that are in the fresh plan, so a client can't request arbitrary grants."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    p_id, s_id = _ws_id("primary"), _ws_id("secondary")
+    if not p_id or not s_id:
+        return jsonify({"error": "Workspace pair not configured"}), 400
+    wanted = {(r.get("secondary_item_id"), (r.get("principal") or "").lower())
+              for r in (request.get_json(silent=True) or {}).get("rows", [])}
+    plan = item_permissions.build_plan(_fabric_call, _pbi_call, p_id, s_id,
+                                       get_workspace_items(p_id), get_workspace_items(s_id), logger=logger)
+    grantable = [r for r in plan["rows"]
+                 if r["action"] in (item_permissions.ACTION_GRANT, item_permissions.ACTION_UPGRADE)
+                 and (r["secondary_item_id"], r["principal"].lower()) in wanted]
+    result = item_permissions.apply_rows(_pbi_call, s_id, grantable, logger)
+    result["rejected"] = len(wanted) - len(grantable)
+    _cache.pop(f"itemperms:{p_id}:{s_id}", None)
+    return jsonify(result), (200 if result["failed"] == 0 else 207)
+
+
+def _model_storage_modes(workspace_id: str, item_id: str) -> Dict[str, int]:
+    """Partition storage modes from the model's TMDL/BIM definition (Fabric getDefinition)."""
+    resp = fabric_api("POST", f"/workspaces/{workspace_id}/items/{item_id}/getDefinition", timeout=120)
+    modes: Dict[str, int] = {}
+    for part in (resp.get("definition") or {}).get("parts", []):
+        try:
+            body = base64.b64decode(part.get("payload", "")).decode("utf-8", "replace")
+        except Exception:
+            continue
+        path = part.get("path", "")
+        if path.endswith(".tmdl"):
+            explicit = _re.findall(r"^\s*mode:\s*(\w+)", body, _re.M)
+            partitions = len(_re.findall(r"^\s*partition\s", body, _re.M))
+            for m in explicit:
+                modes[m] = modes.get(m, 0) + 1
+            if partitions > len(explicit):
+                modes["import"] = modes.get("import", 0) + partitions - len(explicit)
+        elif path.endswith("model.bim"):
+            try:
+                for t in json.loads(body).get("model", {}).get("tables", []):
+                    for p in t.get("partitions", []):
+                        m = p.get("mode") or "import"
+                        modes[m] = modes.get(m, 0) + 1
+            except ValueError:
+                pass
+    return modes
+
+
+@app.route('/api/bcdr/model-readiness', methods=['GET'])
+def api_model_readiness():
+    """Is each secondary semantic model actually queryable? Storage mode + last refresh/framing."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    s_id = _ws_id("secondary")
+    if not s_id:
+        return jsonify({"error": "Secondary workspace not configured"}), 400
+
+    def check(m):
+        entry = {"id": m["id"], "name": m["displayName"], "modes": {}, "last_refresh": None, "ready": False, "issues": []}
+        try:
+            entry["modes"] = _model_storage_modes(s_id, m["id"])
+        except Exception as e:
+            entry["issues"].append(f"definition unreadable: {e}")
+        try:
+            hist = _pbi_call("GET", f"/groups/{s_id}/datasets/{m['id']}/refreshes?$top=1").get("value", [])
+            if hist:
+                h = hist[0]
+                entry["last_refresh"] = {"status": h.get("status"), "type": h.get("refreshType"),
+                                         "end": h.get("endTime") or h.get("startTime")}
+        except Exception as e:
+            entry["issues"].append(f"refresh history unreadable: {e}")
+        needs_data = any(k in entry["modes"] for k in ("import", "directLake", "dual"))
+        ok_refresh = (entry["last_refresh"] or {}).get("status") == "Completed"
+        if needs_data and not ok_refresh:
+            entry["issues"].append("never refreshed/framed in secondary - reports will not show data until it is")
+        entry["ready"] = (not needs_data or ok_refresh) and not [i for i in entry["issues"] if "unreadable" in i]
+        return entry
+
+    def build():
+        from concurrent.futures import ThreadPoolExecutor
+        targets = [i for i in get_workspace_items(s_id) if i.get("type") == "SemanticModel"
+                   and not i.get("displayName", "").startswith("BCDR_")]
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            models = list(pool.map(check, targets))
+        return {"models": models, "measured_at": datetime.utcnow().isoformat() + "Z",
+                "all_ready": all(m["ready"] for m in models)}
+    return jsonify(_cached_json(f"modelready:{s_id}", 120, build))
+
+
+@app.route('/api/bcdr/model-refresh', methods=['POST'])
+def api_model_refresh():
+    """Trigger a refresh (framing for DirectLake) of secondary semantic models. Power BI REST, GA."""
+    if not is_authenticated():
+        return jsonify({"error": "Not authenticated"}), 401
+    s_id = _ws_id("secondary")
+    if not s_id:
+        return jsonify({"error": "Secondary workspace not configured"}), 400
+    wanted = set((request.get_json(silent=True) or {}).get("model_ids") or [])
+    results = []
+    for m in [i for i in get_workspace_items(s_id) if i.get("type") == "SemanticModel"]:
+        if wanted and m["id"] not in wanted:
+            continue
+        try:
+            _pbi_call("POST", f"/groups/{s_id}/datasets/{m['id']}/refreshes", {"notifyOption": "NoNotification"})
+            results.append({"model": m["displayName"], "status": "accepted"})
+        except Exception as e:
+            results.append({"model": m["displayName"], "status": "failed", "error": str(e)[:300]})
+    _cache.pop(f"modelready:{s_id}", None)
+    failed = [r for r in results if r["status"] == "failed"]
+    return jsonify({"results": results, "failed": len(failed)}), (207 if failed else 202)
 
 
 # ============================================================================

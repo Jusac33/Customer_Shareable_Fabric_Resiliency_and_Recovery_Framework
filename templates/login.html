@@ -4,36 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In - Fabric Resiliency & Recovery</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/fabric/product_fabric.svg">
+    <link rel="stylesheet" href="/static/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: transparent;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         .login-container {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            background: var(--surface);
+            -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+            border: 1px solid var(--glass-edge);
+            border-radius: 20px;
+            box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,.7);
             width: 440px;
-            max-width: 90vw;
+            max-width: 92vw;
             overflow: hidden;
+            animation: pop-in var(--t-slow) var(--ease-emph);
         }
         .login-header {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            padding: 40px 30px 30px;
+            padding: 36px 30px 22px;
             text-align: center;
-            color: white;
+            color: var(--text);
+            border-bottom: 1px solid var(--line);
         }
         .login-header .logo-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
-            color: #64B5F6;
+            margin-bottom: 12px;
         }
+        .login-header .logo-icon img { width: 56px; height: 56px; filter: drop-shadow(0 6px 14px rgba(17,120,101,.35)); }
         .login-header h1 {
             font-size: 24px;
             font-weight: 700;
@@ -41,7 +45,7 @@
         }
         .login-header p {
             font-size: 13px;
-            color: #aaa;
+            color: var(--text-3);
         }
         .login-body {
             padding: 30px;
@@ -89,7 +93,7 @@
             text-align: center;
         }
         .device-code-box {
-            background: #f8f9fa;
+            background: var(--surface-2);
             border: 2px dashed #2196F3;
             border-radius: 8px;
             padding: 25px;
@@ -163,7 +167,7 @@
             padding: 20px 0;
         }
         .spinner {
-            border: 4px solid #e0e0e0;
+            border: 4px solid var(--line);
             border-top: 4px solid #2196F3;
             border-radius: 50%;
             width: 50px;
@@ -206,7 +210,7 @@
         .login-footer {
             text-align: center;
             padding: 15px 30px 25px;
-            color: #999;
+            color: var(--text-3);
             font-size: 12px;
         }
 
@@ -215,7 +219,7 @@
             display: flex;
             gap: 0;
             margin-bottom: 20px;
-            border-bottom: 2px solid #e0e0e0;
+            border-bottom: 2px solid var(--line);
         }
         .auth-tab {
             flex: 1;
@@ -224,7 +228,7 @@
             background: none;
             font-size: 13px;
             font-weight: 600;
-            color: #888;
+            color: var(--text-3);
             cursor: pointer;
             border-bottom: 2px solid transparent;
             margin-bottom: -2px;
@@ -252,7 +256,7 @@
         .sp-field input {
             width: 100%;
             padding: 10px 12px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--line);
             border-radius: 6px;
             font-size: 14px;
             font-family: inherit;
@@ -267,9 +271,10 @@
     </style>
 </head>
 <body>
+    <div class="aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="grain"></span></div>
     <div class="login-container">
         <div class="login-header">
-            <div class="logo-icon"><i class="fas fa-shield-halved"></i></div>
+            <div class="logo-icon"><img src="/static/img/fabric/product_fabric.svg" alt="" width="56" height="56"></div>
             <h1>Fabric Resiliency & Recovery</h1>
             <p>Business Continuity & Recovery Dashboard</p>
         </div>

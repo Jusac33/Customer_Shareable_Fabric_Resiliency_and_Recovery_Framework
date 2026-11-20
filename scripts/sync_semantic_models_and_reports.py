@@ -72,7 +72,7 @@ def sync_semantic_models(
         secondary_by_name = {m["displayName"]: m for m in secondary_models}
         
         # Build combined mapping for base64-aware remapping
-        mapping = common.build_combined_mapping()
+        mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
         
         for primary_model in primary_models:
             model_name = primary_model["displayName"]
@@ -190,7 +190,7 @@ def sync_reports(
                 # Build combined mapping: model_mapping + all reference/artifact mappings
                 # This ensures definition.pbir connectionString, semanticmodelid,
                 # and workspace references are all remapped
-                mapping = common.build_combined_mapping()
+                mapping = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
                 mapping.update(model_mapping)
                 
                 # Remap all references (base64-aware)

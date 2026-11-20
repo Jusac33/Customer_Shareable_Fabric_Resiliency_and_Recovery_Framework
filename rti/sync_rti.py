@@ -268,7 +268,7 @@ def sync_all_rti(
         all_primary, all_secondary,
     )
     # Merge with the standard reference/artifact/connection mappings
-    combined = common.build_combined_mapping()
+    combined = common.build_combined_mapping(primary_workspace_id, secondary_workspace_id)
     combined.update(conn_map)
     logger.info(f"Connection map: {len(combined)} replacement(s)")
 

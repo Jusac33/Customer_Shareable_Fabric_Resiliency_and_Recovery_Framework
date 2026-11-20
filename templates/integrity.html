@@ -58,7 +58,7 @@
 <style>
     .assurance-stats { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
     .assurance-stat {
-        padding: 12px 20px; border-radius: 8px; background: #f5f5f5;
+        padding: 12px 20px; border-radius: 8px; background: var(--surface-2);
         border-left: 4px solid #ccc; min-width: 120px; text-align: center;
     }
     .assurance-stat .label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
@@ -74,10 +74,10 @@
     .assurance-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .assurance-table th {
         padding: 10px 14px; text-align: left; font-weight: 700; color: #555;
-        background: #fafafa; border-bottom: 2px solid #e0e0e0;
+        background: var(--surface-2); border-bottom: 2px solid var(--line);
     }
-    .assurance-table td { padding: 10px 14px; border-bottom: 1px solid #eee; }
-    .assurance-table tr:hover { background: #f8f9fa; }
+    .assurance-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+    .assurance-table tr:hover { background: var(--surface-2); }
 
     .badge {
         display: inline-block; padding: 3px 10px; border-radius: 12px;
@@ -101,7 +101,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Show loading state
         document.getElementById('assurance-table-body').innerHTML =
-            '<tr><td colspan="6" style="text-align:center;padding:30px;color:#888;">' +
+            '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-3);">' +
             '<i class="fas fa-spinner fa-spin" style="font-size:20px;margin-right:8px;"></i> Loading assurance checks…</td></tr>';
         document.getElementById('stat-verified').textContent = '…';
         document.getElementById('stat-warnings').textContent = '…';
@@ -140,7 +140,7 @@
             else failures++;
 
             const badgeClass = c.status === 'pass' ? 'success' : (c.status === 'warning' ? 'warning' : 'error');
-            const badgeLabel = c.status === 'pass' ? '✓ Verified' : (c.status === 'warning' ? '⚠ Warning' : '✗ Failed');
+            const badgeLabel = c.status === 'pass' ? 'Verified' : (c.status === 'warning' ? 'Warning' : 'Failed');
             const varClass = c.variance === '0' || c.variance === '0 rows' || c.variance === '100%' ? 'variance-zero' : 'variance-nonzero';
 
             rows += `<tr>
@@ -155,14 +155,14 @@
 
         // Show a loading row at top if slow phase is still pending
         if (loadingMsg) {
-            rows = '<tr><td colspan="6" style="text-align:center;padding:12px;color:#888;background:#fafafa;">' +
+            rows = '<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--text-3);background:var(--surface-2);">' +
                 '<i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>' + esc(loadingMsg) + '</td></tr>' + rows;
         }
 
         document.getElementById('stat-verified').textContent = verified;
         document.getElementById('stat-warnings').textContent = warnings;
         document.getElementById('stat-failures').textContent = failures;
-        document.getElementById('assurance-table-body').innerHTML = rows || '<tr><td colspan="6" style="color:#999;text-align:center;padding:20px;">No assurance data available</td></tr>';
+        document.getElementById('assurance-table-body').innerHTML = rows || '<tr><td colspan="6" style="color:var(--text-3);text-align:center;padding:20px;">No assurance data available</td></tr>';
 
         // System replication artifacts
         const sysArtifacts = assuranceData.system_artifacts || [];
@@ -170,7 +170,7 @@
             document.getElementById('system-artifacts-section').style.display = '';
             document.getElementById('system-artifacts-count').textContent = sysArtifacts.length + ' items in secondary';
             document.getElementById('system-artifacts-list').innerHTML = sysArtifacts.map(a =>
-                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 10px;background:#e3f2fd;border-radius:4px;font-size:11px;">${esc(a.name)} <span style="color:#888;">(${esc(a.type)})</span></span>`
+                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 10px;background:#e3f2fd;border-radius:4px;font-size:11px;">${esc(a.name)} <span style="color:var(--text-3);">(${esc(a.type)})</span></span>`
             ).join('');
         }
     }
