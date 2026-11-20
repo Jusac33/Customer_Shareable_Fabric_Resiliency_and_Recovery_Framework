@@ -895,27 +895,54 @@ The CLI failover script performs a full orchestrated failover:
 ```
 Step 1: Validate secondary currency (artifact count comparison + sync plan check)
 Step 2: Pause primary workspace
+        ├── Probe primary reachability (GET /workspaces/{ws})
         ├── Cancel all running jobs (GET /jobs/instances → POST .../cancel)
-        ├── Disable all schedules (PATCH /jobScheduler {enabled: false})
-        └── Save schedule manifest (for re-enablement on secondary)
+        ├── Disable enabled schedules (PATCH .../jobs/{jobType}/schedules/{id} {enabled: false, configuration})
+        └── Keep the list of schedules that were enabled
 Step 3: Final data sync (imports and runs sync modules: lakehouses, notebooks, semantic models, etc.)
 Step 4: Validate secondary resources (per-type accessibility check)
 Step 5: Activate secondary
-        ├── Map primary schedule manifest to secondary item IDs via artifact_mapping.csv
-        └── Enable schedules on secondary counterparts (PATCH /jobScheduler {enabled: true})
+        ├── Primary unreachable? merge enabled schedules from data/schedule_manifest.json (last sync)
+        ├── Match each schedule on the secondary by item type + name + job type + configuration
+        └── Enable the paused replica (PATCH), or create it enabled if missing (POST)
 ```
 
-**Schedulable artifact types** handled: `DataPipeline`, `Notebook`, `SparkJobDefinition`, `DataflowsGen2`
+**Schedulable artifact types** handled: `DataPipeline`, `Notebook`, `SparkJobDefinition`,
+`Dataflow`, `CopyJob`, `Lakehouse` (table maintenance). The job type is probed per item type
+from a candidate list (`bcdr_schedules.JOB_TYPE_CANDIDATES`); unresolved types are reported,
+never guessed.
 
-**Fabric APIs used for pause/activate:**
+**Schedule replication (steady state).** Every sync (`scripts/bulk_sync.py`, the dashboard's
+bulk sync, or `scripts/sync_schedules.py`) replicates each primary schedule to the secondary
+item **paused** and writes `data/schedule_manifest.json`. A standby secondary therefore
+already holds every schedule, and an unplanned failover can enable the right ones without
+reaching the primary.
+
+> **Fixed:** earlier versions called `/workspaces/{ws}/items/{id}/jobScheduler`, which is not
+> a Fabric endpoint (it returns 404). Errors were swallowed, so failover silently disabled
+> and enabled nothing. Verified live: legacy path 404; documented path 200.
+
+**Real-time test (crestshield, 14/14, cleaned up):** test notebook schedules were created on
+the primary in a 2030 window so they could never fire: one enabled, one disabled. Checked:
+- replicated paused; a re-sync created no duplicates;
+- planned failover paused the primary and enabled only the enabled schedule on the secondary;
+- unplanned failover (primary forced unreachable) activated from the last-sync manifest;
+- failback returned the secondary to standby and re-enabled the primary;
+- all test schedules were deleted.
+
+**Fabric APIs used for pause/activate (Job Scheduler, GA):**
 | Operation | API Endpoint |
 |-----------|-------------|
 | List job instances | `GET /workspaces/{ws}/items/{id}/jobs/instances` |
 | Cancel running job | `POST /workspaces/{ws}/items/{id}/jobs/instances/{jobId}/cancel` |
-| Get schedule | `GET /workspaces/{ws}/items/{id}/jobScheduler` |
-| Enable/disable schedule | `PATCH /workspaces/{ws}/items/{id}/jobScheduler` |
+| List schedules | `GET /workspaces/{ws}/items/{id}/jobs/{jobType}/schedules` |
+| Create schedule | `POST /workspaces/{ws}/items/{id}/jobs/{jobType}/schedules` |
+| Enable/disable schedule | `PATCH /workspaces/{ws}/items/{id}/jobs/{jobType}/schedules/{scheduleId}` (body needs `configuration`) |
 
-The schedule manifest is persisted in `data/failover_log.json` so the failback script knows which schedules to re-enable on primary.
+The paused-schedule list is persisted in `data/failover_log.json` so the failback script
+knows which schedules to re-enable on primary. Without a failover log, failback falls back to
+the enabled schedules in `data/schedule_manifest.json`. It never enables every disabled
+schedule.
 
 ### Failback Execution (Dashboard)
 After the disaster is resolved, **Execute Failback** reverses the process:
@@ -1952,7 +1979,7 @@ portal backend (`*.analysis.windows.net/metadata/access`) has been removed.
 | Detect | Fabric Admin `GET /v1/admin/workspaces/{ws}/items/{item}/users` (preview, 200 req/hr) | All | Fabric administrator, or service principal with *Service principals can access read-only admin APIs* |
 | Detect | Power BI `GET /groups/{ws}/datasets/{id}/users` (GA) | Semantic models | Workspace member |
 | Replicate | Power BI `POST` / `PUT /groups/{ws}/datasets/{id}/users` (GA) | Semantic models | Needs ReadReshare on the model |
-| Everything else | No public write API | All other types | Listed as `manual_portal_share`, re-checked by `--verify` |
+| Everything else | No public write API | All other types | Closed with the access-group bootstrap (28.2.2); re-checked by `--verify` |
 
 Rules:
 
@@ -1981,6 +2008,84 @@ CSV contains principal identifiers and is gitignored.
 was scanned; its only principals were workspace-role holders, so nothing needed
 replicating. The other 22 items were reported NOT SCANNED because the caller is
 not a Fabric administrator. A run as a Fabric admin is required for full coverage.
+
+#### 28.2.2 Access-group bootstrap — closing the gap for every other item type
+
+There is no public API that writes a direct share on lakehouses, warehouses,
+notebooks, reports, and other non-semantic-model items. The Fabric *Share* API
+(`/shares`, beta) is external, cross-tenant data sharing by invitation, not
+in-tenant item permissions. The supported workaround moves the moving part from
+the share into an Entra group:
+
+1. **Identify** who has direct access to each primary item (admin item-access API).
+2. **Push** them, with Microsoft Graph, into one Entra security group per
+   *(item, permission set)*. Graph requires `Group.ReadWrite.All`,
+   `GroupMember.ReadWrite.All` and `User.Read.All`.
+3. **Share the secondary item with that group once.** For semantic models this is
+   done by API (Datasets users, `principalType: Group`). For other items it is a
+   one-time portal share, listed in `data/item_access_portal_steps.csv`. The list
+   drops each item as soon as the admin API sees the group on it.
+
+From then on every access change is a group-membership change, which the
+bootstrap keeps in sync by API. When a primary item is already shared with a
+group, the same group only needs sharing once on the secondary, because membership
+is shared automatically. Service principals become group members too, so the
+semantic-model "cannot grant to App" gap is closed by the group grant.
+
+```bash
+python scripts/sync_item_permissions.py --groups-plan              # read-only; writes data/item_access_groups.csv
+python scripts/sync_item_permissions.py --groups-apply --dry-run   # Graph reads only; shows groups/members to create
+python scripts/sync_item_permissions.py --groups-apply             # creates groups, adds members, grants models
+python scripts/sync_item_permissions.py --verify                   # group members count as replicated
+```
+
+- Group names are stable per item and permission set (`mailNickname` `bcdr-ia-<item>-<hash>`),
+  so re-runs maintain the same group.
+- Members are **only added**. Extra members are reported, never removed.
+- `--plan` and `--verify` expand group shares on secondary items into their
+  transitive members, so a user covered through the group is reported as present.
+  Groups that can't be read, or that have more than 20,000 members, are not
+  credited, which keeps coverage from being over-reported.
+- `Write` still can't be granted by sharing. Give the group Contributor on the
+  workspace instead.
+- *EntireTenant* shares are reported as unsupported (they can't be group members).
+
+**Live check (crestshield, read-only):** the Graph group lookup and user resolution
+succeeded in a dry run. Member expansion was verified on real groups, and large
+groups were correctly capped.
+
+#### 28.2.3 Granular SQL permissions (Warehouse / SQL analytics endpoint)
+
+Item sharing decides who can connect. Inside a Warehouse or Lakehouse SQL
+endpoint, access is T-SQL: custom roles, role membership, and
+`GRANT`/`DENY [WITH GRANT OPTION]` at database, schema, object, and column
+scope. None of it is in the item definition. `sql_permissions.py` reads it from
+the catalog views (`sys.database_permissions`, `sys.database_principals`,
+`sys.database_role_members`) and replays the difference on the secondary, in this
+order: `CREATE ROLE`, then `ALTER ROLE … ADD MEMBER`, then grants.
+
+```bash
+python scripts/sync_sql_permissions.py --plan     # read-only; writes data/sql_permissions_plan.csv
+python scripts/sync_sql_permissions.py --apply    # executes the reviewed CSV
+python scripts/sync_sql_permissions.py --verify
+```
+
+It also runs as a phase of `sync_permissions.py` (honours `--dry-run`).
+
+- It never revokes. Grants that exist only on the secondary are reported.
+- Item-derived `CONNECT` and system principals are skipped.
+- A grant on an object that doesn't exist on the secondary yet is held back
+  (`skipped`) until the schema or data sync has created it.
+- RLS security policies and dynamic data masking are DDL and travel with the
+  schema, not here.
+
+**Live check (crestshield):** first a read-only check: the catalog queries ran on all
+three lakehouse SQL endpoints with no drift. Then a real-time test with writes, cleaned
+up afterwards. A test role with a schema grant, an object grant, a column-level `DENY`
+and an Entra user member was created on the primary, detected, applied to the
+secondary, and verified identical (8/8 plus role membership). The real-time test also
+caught an ordering bug. An object-level `GRANT` clears column-level permissions, so
+statements now run in scope order: database → schema → object → column.
 
 ### 28.3 OneLake Data Access Roles — Delta Sync
 
@@ -2322,7 +2427,7 @@ The project has three pytest test suites covering the lakehouse sync, failback, 
 python -m pytest scripts/ -v
 ```
 
-**Latest result: 167/167 tests passing** (adds `test_item_permissions_supported.py`, `test_bcdr_freshness.py`, `test_connection_mapping.py`, and `TestRefreshSemanticModels`).
+**Latest result: 213/213 tests passing** (adds `test_item_permissions_supported.py`, `test_bcdr_freshness.py`, `test_connection_mapping.py`, `test_sql_permissions.py`, `test_bcdr_schedules.py`, `TestRefreshSemanticModels` and `TestRetryAfter`).
 
 ### `scripts/test_failback_sync.py` — 33 tests
 
@@ -2381,11 +2486,28 @@ Architecture page are built entirely from them, with no static values.
 
 **Files:** `bcdr_freshness.py`, `GET /api/bcdr/data-freshness` (`?refresh=1` bypasses the 5-minute cache).
 
-Compares the latest Delta commit (`_delta_log/NNNNNNNNNNNNNNNNNNNN.json`) of every
-table on both sides through the OneLake DFS endpoint
+Compares the Delta commit **versions** (`_delta_log/NNNNNNNNNNNNNNNNNNNN.json`) of
+every table on both sides through the OneLake DFS endpoint
 (`GET https://onelake.dfs.fabric.microsoft.com/{ws}?resource=filesystem&directory=...`).
+A table's lag is measured on the **primary's own commit history**: the time between
+the primary commit that the secondary holds and the primary's latest commit.
 Measured RPO is the worst lag across all compared tables.
 
+- Secondary commit-file times are **copy times**. Comparing them with primary
+  commit times made a stale replica that was copied late look current. On the
+  crestshield pair this understated the RPO by about 11 days (42.4 days reported;
+  53.6 days actual).
+- When the secondary's version is older than the primary's retained log, the lag
+  is reported as a **lower bound** (`≥` in the UI).
+- A secondary that is *ahead* of the primary is reported as **diverged**: it was
+  written to, or the primary was restored. The next sync would overwrite it.
+- **In-commit timestamps.** Without `delta.enableInCommitTimestamps`, Delta takes a
+  commit's time from the commit file's modification time, which a copy resets. Time
+  travel and change data feed **by timestamp** on the secondary can then silently
+  resolve to a different version. Version-based reads are unaffected. The latest
+  primary commit of each table is inspected, and tables without in-commit
+  timestamps are flagged on the Architecture page. Query replicas by version, or
+  enable in-commit timestamps where your Spark runtime supports them.
 - Works for **schema-enabled** lakehouses (`Tables/<schema>/<table>`), where the Fabric
   *List Tables* API returns `UnsupportedOperationForSchemasEnabledLakehouse`.
 - Uses the **data plane** only, so it keeps working when Fabric item APIs (control
@@ -2458,3 +2580,40 @@ capacity is in a **different region**. For scenario 3, which is control-plane lo
 anything that needs a write must already be done before the disaster. Readiness
 (section 33) is how that is verified continuously.
 
+
+---
+
+## 35. Parity Map — Azure Databricks Managed Disaster Recovery
+
+Azure Databricks managed DR ([public docs](https://learn.microsoft.com/azure/databricks/admin/managed-disaster-recovery))
+pairs two workspaces in a *failover group* and replicates continuously. It
+reports a single replication point, failure states, and an optional stable URL.
+It is a gated capability that you apply for through the Azure Databricks account
+team, and it requires the Mission Critical add-on. This framework uses the same
+patterns where Fabric has supported APIs to build them, and documents the
+workaround where it doesn't.
+
+| Managed DR behaviour | This framework | How |
+|---|---|---|
+| Failover group = primary + secondary workspace | ✅ | Workspace pairs (section 16) |
+| Jobs replicated with schedules **paused** in the secondary | ✅ | `bcdr_schedules.py`; each sync replicates schedules paused and writes `data/schedule_manifest.json` (section 17) |
+| Failover resumes schedules in the new primary, pauses the old one | ✅ | Failover step 5; uses the last-sync manifest when the primary is unreachable |
+| Replication point = the time up to which *all* in-scope data is copied | ✅ | Measured RPO = worst per-table lag on the primary's commit history (33.1) |
+| Errors hold the replication point and are listed | ✅ partial | Freshness / model / permission readiness surface errors and mark results *incomplete* |
+| ACLs and grants replicated, ownership matched | ✅ partial | Workspace roles, OneLake roles, semantic-model shares, access groups (28.2.2), SQL grants (28.2.3), model ownership takeover |
+| Clusters / warehouses replicated stopped | ✅ equivalent | Secondary capacity can stay paused until failover |
+| Time travel by timestamp needs in-commit timestamps | ✅ detected | Tables without in-commit timestamps are flagged (33.1) |
+| Rename = delete + recreate in secondary | ⚠️ same | Items and tables are matched by name; a rename creates a new replica and orphans the old one (reported as extra) |
+| Shallow clones break after failover | ⚠️ analogue | OneLake shortcuts that point at primary paths need remapping or recreation |
+| Workspace asset **IDs preserved** across regions | ❌ not possible | Fabric assigns new item IDs. Mitigation: type + name matching and `data/artifact_mapping.csv` |
+| **Stable URL** / stable workspace ID that follows the primary | ❌ not available | Mitigations: name-based connections (XMLA/`powerbi://…/myorg/<workspace name>`) combined with a workspace rename swap during failover; or a redirect or configuration entry (App Configuration, Key Vault, Variable Library) that clients resolve at run time |
+| Secondary is read-only and can't run compute | ❌ not enforced | Schedules stay paused on the standby. Keep users on Viewer in the secondary until failover |
+| Account-console failover button with state machine | ⚠️ partial | Dashboard managed failover/failback (section 17); states recorded in `data/failover_log.json` |
+
+**Operational guidance borrowed from managed DR:**
+- **Planned failover:** stop writes on the primary, wait until measured RPO is
+  near zero, then fail over. In an unplanned failover, data written after the
+  replication point can be lost.
+- **Test failover every quarter.**
+- **Fail back** with the same procedure in reverse, only after reverse
+  replication has caught up.

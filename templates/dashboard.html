@@ -299,8 +299,10 @@
         ]);
         if (fresh.status === 'fulfilled') {
             const s = fresh.value.summary, h = s.measured_rpo_hours;
-            setCard('rd-rpo', fmt(h), `${(s.states || {}).behind || 0} of ${s.tables_compared} tables behind`,
-                h == null ? '' : h <= 1 ? 'ok' : h <= 24 ? 'warn' : 'bad');
+            setCard('rd-rpo', (s.rpo_is_lower_bound && h != null ? '≥ ' : '') + fmt(h),
+                `${(s.states || {}).behind || 0} of ${s.tables_compared} tables behind` +
+                ((s.states || {}).diverged ? ` · ${s.states.diverged} diverged` : ''),
+                h == null ? '' : h <= 1 && !(s.states || {}).diverged ? 'ok' : h <= 24 ? 'warn' : 'bad');
         } else setCard('rd-rpo', '—', fresh.reason.message, 'warn');
 
         if (models.status === 'fulfilled') {

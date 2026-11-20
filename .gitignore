@@ -62,6 +62,9 @@ data/*.json
 data/*.bak
 # Contains principal IDs from item_permissions_accelerator.py
 data/item_permissions_plan.csv
+data/item_access_groups.csv
+data/item_access_portal_steps.csv
+data/sql_permissions_plan.csv
 
 # Cache
 .cache/

@@ -4545,6 +4545,12 @@ def api_bcdr_bulk_sync():
         try:
             from scripts.bulk_sync import bulk_sync
             result = bulk_sync(p_id, s_id, logger, dry_run=dry_run, item_types=item_types)
+            try:
+                from scripts.sync_schedules import sync_schedules
+                result["schedules"] = sync_schedules(p_id, s_id, logger, dry_run=dry_run)
+            except Exception as se:
+                logger.error(f"Schedule replication failed: {se}")
+                result["schedules"] = {"failed": 1, "errors": [str(se)[:200]]}
             _update_sync_progress("BulkSync", total=result.get("exported", 0),
                                   current=result.get("imported", 0),
                                   current_item=f"Done — mode={result['mode']}",

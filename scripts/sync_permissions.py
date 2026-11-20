@@ -9,8 +9,15 @@ Purpose:
   Item-level permissions use supported APIs only (item_permissions.py):
   semantic-model shares are replicated via the Power BI Datasets users API;
   other item types are detected via the Fabric Admin item-access API (Fabric
-  admin or admin-enabled service principal) and listed for manual re-share,
-  because no public write API exists for them. See IMPLEMENTATION_GUIDE.md 28.2.
+  admin or admin-enabled service principal). They have no public share-write
+  API, so they are closed with the access-group bootstrap
+  (sync_item_permissions.py --groups-plan / --groups-apply): direct-access
+  principals are pushed into Entra groups by Graph and each secondary item is
+  shared with its group once. This run credits group members as replicated.
+
+  Granular SQL permissions (roles, membership, GRANT/DENY) on Warehouses and
+  Lakehouse SQL endpoints are replicated by T-SQL (sql_permissions.py).
+  See IMPLEMENTATION_GUIDE.md 28.2.
 
 Artifact Types Covered:
   All (permissions apply to all artifact types)
@@ -39,6 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import common
 import item_permissions
+import sql_permissions
 
 
 # Fabric connections are tenant-scoped, so connection GUIDs embedded in copied
@@ -759,11 +767,45 @@ def main():
             args.primary_workspace, args.secondary_workspace,
             common.get_items(args.primary_workspace), common.get_items(args.secondary_workspace),
             logger=logger,
+            group_member_resolver=item_permissions.make_group_member_resolver(common.graph_api_call, logger),
         )
         item_apply = {"applied": 0, "failed": 0, "skipped_manual": item_plan["counts"].get(item_permissions.ACTION_MANUAL, 0), "failures": []}
         if not args.dry_run:
             item_apply = item_permissions.apply_rows(common.powerbi_api_call, args.secondary_workspace, item_plan["rows"], logger)
-        sync_summary["item_permissions"] = {"plan": item_plan, "apply": item_apply}
+        access_groups = item_permissions.plan_access_groups(item_plan["rows"])
+        sync_summary["item_permissions"] = {"plan": item_plan, "apply": item_apply,
+                                            "access_groups_needed": len(access_groups["specs"])}
+
+        # Granular SQL permissions on Warehouses / Lakehouse SQL endpoints (T-SQL)
+        logger.info("\n=== SYNCING SQL PERMISSIONS (T-SQL) ===")
+        sql_apply = {"applied": 0, "failed": 0, "failures": []}
+        try:
+            sql_plan = sql_permissions.build_sql_plan(
+                common.api_call, common.sql_host_from,
+                lambda: common.get_token(scope=common.SQL_API_SCOPE),
+                args.primary_workspace, args.secondary_workspace,
+                common.get_items(args.primary_workspace), common.get_items(args.secondary_workspace),
+                logger=logger,
+            )
+            if not args.dry_run:
+                token = common.get_token(scope=common.SQL_API_SCOPE)
+                by_db: Dict[tuple, List[Dict[str, Any]]] = {}
+                for r in sql_plan["rows"]:
+                    by_db.setdefault((r["secondary_host"], r["database"]), []).append(r)
+                for (host, db), stmts in by_db.items():
+                    conn = sql_permissions.connect(host, db, token)
+                    try:
+                        res = sql_permissions.apply_statements(lambda s: conn.cursor().execute(s), stmts, logger)
+                    finally:
+                        conn.close()
+                    for k in ("applied", "failed"):
+                        sql_apply[k] += res[k]
+                    sql_apply["failures"] += res["failures"]
+        except Exception as e:
+            logger.error(f"SQL permission sync failed: {e}")
+            sql_plan = {"rows": [], "coverage": {"databases_scanned": 0, "unmatched_in_secondary": 0,
+                                                 "errors": [str(e)[:300]], "extra_on_secondary": 0}}
+        sync_summary["sql_permissions"] = {"plan": sql_plan, "apply": sql_apply}
 
         # Grant the DR executing principal a role on every connection in use
         logger.info("\n=== SYNCING CONNECTION ROLE ASSIGNMENTS ===")
@@ -799,6 +841,19 @@ def main():
         print(f"  Semantic-model shares applied: {item_apply['applied']}{' (dry run)' if args.dry_run else ''}")
         print(f"  Semantic-model grants failed:  {item_apply['failed']}")
         print(f"  Manual portal shares needed:   {item_plan['counts'].get(item_permissions.ACTION_MANUAL, 0)}")
+        print(f"  Access groups to bootstrap:    {sync_summary['item_permissions']['access_groups_needed']}"
+              f"  (python scripts/sync_item_permissions.py --groups-plan)")
+        sql_cov = sql_plan["coverage"]
+        sql_open = sum(1 for r in sql_plan["rows"] if r["kind"] != "skipped")
+        print(f"--- SQL Permissions (Warehouse / SQL endpoint) ---")
+        print(f"  Databases Scanned:         {sql_cov['databases_scanned']}")
+        print(f"  Statements {'Planned' if args.dry_run else 'Applied'}:        "
+              f"{sql_open if args.dry_run else sql_apply['applied']}")
+        print(f"  Statements Failed:         {sql_apply['failed']}")
+        print(f"  Waiting On Schema/Data:    {sum(1 for r in sql_plan['rows'] if r['kind'] == 'skipped')}")
+        print(f"  Extra On Secondary:        {sql_cov['extra_on_secondary']}  (reported, never revoked)")
+        for err in sql_cov["errors"][:5]:
+            print(f"  ERROR: {err}")
         print(f"  Items NOT scanned:             {cov['not_scanned']}"
               f"{'  (Fabric Admin API denied - run as Fabric admin for full coverage)' if cov.get('admin_api_denied') else ''}")
         print(f"--- Connection Role Assignments ---")

@@ -239,14 +239,17 @@
             if (freshR.status === 'fulfilled') {
                 const sm = freshR.value.summary;
                 const h = sm.measured_rpo_hours;
-                rpo.textContent = fmtHours(h);
+                rpo.textContent = (sm.rpo_is_lower_bound && h !== null ? '≥ ' : '') + fmtHours(h);
                 rpo.className = 'rpo-value ' + (h === null ? '' : h <= 1 ? 'ok' : h <= 24 ? 'warn' : 'bad');
                 const st = sm.states || {};
                 document.getElementById('rpo-detail').textContent =
-                    `${st.in_sync || 0} in sync · ${st.behind || 0} behind · ${st.missing_in_secondary || 0} missing — ${sm.tables_compared} tables`;
+                    `${st.in_sync || 0} in sync · ${st.behind || 0} behind · ${st.missing_in_secondary || 0} missing` +
+                    `${st.diverged ? ` · ${st.diverged} diverged` : ''} — ${sm.tables_compared} tables`;
                 flow.classList.toggle('stalled', h !== null && h > 24);
-                if (h !== null && h > 24) risks.push(risk('bad', 'fa-hourglass-half', `Secondary data is ${fmtHours(h)} behind`, 'Measured from OneLake Delta commits. Your effective RPO right now is this lag, not the configured schedule.'));
+                if (h !== null && h > 24) risks.push(risk('bad', 'fa-hourglass-half', `Secondary data is ${fmtHours(h)} behind`, 'Measured on the primary\'s own Delta commit history. Your effective RPO right now is this lag, not the configured schedule.'));
                 if ((st.missing_in_secondary || 0) > 0) risks.push(risk('warn', 'fa-table', `${st.missing_in_secondary} table(s) missing in secondary`, 'Tables exist in primary lakehouses but not in their secondary counterparts.'));
+                if (st.diverged) risks.push(risk('bad', 'fa-code-branch', `${st.diverged} table(s) diverged`, 'The secondary has commits the primary does not: it was written to, or the primary was restored. The next sync would overwrite them.'));
+                if (sm.tables_without_in_commit_timestamps) risks.push(risk('warn', 'fa-clock-rotate-left', `${sm.tables_without_in_commit_timestamps} table(s) without in-commit timestamps`, 'Copied commit files carry the copy time, so time travel / change data feed BY TIMESTAMP on the secondary can return the wrong version. Query by version, or enable delta.enableInCommitTimestamps where your runtime supports it.'));
                 if (!sm.complete) risks.push(risk('warn', 'fa-circle-question', 'Freshness measurement incomplete', (sm.errors || []).join(' · ') || 'Some tables could not be compared.'));
                 document.getElementById('risk-when').textContent = 'Measured ' + new Date(freshR.value.measured_at).toLocaleString();
             } else {

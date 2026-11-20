@@ -40,9 +40,8 @@ from failover import (
     disable_schedules,
     enable_schedules,
     SCHEDULABLE_TYPES,
-    _get_item_schedule,
-    _update_item_schedule,
 )
+import bcdr_schedules
 
 
 def pause_secondary_pipelines(workspace_id: str, logger, dry_run: bool = False) -> Dict[str, Any]:
@@ -231,52 +230,33 @@ def reactivate_primary_workspace(
 ) -> bool:
     """
     Reactivate primary workspace:
-      1. Load the schedule manifest from the original failover log
-      2. Re-enable those schedules on primary
+      1. Load the schedule manifest from the original failover log (the
+         schedules that were enabled on primary when it was paused)
+      2. Re-enable those schedules on primary (Job Scheduler API)
+    Without a failover log, the enabled schedules from the last-sync manifest
+    are used; schedules that were intentionally disabled stay disabled.
     """
     logger.info("Reactivating primary workspace...")
 
-    if dry_run:
-        logger.info("[DRY RUN] Would reactivate primary workspace")
-        return True
-
     try:
-        # Load original failover log to get the schedule manifest
         schedule_manifest = []
         if os.path.exists(failover_log_path):
             with open(failover_log_path) as f:
                 failover_log = json.load(f)
             schedule_manifest = failover_log.get("schedule_manifest", [])
             logger.info(f"  Loaded {len(schedule_manifest)} schedule entries from failover log")
-        else:
-            logger.warning(f"  No failover log found at {failover_log_path}")
-            logger.info("  Will scan for schedules to enable instead")
+        if not schedule_manifest:
+            schedule_manifest = [e for e in bcdr_schedules.load_manifest() if e.get("enabled")]
+            logger.info(f"  Using {len(schedule_manifest)} enabled schedule(s) from "
+                        f"{bcdr_schedules.MANIFEST_PATH}")
 
-        if schedule_manifest:
-            # Re-enable schedules that were active before failover
-            enabled_count = 0
-            for entry in schedule_manifest:
-                item_id = entry["item_id"]
-                item_name = entry["item_name"]
-                logger.info(f"  Enabling schedule on '{item_name}'")
-                if _update_item_schedule(primary_workspace_id, item_id, enabled=True):
-                    enabled_count += 1
-                else:
-                    logger.warning(f"  Failed to enable schedule on '{item_name}'")
-            logger.info(f"  ✓ Re-enabled {enabled_count}/{len(schedule_manifest)} schedules")
-        else:
-            # Fallback: enable all schedules found on primary
-            logger.info("  No manifest available — scanning primary for disabled schedules")
-            for item_type in SCHEDULABLE_TYPES:
-                items = common.get_items(primary_workspace_id, item_type=item_type)
-                for item in items:
-                    sched = _get_item_schedule(primary_workspace_id, item["id"])
-                    if sched and not sched.get("enabled", True):
-                        logger.info(f"  Enabling schedule on '{item['displayName']}'")
-                        _update_item_schedule(primary_workspace_id, item["id"], enabled=True)
-
+        res = enable_schedules(primary_workspace_id, schedule_manifest, logger, dry_run)
+        for err in res["errors"]:
+            logger.warning(f"  Schedule not re-enabled: {err}")
+        logger.info(f"  ✓ Re-enabled {len(res['schedules_enabled'])}/{len(schedule_manifest)} schedules"
+                    f"{' (DRY RUN)' if dry_run else ''}")
         logger.info("✓ Primary workspace reactivated")
-        return True
+        return not res["errors"]
 
     except Exception as e:
         logger.error(f"Error reactivating primary: {str(e)}")
@@ -296,26 +276,17 @@ def decommission_secondary(
     """
     logger.info("Decommissioning secondary workspace to standby state...")
 
-    if dry_run:
-        logger.info("[DRY RUN] Would decommission secondary")
-        return True
-
     try:
-        # Verify all schedules are disabled
-        disabled_count = 0
-        for item_type in SCHEDULABLE_TYPES:
-            items = common.get_items(secondary_workspace_id, item_type=item_type)
-            for item in items:
-                sched = _get_item_schedule(secondary_workspace_id, item["id"])
-                if sched and sched.get("enabled", False):
-                    logger.info(f"  Disabling leftover schedule on '{item['displayName']}'")
-                    _update_item_schedule(secondary_workspace_id, item["id"], enabled=False)
-                    disabled_count += 1
+        # Standby secondary keeps its replicated schedules, but paused.
+        res = disable_schedules(secondary_workspace_id, logger, dry_run)
+        for err in res["errors"]:
+            logger.warning(f"  Could not pause schedule: {err}")
 
         logger.info("✓ Secondary workspace transitioned to standby state")
-        logger.info(f"  - {disabled_count} additional schedules disabled")
+        logger.info(f"  - {len(res['schedules_disabled'])} additional schedules paused"
+                    f"{' (DRY RUN)' if dry_run else ''}")
         logger.info("  - All artifacts preserved for next failover cycle")
-        return True
+        return not res["errors"]
 
     except Exception as e:
         logger.error(f"Error decommissioning secondary: {str(e)}")

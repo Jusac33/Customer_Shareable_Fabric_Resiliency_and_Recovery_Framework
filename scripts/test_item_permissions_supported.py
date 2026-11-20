@@ -200,5 +200,202 @@ class TestNoUnsupportedEndpoints(unittest.TestCase):
         self.assertNotIn("clusterdetails", src)
 
 
+class TestGroupExpansion(unittest.TestCase):
+    """A user reaching the secondary item through a shared group is already replicated."""
+
+    def _plan(self, secondary, resolver, primary=None):
+        primary = primary or [share("u@x.com", {"Read"}, extra_keys=("uid",))]
+        return ip.plan_for_item(ITEM_LH, "s-lh", primary,
+                                ip.expand_group_shares(secondary, resolver), set())
+
+    def test_member_of_shared_group_is_present(self):
+        rows = self._plan([share("gid", {"Read"}, ptype="Group")], lambda g: {"uid"})
+        self.assertEqual(rows[0]["action"], ip.ACTION_PRESENT)
+
+    def test_unreadable_group_is_not_credited(self):
+        rows = self._plan([share("gid", {"Read"}, ptype="Group")], lambda g: None)
+        self.assertEqual(rows[0]["action"], ip.ACTION_MANUAL)
+
+    def test_resolver_pages_and_caps_large_groups(self):
+        pages = {"/p1": {"value": [{"id": "U1", "userPrincipalName": "A@x.com"}], "@odata.nextLink": "/p2"},
+                 "/p2": {"value": [{"id": "U2"}]}}
+        graph = mock.Mock(side_effect=lambda m, p: pages["/p1" if "transitiveMembers" in p else p])
+        self.assertEqual(ip.make_group_member_resolver(graph)("G"), {"u1", "a@x.com", "u2"})
+        self.assertIsNone(ip.make_group_member_resolver(graph, max_members=1)("G"))
+
+    def test_additional_permissions_must_also_match(self):
+        p = [{**share("u@x.com", {"Read"}), "additional": ["ReadAll"]}]
+        rows = self._plan([share("gid", {"Read"}, ptype="Group")], lambda g: {"u@x.com"}, primary=p)
+        self.assertEqual(rows[0]["action"], ip.ACTION_MANUAL)
+        self.assertEqual(rows[0]["additional"], "ReadAll")
+        s = [{**share("gid", {"Read"}, ptype="Group"), "additional": ["ReadAll", "ReadData"]}]
+        rows = self._plan(s, lambda g: {"u@x.com"}, primary=p)
+        self.assertEqual(rows[0]["action"], ip.ACTION_PRESENT)
+
+
+def manual(item_id, item_type, name, principal, ptype="User", rights="Read", additional=""):
+    return {"action": ip.ACTION_MANUAL, "item_type": item_type, "item_name": name,
+            "primary_item_id": item_id, "secondary_item_id": "s-" + item_id,
+            "principal": principal, "principal_type": ptype, "display_name": "",
+            "rights": rights, "additional": additional}
+
+
+class TestPlanAccessGroups(unittest.TestCase):
+    def test_users_with_same_item_and_rights_share_one_group(self):
+        gp = ip.plan_access_groups([
+            manual("p-lh-0001", "Lakehouse", "gold", "a@x.com"),
+            manual("p-lh-0001", "Lakehouse", "gold", "b@x.com"),
+            manual("p-lh-0001", "Lakehouse", "gold", "c@x.com", rights="ReadReshare"),
+            {**manual("p-lh-0001", "Lakehouse", "gold", "z@x.com"), "action": ip.ACTION_PRESENT},
+        ])
+        managed = [s for s in gp["specs"] if s["kind"] == "managed_group"]
+        self.assertEqual(len(managed), 2)
+        read = next(s for s in managed if s["rights"] == "Read")
+        self.assertEqual([m["principal"] for m in read["members"]], ["a@x.com", "b@x.com"])
+        self.assertEqual(read["share_mode"], ip.SHARE_MODE_PORTAL)
+
+    def test_nickname_is_stable_safe_and_permission_specific(self):
+        a = ip.access_group_nickname("1C2D3E4F-aaaa-bbbb-cccc-ddddeeeeffff", "Read", "")
+        self.assertEqual(a, ip.access_group_nickname("1c2d3e4f-aaaa-bbbb-cccc-ddddeeeeffff", "Read", ""))
+        self.assertNotEqual(a, ip.access_group_nickname("1c2d3e4f-aaaa-bbbb-cccc-ddddeeeeffff", "Read", "ReadAll"))
+        self.assertLessEqual(len(a), 64)
+        self.assertRegex(a, r"^[a-z0-9-]+$")
+
+    def test_group_principal_needs_one_share_not_a_new_group(self):
+        gp = ip.plan_access_groups([manual("p-nb", "Notebook", "nb", "GID-1", ptype="Group")])
+        self.assertEqual(gp["specs"][0]["kind"], "existing_group")
+        self.assertEqual(gp["specs"][0]["group_id"], "GID-1")
+
+    def test_service_principal_on_semantic_model_is_automated_via_group(self):
+        gp = ip.plan_access_groups([manual("p-sm", "SemanticModel", "Sales", "sp-oid", ptype="App")])
+        self.assertEqual(gp["specs"][0]["share_mode"], ip.SHARE_MODE_API)
+        self.assertEqual(gp["specs"][0]["members"], [{"principal": "sp-oid", "principal_type": "App"}])
+
+    def test_entire_tenant_is_reported_unsupported(self):
+        gp = ip.plan_access_groups([manual("p-r", "Report", "r", "tenant", ptype="None")])
+        self.assertEqual(gp["specs"], [])
+        self.assertEqual(len(gp["unsupported"]), 1)
+
+
+GID = "11111111-2222-3333-4444-555555555555"
+UID_A = "aaaaaaaa-0000-0000-0000-000000000001"
+UID_B = "aaaaaaaa-0000-0000-0000-000000000002"
+UID_X = "aaaaaaaa-0000-0000-0000-0000000000ff"
+
+
+class FakeGraph:
+    def __init__(self, existing_group=False, members=(), fail_add=None, not_found_first=0):
+        self.groups = {GID: list(members)} if existing_group else {}
+        self.calls = []
+        self.fail_add = fail_add
+        self.not_found_first = not_found_first
+
+    def __call__(self, method, path, body=None):
+        self.calls.append((method, path))
+        if method == "GET" and path.startswith("/groups?$filter"):
+            return {"value": [{"id": GID}] if GID in self.groups else []}
+        if method == "POST" and path == "/groups":
+            self.groups[GID] = []
+            return {"id": GID}
+        if method == "GET" and path.startswith(f"/groups/{GID}/members"):
+            return {"value": [{"id": m} for m in self.groups.get(GID, [])]}
+        if method == "GET" and path.startswith("/users/"):
+            return {"id": {"a%40x.com": UID_A, "b%40x.com": UID_B}[path.split("/")[2].split("?")[0]]}
+        if method == "POST" and path.endswith("/members/$ref"):
+            if self.not_found_first:
+                self.not_found_first -= 1
+                e = Exception("API error 404")
+                e.status_code = 404
+                raise e
+            if self.fail_add:
+                raise self.fail_add
+            self.groups[GID].append(body["@odata.id"].rsplit("/", 1)[1])
+            return {}
+        raise AssertionError((method, path))
+
+
+class TestApplyAccessGroups(unittest.TestCase):
+    def _spec(self, item_type="Lakehouse", members=("a@x.com", "b@x.com"), rights="Read"):
+        return ip.plan_access_groups([manual("p-1", item_type, "gold", m, rights=rights) for m in members])["specs"]
+
+    def test_creates_group_adds_members_and_lists_one_time_share(self):
+        g = FakeGraph()
+        res = ip.apply_access_groups(g, mock.Mock(), "sw", self._spec(), sleep=lambda s: None)
+        self.assertEqual(res["groups_created"], 1)
+        self.assertEqual(res["members_added"], 2)
+        self.assertEqual(g.groups[GID], [UID_A, UID_B])
+        self.assertEqual(len(res["portal_steps"]), 1)
+        self.assertEqual(res["portal_steps"][0]["group_id"], GID)
+        self.assertEqual(res["failures"], [])
+
+    def test_existing_members_kept_extras_reported_never_removed(self):
+        g = FakeGraph(existing_group=True, members=[UID_A, UID_X])
+        res = ip.apply_access_groups(g, mock.Mock(), "sw", self._spec(), sleep=lambda s: None)
+        self.assertEqual((res["groups_existing"], res["members_present"], res["members_added"]), (1, 1, 1))
+        self.assertEqual(res["extra_members"][0]["object_ids"], [UID_X])
+        self.assertNotIn("DELETE", [c[0] for c in g.calls])
+
+    def test_dry_run_writes_nothing(self):
+        g = FakeGraph()
+        res = ip.apply_access_groups(g, mock.Mock(), "sw", self._spec(), dry_run=True)
+        self.assertEqual(res["groups_to_create"], [self._spec()[0]["group_display_name"]])
+        self.assertEqual(res["members_to_add"], 2)
+        self.assertEqual([c for c in g.calls if c[0] != "GET"], [])
+
+    def test_new_group_replication_delay_is_retried(self):
+        g = FakeGraph(not_found_first=2)
+        sleeps = []
+        res = ip.apply_access_groups(g, mock.Mock(), "sw", self._spec(members=("a@x.com",)), sleep=sleeps.append)
+        self.assertEqual(res["members_added"], 1)
+        self.assertEqual(sleeps, [5, 10])
+
+    def test_member_failure_is_recorded(self):
+        g = FakeGraph(fail_add=Exception("API error 403: Insufficient privileges"))
+        res = ip.apply_access_groups(g, mock.Mock(), "sw", self._spec(members=("a@x.com",)), sleep=lambda s: None)
+        self.assertEqual(res["members_added"], 0)
+        self.assertIn("Insufficient privileges", res["failures"][0]["error"])
+
+    def test_semantic_model_group_grant_is_automated(self):
+        pbi = mock.Mock(side_effect=lambda m, ep, body=None: {"value": []} if m == "GET" else {})
+        res = ip.apply_access_groups(FakeGraph(), pbi, "sw", self._spec("SemanticModel", rights="ReadReshare"),
+                                     sleep=lambda s: None)
+        self.assertEqual(res["dataset_group_grants"], 1)
+        self.assertEqual(res["portal_steps"], [])
+        post = [c for c in pbi.call_args_list if c[0][0] == "POST"][0]
+        self.assertEqual(post[0][2], {"identifier": GID, "principalType": "Group",
+                                      "datasetUserAccessRight": "ReadReshare"})
+
+    def test_portal_step_dropped_once_group_is_shared(self):
+        fabric = mock.Mock(return_value={"accessDetails": [
+            {"principal": {"id": GID, "type": "Group"}, "itemAccessDetails": {"permissions": ["Read"]}}]})
+        res = ip.apply_access_groups(FakeGraph(), mock.Mock(), "sw", self._spec(),
+                                     sleep=lambda s: None, fabric_call=fabric)
+        self.assertEqual(res["portal_steps"], [])
+
+
+class TestGroupsCsvRoundTrip(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import sync_item_permissions as cli
+        self.cli = cli
+
+    def test_round_trip_and_reviewer_can_drop_a_member(self):
+        specs = ip.plan_access_groups([manual("p-1", "Lakehouse", "gold", m) for m in ("a@x.com", "b@x.com")]
+                                      + [manual("p-2", "Notebook", "nb", "GID-9", ptype="Group")])["specs"]
+        rows = self.cli.specs_to_rows(specs)
+        self.assertEqual(len(rows), 3)
+        rows = [r for r in rows if r["member"] != "b@x.com"]
+        back = self.cli.rows_to_specs([{k: str(v) for k, v in r.items()} for r in rows])
+        managed = next(s for s in back if s["kind"] == "managed_group")
+        self.assertEqual(managed["members"], [{"principal": "a@x.com", "principal_type": "User"}])
+        self.assertTrue(any(s["kind"] == "existing_group" and s["group_id"] == "GID-9" for s in back))
+
+    def test_malformed_rows_rejected(self):
+        with self.assertRaises(ValueError):
+            self.cli.rows_to_specs([{"kind": "managed_group", "group_nickname": "", "secondary_item_id": "s"}])
+        with self.assertRaises(ValueError):
+            self.cli.rows_to_specs([{"kind": "bogus"}])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

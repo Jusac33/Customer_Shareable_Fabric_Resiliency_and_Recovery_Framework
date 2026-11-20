@@ -648,8 +648,8 @@ class TestEndToEndDryRun(unittest.TestCase):
             ]}
         if "/jobs/instances" in endpoint and method == "GET":
             return {"value": []}
-        if "/jobScheduler" in endpoint:
-            return {"enabled": True}
+        if "/schedules" in endpoint:
+            return {"value": []}
         if "/lakehouses/" in endpoint and "/tables" in endpoint:
             return {"data": [{"name": "claims_raw"}, {"name": "claims_enriched"}]}
         if method in ("POST", "PATCH", "DELETE"):

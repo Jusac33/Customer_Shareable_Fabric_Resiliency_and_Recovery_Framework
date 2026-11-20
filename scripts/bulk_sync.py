@@ -363,6 +363,14 @@ def main():
         item_types=args.types,
     )
 
+    # Schedules ride on the items: replicate them PAUSED once items exist.
+    from sync_schedules import sync_schedules
+    try:
+        sched = sync_schedules(args.primary_workspace, args.secondary_workspace, logger, args.dry_run)
+    except Exception as e:
+        logger.error(f"Schedule replication failed: {e}")
+        sched = {"created_paused": 0, "failed": 1, "errors": [str(e)[:200]]}
+
     print("\n" + "=" * 70)
     print("BULK SYNC SUMMARY")
     print("=" * 70)
@@ -373,9 +381,11 @@ def main():
     print(f"  Unchanged:   {result['unchanged']}")
     print(f"  Skipped:     {result['skipped']}")
     print(f"  Failed:      {len(result['failed'])}")
+    print(f"  Schedules replicated paused: {sched.get('created_paused', 0)}  "
+          f"failed: {sched.get('failed', 0)}")
     print("=" * 70)
 
-    return len(result["failed"]) == 0
+    return len(result["failed"]) == 0 and not sched.get("failed")
 
 
 if __name__ == "__main__":

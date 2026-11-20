@@ -9,7 +9,8 @@ Steps:
   1. Validate secondary workspace is current
   2. Cancel running jobs & disable schedules in primary
   3. Perform final data sync pass (lakehouses, notebooks/pipelines, semantic models)
-  4. Enable schedules & activate secondary workspace
+  4. Enable schedules & activate secondary workspace (from the live primary
+     manifest, or the last-sync manifest when primary is unreachable)
   5. Take over semantic model ownership as the executing service principal
   6. Smoke-test secondary resources
   7. Generate failover report
@@ -40,9 +41,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import common
+import bcdr_schedules
 
-# Artifact types that support on-demand jobs and scheduling
-SCHEDULABLE_TYPES = ["DataPipeline", "Notebook", "SparkJobDefinition", "DataflowsGen2"]
+# Artifact types that support on-demand jobs and scheduling (Job Scheduler API)
+SCHEDULABLE_TYPES = bcdr_schedules.SCHEDULABLE_TYPES
 
 
 def _get_job_instances(workspace_id: str, item_id: str) -> List[Dict[str, Any]]:
@@ -65,23 +67,12 @@ def _cancel_job(workspace_id: str, item_id: str, job_instance_id: str) -> bool:
         return False
 
 
-def _get_item_schedule(workspace_id: str, item_id: str) -> Dict[str, Any]:
-    """Get the job schedule configuration for an item."""
-    endpoint = f"/workspaces/{workspace_id}/items/{item_id}/jobScheduler"
-    try:
-        return common.api_call("GET", endpoint)
-    except Exception:
-        return {}
+def _schedule_client() -> bcdr_schedules.ScheduleClient:
+    return bcdr_schedules.ScheduleClient(common.api_call)
 
 
-def _update_item_schedule(workspace_id: str, item_id: str, enabled: bool) -> bool:
-    """Enable or disable the job schedule for an item."""
-    endpoint = f"/workspaces/{workspace_id}/items/{item_id}/jobScheduler"
-    try:
-        common.api_call("PATCH", endpoint, {"enabled": enabled})
-        return True
-    except Exception:
-        return False
+def _schedulable_items(workspace_id: str) -> List[Dict[str, Any]]:
+    return [i for i in common.get_items(workspace_id) if i.get("type") in SCHEDULABLE_TYPES]
 
 
 def _run_item_job(workspace_id: str, item_id: str, job_type: str = "Pipeline") -> bool:
@@ -123,57 +114,31 @@ def cancel_running_jobs(workspace_id: str, logger, dry_run: bool = False) -> Dic
 
 def disable_schedules(workspace_id: str, logger, dry_run: bool = False) -> Dict[str, Any]:
     """
-    Disable all job schedules for schedulable items in a workspace.
-    Returns a manifest of previously-enabled schedules (for re-enabling later).
+    Disable all job schedules for schedulable items in a workspace
+    (Job Scheduler API). Returns a manifest of previously-enabled schedules
+    (item, job type, schedule id, configuration) for re-enabling later.
     """
-    result = {"schedules_disabled": [], "previously_enabled": [], "errors": []}
-
-    for item_type in SCHEDULABLE_TYPES:
-        items = common.get_items(workspace_id, item_type=item_type)
-        for item in items:
-            item_id = item["id"]
-            item_name = item["displayName"]
-            schedule = _get_item_schedule(workspace_id, item_id)
-            if not schedule:
-                continue
-            is_enabled = schedule.get("enabled", False)
-            if is_enabled:
-                result["previously_enabled"].append({
-                    "item_id": item_id,
-                    "item_name": item_name,
-                    "item_type": item_type,
-                    "schedule_config": schedule,
-                })
-                if dry_run:
-                    logger.info(f"[DRY RUN] Would disable schedule on '{item_name}' ({item_type})")
-                    result["schedules_disabled"].append(item_name)
-                else:
-                    logger.info(f"Disabling schedule on '{item_name}' ({item_type})")
-                    if _update_item_schedule(workspace_id, item_id, enabled=False):
-                        result["schedules_disabled"].append(item_name)
-                    else:
-                        result["errors"].append(item_name)
-    return result
+    res = bcdr_schedules.pause_schedules(_schedule_client(), workspace_id,
+                                         _schedulable_items(workspace_id), logger, dry_run)
+    return {
+        "schedules_disabled": [e["item_name"] for e in res["paused"]],
+        "previously_enabled": res["paused"],
+        "errors": res["errors"],
+    }
 
 
 def enable_schedules(workspace_id: str, schedule_manifest: List[Dict], logger, dry_run: bool = False) -> Dict[str, Any]:
     """
-    Re-enable schedules from a previously saved manifest.
+    Re-enable, in workspace_id, the schedules a manifest marks enabled.
+    Items are matched by type + name, so a manifest captured in the other
+    workspace of the pair works too.
     """
-    result = {"schedules_enabled": [], "errors": []}
-    for entry in schedule_manifest:
-        item_id = entry["item_id"]
-        item_name = entry["item_name"]
-        if dry_run:
-            logger.info(f"[DRY RUN] Would enable schedule on '{item_name}'")
-            result["schedules_enabled"].append(item_name)
-        else:
-            logger.info(f"Enabling schedule on '{item_name}'")
-            if _update_item_schedule(workspace_id, item_id, enabled=True):
-                result["schedules_enabled"].append(item_name)
-            else:
-                result["errors"].append(item_name)
-    return result
+    res = bcdr_schedules.activate_schedules(_schedule_client(), workspace_id, _schedulable_items(workspace_id),
+                                            [{**e, "enabled": True} for e in schedule_manifest], logger, dry_run)
+    return {
+        "schedules_enabled": res["enabled"] + res["created"] + res["already_enabled"],
+        "errors": res["errors"] + [f"{n}: no matching item" for n in res["missing_items"]],
+    }
 
 
 def pause_pipelines(workspace_id: str, logger, dry_run: bool = False) -> Dict[str, Any]:
@@ -187,6 +152,10 @@ def pause_pipelines(workspace_id: str, logger, dry_run: bool = False) -> Dict[st
     }
 
     try:
+        # get_items() returns [] on failure, so probe reachability explicitly:
+        # an unreachable primary must trigger the last-sync manifest fallback.
+        common.api_call("GET", f"/workspaces/{workspace_id}")
+
         # 1. Cancel any running jobs
         logger.info("Cancelling running jobs in workspace...")
         cancel_result = cancel_running_jobs(workspace_id, logger, dry_run)
@@ -208,6 +177,7 @@ def pause_pipelines(workspace_id: str, logger, dry_run: bool = False) -> Dict[st
 
     except Exception as e:
         logger.error(f"Error pausing pipelines: {str(e)}")
+        result["primary_unreachable"] = True
 
     return result
 
@@ -336,46 +306,44 @@ def activate_secondary_workspace(
     schedule_manifest: List[Dict],
     logger,
     dry_run: bool = False,
+    primary_unreachable: bool = False,
 ) -> bool:
     """
-    Activate secondary workspace:
-      1. Re-enable schedules that were active on primary (using manifest).
-      2. Trigger on-demand pipeline runs for critical pipelines.
+    Activate secondary workspace: enable the schedules that were enabled on
+    primary, on their secondary counterparts (matched by type + name + job
+    type + configuration; created if the paused replica is missing).
+
+    When the primary could not be read or paused (unplanned failover, primary
+    region unreachable), the enabled schedules from the manifest captured at
+    the last sync (data/schedule_manifest.json) are merged in, so schedules
+    are activated without needing the primary.
     """
     logger.info("Activating secondary workspace...")
-
-    if dry_run:
-        logger.info("[DRY RUN] Would activate secondary workspace")
-        logger.info(f"  Would enable {len(schedule_manifest)} schedules")
-        return True
+    manifest = list(schedule_manifest)
+    if primary_unreachable:
+        seen = {(e["item_type"], e["item_name"], e["job_type"],
+                 json.dumps(bcdr_schedules.normalize_config(e.get("configuration")), sort_keys=True))
+                for e in manifest}
+        saved = [e for e in bcdr_schedules.load_manifest() if e.get("enabled")]
+        for e in saved:
+            k = (e["item_type"], e["item_name"], e["job_type"],
+                 json.dumps(bcdr_schedules.normalize_config(e.get("configuration")), sort_keys=True))
+            if k not in seen:
+                manifest.append(e)
+        logger.info(f"  Primary unreachable: merged {len(manifest) - len(schedule_manifest)} schedule(s) "
+                    f"from the last-sync manifest ({bcdr_schedules.MANIFEST_PATH})")
+    logger.info(f"  {len(manifest)} schedule(s) to enable")
 
     try:
-        # Re-enable schedules on secondary counterparts
-        # The manifest has primary item IDs; we need to map to secondary IDs
-        artifact_map = common.load_artifact_mapping()
-
-        enabled_count = 0
-        for entry in schedule_manifest:
-            primary_item_id = entry["item_id"]
-            item_name = entry["item_name"]
-            secondary_item_id = artifact_map.get(primary_item_id)
-
-            if not secondary_item_id:
-                logger.warning(f"  No secondary mapping for '{item_name}' — skipping schedule enable")
-                continue
-
-            logger.info(f"  Enabling schedule on secondary '{item_name}'")
-            if _update_item_schedule(secondary_workspace_id, secondary_item_id, enabled=True):
-                enabled_count += 1
-            else:
-                logger.warning(f"  Failed to enable schedule on '{item_name}'")
-
-        logger.info(f"✓ Secondary workspace activated ({enabled_count} schedules enabled)")
-        return True
-
+        res = enable_schedules(secondary_workspace_id, manifest, logger, dry_run)
     except Exception as e:
         logger.error(f"Error activating secondary: {str(e)}")
         return False
+    for err in res["errors"]:
+        logger.warning(f"  Schedule not enabled: {err}")
+    logger.info(f"✓ Secondary workspace activated ({len(res['schedules_enabled'])} schedules enabled"
+                f"{', DRY RUN' if dry_run else ''})")
+    return not res["errors"]
 
 
 def _takeover_semantic_model(workspace_id: str, dataset_id: str) -> None:
@@ -586,7 +554,9 @@ def main():
         
         # Step 4: Activate secondary (re-enable schedules from manifest)
         logger.info("\n=== STEP 4: ACTIVATING SECONDARY WORKSPACE ===")
-        if activate_secondary_workspace(args.secondary_workspace, schedule_manifest, logger, dry_run=args.dry_run):
+        if activate_secondary_workspace(args.secondary_workspace, schedule_manifest, logger, dry_run=args.dry_run,
+                                        primary_unreachable=pause_result.get("primary_unreachable", False)
+                                        or bool(pause_result["pipelines_failed"])):
             failover_log["status"] = "SUCCESS" if not args.dry_run else "DRY_RUN_SUCCESS"
         else:
             failover_log["status"] = "PARTIAL_FAILURE"

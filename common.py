@@ -58,6 +58,11 @@ FABRIC_API_SCOPE = "https://api.fabric.microsoft.com/.default"
 POWERBI_API_BASE = "https://api.powerbi.com/v1.0/myorg"
 POWERBI_API_SCOPE = "https://analysis.windows.net/powerbi/api/.default"
 
+# Microsoft Graph (Entra groups used for item-access bootstrap) and Fabric SQL
+GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
+GRAPH_API_SCOPE = "https://graph.microsoft.com/.default"
+SQL_API_SCOPE = "https://database.windows.net/.default"
+
 # Artifact Types to Support
 ARTIFACT_TYPES_TO_SYNC = [
     "Lakehouse",
@@ -423,6 +428,32 @@ def powerbi_api_call(
         timeout,
         get_powerbi_headers,
         powerbi_api_call,
+    )
+
+
+def get_graph_headers() -> Dict[str, str]:
+    return {"Authorization": "Bearer " + get_token(scope=GRAPH_API_SCOPE),
+            "Content-Type": "application/json"}
+
+
+def graph_api_call(
+    method: str,
+    endpoint: str,
+    payload: Optional[Dict] = None,
+    retry: int = 0,
+    timeout: int = 30,
+) -> Dict[str, Any]:
+    """Microsoft Graph v1.0 call (same retry/error semantics as api_call).
+
+    Used only for Entra security-group management in the item-access
+    bootstrap (item_permissions.py). Requires Group.ReadWrite.All,
+    GroupMember.ReadWrite.All and User.Read.All application permissions.
+    """
+    if endpoint.startswith(GRAPH_API_BASE):
+        endpoint = endpoint[len(GRAPH_API_BASE):]
+    return _execute_rest_call(
+        method, GRAPH_API_BASE, endpoint, payload, retry, timeout,
+        get_graph_headers, graph_api_call,
     )
 
 

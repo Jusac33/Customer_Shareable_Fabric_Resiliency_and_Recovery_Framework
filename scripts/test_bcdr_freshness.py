@@ -26,7 +26,8 @@ class TestLatestCommit(unittest.TestCase):
             {"name": "lh/Tables/t/_delta_log/00000000000000000010.checkpoint.parquet", "lastModified": T0},
             {"name": "lh/Tables/t/_delta_log/_last_checkpoint", "lastModified": T0},
         ]
-        self.assertEqual(bf.latest_commit(entries), {"version": 10, "last_commit": T0})
+        self.assertEqual(bf.latest_commit(entries),
+                         {"version": 10, "last_commit": T0, "commit_times": {2: T_PLUS_2H, 10: T0}})
 
     def test_empty(self):
         self.assertIsNone(bf.latest_commit([]))
@@ -45,14 +46,32 @@ class TestCompare(unittest.TestCase):
         self.assertEqual(rows["dbo/x"]["state"], "extra_in_secondary")
         self.assertEqual(rows["dbo/d"]["state"], "in_sync")  # within tolerance
 
-    def test_secondary_newer_is_not_negative_lag(self):
+    def test_secondary_ahead_of_primary_is_diverged_not_in_sync(self):
         rows = bf.compare({"t": c(1, T0)}, {"t": c(2, T_PLUS_2H)})
-        self.assertEqual(rows[0]["behind_hours"], 0.0)
-        self.assertEqual(rows[0]["state"], "in_sync")
+        self.assertEqual(rows[0]["state"], "diverged")
+        self.assertIsNone(rows[0]["behind_hours"])
+
+    def test_stale_replica_copied_late_is_behind(self):
+        # Secondary holds v3 but its commit file was copied AFTER primary's v6:
+        # file times would say "in sync"; the primary's history says 2h behind.
+        p = {"version": 6, "last_commit": T_PLUS_2H, "commit_times": {3: T0, 6: T_PLUS_2H}}
+        s = {"version": 3, "last_commit": "Mon, 01 Sep 2026 13:00:00 GMT"}
+        row = bf.compare({"t": p}, {"t": s})[0]
+        self.assertEqual((row["state"], row["behind_hours"], row["lag_is_lower_bound"]), ("behind", 2.0, False))
+
+    def test_secondary_older_than_retained_log_is_lower_bound(self):
+        p = {"version": 60, "last_commit": T_PLUS_2H, "commit_times": {50: T0, 60: T_PLUS_2H}}
+        row = bf.compare({"t": p}, {"t": c(10, T0)})[0]
+        self.assertEqual((row["state"], row["behind_hours"], row["lag_is_lower_bound"]), ("behind", 2.0, True))
+        self.assertTrue(bf.summarize([{"tables": [row]}])["rpo_is_lower_bound"])
 
     def test_unparseable_timestamp_is_unknown(self):
-        rows = bf.compare({"t": c(1, "garbage")}, {"t": c(1, T0)})
+        rows = bf.compare({"t": c(2, "garbage")}, {"t": c(1, T0)})
         self.assertEqual(rows[0]["state"], "unknown")
+
+    def test_equal_versions_are_in_sync_regardless_of_file_times(self):
+        rows = bf.compare({"t": c(1, "garbage")}, {"t": c(1, T0)})
+        self.assertEqual((rows[0]["state"], rows[0]["behind_hours"]), ("in_sync", 0.0))
 
 
 class TestSummarize(unittest.TestCase):
@@ -72,11 +91,17 @@ class TestSummarize(unittest.TestCase):
 
 class FakeSession:
     """Minimal OneLake DFS fake keyed by directory."""
-    def __init__(self, tree):
+    def __init__(self, tree, files=None):
         self.tree = tree
+        self.files = files or {}
 
     def get(self, url, headers=None, params=None, timeout=None):
         r = mock.Mock()
+        if params is None:  # file read
+            path = url.split("/ws/", 1)[1]
+            r.status_code = 200 if path in self.files else 404
+            r.text = self.files.get(path, "")
+            return r
         d = params["directory"]
         if d not in self.tree:
             r.status_code = 404
@@ -107,7 +132,24 @@ class TestTableCommits(unittest.TestCase):
             "lh/Tables/dbo/claims/_delta_log": [f("lh/Tables/dbo/claims/_delta_log/00000000000000000007.json", T0)],
         }
         out = bf.table_commits(FakeSession(tree), "tok", "ws", "lh")
-        self.assertEqual(out, {"dbo/claims": {"version": 7, "last_commit": T0}})
+        self.assertEqual(out, {"dbo/claims": {"version": 7, "last_commit": T0, "commit_times": {7: T0}}})
+
+    def test_in_commit_timestamp_detection(self):
+        tree = {
+            "lh/Tables": [d("lh/Tables/a"), d("lh/Tables/b")],
+            "lh/Tables/a/_delta_log": [f("lh/Tables/a/_delta_log/00000000000000000001.json", T0)],
+            "lh/Tables/b/_delta_log": [f("lh/Tables/b/_delta_log/00000000000000000004.json", T0)],
+        }
+        files = {
+            "lh/Tables/a/_delta_log/00000000000000000001.json":
+                '{"commitInfo":{"inCommitTimestamp":1756720800000,"operation":"WRITE"}}\n{"add":{}}',
+            "lh/Tables/b/_delta_log/00000000000000000004.json":
+                '{"add":{}}\n{"commitInfo":{"timestamp":1756720800000,"operation":"WRITE"}}',
+        }
+        out = bf.table_commits(FakeSession(tree, files), "tok", "ws", "lh", check_ict=True)
+        self.assertEqual((out["a"]["ict"], out["b"]["ict"]), (True, False))
+        rows = bf.compare(out, out)
+        self.assertEqual(bf.summarize([{"tables": rows}])["tables_without_in_commit_timestamps"], 1)
 
     def test_flat_lakehouse(self):
         tree = {
